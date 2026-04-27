@@ -1,0 +1,82 @@
+{
+  "artifact_id": "prefab.context_rules_and_guidelines.imported.v1",
+  "source_repo": "rhino_prefab_context (user-provided extracted knowledge)",
+  "source_path": "data/seed/office_rules.json + data/seed/guidelines.json (conceptual)",
+  "imported_at": "2026-04-27",
+  "reviewer": "pending_human_reviewer",
+  "status": "in_review",
+  "items": [
+    {
+      "id": "prefab.context.office_layer_conventions_local_risk",
+      "description": "Convenciones de capa de oficina para lectura contextual, con riesgo de sobreajuste local.",
+      "source": "extracted_knowledge.operational_context.1",
+      "conceptual_layer": "knowledge_artifact",
+      "signals_used": ["layer_naming_conventions"],
+      "assumptions": ["Office conventions are documented externally"],
+      "limitations": ["High locality; not portable across projects"],
+      "contamination_risk": "high",
+      "status": "in_review",
+      "notes": ["Knowledge-only, not runtime rule"]
+    },
+    {
+      "id": "prefab.context.preexport_checklist_nominal_thickness_closed_geometry",
+      "description": "Checklist preexport: espesor nominal y geometria cerrada como precondiciones de calidad.",
+      "source": "extracted_knowledge.operational_context.2",
+      "conceptual_layer": "knowledge_artifact",
+      "signals_used": ["nominal_thickness_declared", "closed_geometry_flag"],
+      "assumptions": ["Signals are available prior to downstream interpretation"],
+      "limitations": ["Checklist result alone does not determine interpretation"],
+      "contamination_risk": "medium",
+      "status": "in_review",
+      "notes": ["suggests_data_readiness", "reclassified_from_observation_for_conservative_governance"]
+    },
+    {
+      "id": "prefab.guideline.context_first_before_decision",
+      "description": "Guideline: considerar contexto antes de decidir interpretacion.",
+      "source": "extracted_knowledge.operational_context.3",
+      "conceptual_layer": "knowledge_artifact",
+      "signals_used": ["context_completeness"],
+      "assumptions": ["Decision stage exists outside this import"],
+      "limitations": ["No scoring function provided"],
+      "contamination_risk": "low",
+      "status": "in_review",
+      "notes": ["requires_human_review"]
+    },
+    {
+      "id": "prefab.guideline.conservative_interpretation_under_uncertainty",
+      "description": "Guideline: usar interpretacion conservadora ante incertidumbre.",
+      "source": "extracted_knowledge.operational_context.4",
+      "conceptual_layer": "knowledge_artifact",
+      "signals_used": ["uncertainty_level", "evidence_completeness"],
+      "assumptions": ["Uncertainty can be represented explicitly"],
+      "limitations": ["No threshold values provided"],
+      "contamination_risk": "low",
+      "status": "in_review",
+      "notes": ["suggests_ambiguous_entity", "requires_human_review", "reclassified_from_hypothesis_to_non_runtime_guideline"]
+    },
+    {
+      "id": "prefab.meta.classifier_signal_catalog",
+      "description": "Catalogo de senales usadas por clasificador: name/layer/geometry.",
+      "source": "extracted_knowledge.high_risk_meta.1",
+      "conceptual_layer": "metadata_signal",
+      "signals_used": ["name_signal", "layer_signal", "geometry_signal"],
+      "assumptions": ["Signals are observational features, not decisions"],
+      "limitations": ["No weighting or execution logic imported"],
+      "contamination_risk": "high",
+      "status": "in_review",
+      "notes": ["meta-knowledge only; no runtime classifier import"]
+    },
+    {
+      "id": "prefab.meta.rule_engine_conceptual_schema",
+      "description": "Esquema conceptual de motor de reglas: precondiciones, estado y evidencia.",
+      "source": "extracted_knowledge.high_risk_meta.2",
+      "conceptual_layer": "knowledge_artifact",
+      "signals_used": ["preconditions", "state_snapshot", "evidence_refs"],
+      "assumptions": ["Conceptual schema is descriptive only"],
+      "limitations": ["No executable engine semantics imported"],
+      "contamination_risk": "high",
+      "status": "in_review",
+      "notes": ["needs_refactor_before_any_runtime_use"]
+    }
+  ]
+}

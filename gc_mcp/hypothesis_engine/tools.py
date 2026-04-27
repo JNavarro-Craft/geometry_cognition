@@ -1,0 +1,233 @@
+from __future__ import annotations
+
+from typing import Any
+
+from shared.contracts import validate_payload
+
+
+ALLOWED_LABELS = {
+    "morphological_pattern",
+    "relational_pattern",
+    "repeated_linear_pattern",
+    "plate_like_cluster",
+    "compact_cluster",
+    "ambiguous_entity",
+    "insufficient_evidence",
+}
+
+FORBIDDEN_TERMS = {"panel", "beam", "truss", "sip", "connector", "wood", "steel"}
+
+
+def _entity_id_from_entity(ent: dict[str, Any]) -> str:
+    """Must equal entities[].entity_id from geometry_kernel / entity_schema (no shortening)."""
+    raw = ent["entity_id"]
+    if isinstance(raw, str):
+        return raw
+    return str(raw)
+
+
+def _dedupe_preserve_order(ids: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for x in ids:
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
+
+
+def _supporting_evidence_ids_for_entity(
+    entity_id: str,
+    members: set[str],
+    relations: list[dict[str, Any]],
+    evidence_by_id: dict[str, dict[str, Any]],
+) -> list[str]:
+    """
+    Assemble official evidence_id values emitted by evidence_graph (no name/fuzzy heuristics):
+    - ev-ent-{entity_id} from entity item
+    - ev-geom-{object_id} for each object_id in member_object_ids
+    - ev-rel-{relation_id} when the relation's subject_id or object_id is in that member set
+    """
+    ordered: list[str] = []
+
+    ent_id = f"ev-ent-{entity_id}"
+    if ent_id in evidence_by_id:
+        ordered.append(ent_id)
+
+    for m in sorted(members):
+        gid = f"ev-geom-{m}"
+        if gid in evidence_by_id:
+            ordered.append(gid)
+
+    for rel in sorted(relations, key=lambda r: str(r.get("relation_id", ""))):
+        sub = str(rel.get("subject_id", ""))
+        obj = str(rel.get("object_id", ""))
+        if sub not in members and obj not in members:
+            continue
+        rid = str(rel.get("relation_id", ""))
+        rel_eid = f"ev-rel-{rid}"
+        if rel_eid in evidence_by_id:
+            ordered.append(rel_eid)
+
+    return _dedupe_preserve_order(ordered)
+
+
+def _contains_forbidden_term(text: str) -> bool:
+    lowered = text.lower()
+    return any(term in lowered for term in FORBIDDEN_TERMS)
+
+
+def _build_hypothesis(
+    hypothesis_id: str,
+    entity_id: str,
+    label: str,
+    level: str,
+    confidence: float,
+    supporting_evidence: list[str],
+    contradicting_evidence: list[str],
+    alternatives: list[str],
+    missing_information: list[str],
+    status: str,
+) -> dict[str, Any]:
+    if label not in ALLOWED_LABELS:
+        label = "ambiguous_entity"
+    if _contains_forbidden_term(label):
+        label = "ambiguous_entity"
+    item = {
+        "hypothesis_id": hypothesis_id,
+        "entity_id": entity_id,
+        "hypothesis_label": label,
+        "hypothesis_level": level,
+        "confidence": max(0.0, min(1.0, confidence)),
+        "supporting_evidence": supporting_evidence,
+        "contradicting_evidence": contradicting_evidence,
+        "alternatives": alternatives,
+        "missing_information": missing_information,
+        "status": status,
+    }
+    validate_payload("hypothesis_schema.v1.json", item)
+    return item
+
+
+def generate_hypotheses(payload: dict[str, Any]) -> dict[str, Any]:
+    evidence_items = payload.get("evidence_items", [])
+    entities = payload.get("entities", [])
+    relations = payload.get("relations", [])
+    if not isinstance(relations, list):
+        relations = []
+
+    evidence_by_id: dict[str, dict[str, Any]] = {str(item["evidence_id"]): item for item in evidence_items}
+
+    hypotheses: list[dict[str, Any]] = []
+    sequence = 1
+    for ent in entities:
+        entity_id = _entity_id_from_entity(ent)
+        members = {str(x) for x in ent.get("member_object_ids", [])}
+
+        supporting_ids = _supporting_evidence_ids_for_entity(
+            entity_id,
+            members,
+            relations,
+            evidence_by_id,
+        )
+
+        unique_relevant = {eid: evidence_by_id[eid] for eid in supporting_ids if eid in evidence_by_id}
+        avg_conf = (
+            sum(float(ev.get("confidence", 0.0)) for ev in unique_relevant.values()) / len(unique_relevant)
+            if unique_relevant
+            else 0.0
+        )
+
+        if not supporting_ids:
+            hypotheses.append(
+                _build_hypothesis(
+                    hypothesis_id=f"hyp-{sequence:04d}",
+                    entity_id=entity_id,
+                    label="insufficient_evidence",
+                    level="relational",
+                    confidence=0.15,
+                    supporting_evidence=[],
+                    contradicting_evidence=[],
+                    alternatives=["ambiguous_entity"],
+                    missing_information=["no_evidence_items_in_graph", "evidence_graph_required"],
+                    status="candidate",
+                )
+            )
+            sequence += 1
+            continue
+
+        label = "ambiguous_entity"
+        level = "relational"
+        alternatives = ["insufficient_evidence"]
+        missing_information: list[str] = []
+        status = "candidate"
+        confidence = min(0.85, max(0.2, avg_conf))
+
+        has_geom = any(ev.get("evidence_type") == "geometry" for ev in unique_relevant.values())
+        has_relation = any(ev.get("evidence_type") == "relation" for ev in unique_relevant.values())
+
+        morph_values = [
+            str(ev.get("observed_value", {}).get("morphology", ""))
+            for ev in unique_relevant.values()
+            if isinstance(ev.get("observed_value"), dict)
+        ]
+        predicates = [
+            str(ev.get("observed_value", {}).get("predicate", ""))
+            for ev in unique_relevant.values()
+            if isinstance(ev.get("observed_value"), dict)
+        ]
+
+        if has_geom and "linear_prismatic" in morph_values:
+            label = "repeated_linear_pattern" if "repeated_with" in predicates else "morphological_pattern"
+            level = "morphological"
+            alternatives = ["relational_pattern", "ambiguous_entity"]
+        elif has_geom and ("thin_plate" in morph_values or "planar_surface" in morph_values):
+            label = "plate_like_cluster"
+            level = "morphological"
+            alternatives = ["morphological_pattern", "ambiguous_entity"]
+        elif has_geom and "compact_solid" in morph_values:
+            label = "compact_cluster"
+            level = "morphological"
+            alternatives = ["morphological_pattern", "ambiguous_entity"]
+        elif has_relation:
+            label = "relational_pattern"
+            level = "relational"
+            alternatives = ["ambiguous_entity"]
+        else:
+            missing_information = ["clear_morphology_or_relation_pattern"]
+
+        if confidence < 0.35:
+            label = "insufficient_evidence"
+            alternatives = ["ambiguous_entity"]
+            missing_information = ["additional_observation_refs", "additional_relation_evidence"]
+        elif confidence < 0.5:
+            label = "ambiguous_entity"
+            missing_information = ["higher_confidence_evidence"]
+        elif confidence >= 0.7:
+            status = "supported"
+
+        hypothesis = _build_hypothesis(
+            hypothesis_id=f"hyp-{sequence:04d}",
+            entity_id=entity_id,
+            label=label,
+            level=level,
+            confidence=confidence,
+            supporting_evidence=supporting_ids,
+            contradicting_evidence=[],
+            alternatives=alternatives,
+            missing_information=missing_information,
+            status=status,
+        )
+        hypotheses.append(hypothesis)
+        sequence += 1
+
+    return {
+        "mcp_name": "hypothesis_engine",
+        "role": "hypothesis",
+        "status": "ok",
+        "message": f"Generated {len(hypotheses)} abstract hypotheses from evidence.",
+        "expected_input_contract": "evidence_schema.v1.json + entities + relations (optional, from same pipeline as evidence_graph)",
+        "output_contract": "hypothesis_schema.v1.json",
+        "hypotheses": hypotheses,
+        "evidence_index": list(evidence_by_id.keys()),
+    }

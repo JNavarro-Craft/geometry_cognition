@@ -1,0 +1,67 @@
+{
+  "objects": [
+    {
+      "object_id": "obj-blk-001",
+      "source_system": "rhino",
+      "source_ref": "guid:blk-inst-001",
+      "object_kind": "instance_reference",
+      "raw_type": "InstanceObject",
+      "layer": "A::Blocks",
+      "name": "module_A_inst_001",
+      "group_ids": [],
+      "block_context": { "is_block_instance": true, "block_name": "module_A" },
+      "user_text": { "instance_role": "catalog_repeat" },
+      "material": null,
+      "transform": [1, 0, 0, 10.0, 0, 1, 0, 5.0, 0, 0, 1, 0, 0, 0, 0, 1],
+      "geometry_ref": "geom://blk-inst-001",
+      "extraction_warnings": []
+    }
+  ],
+  "entities": [
+    {
+      "entity_id": "ent-blk-001",
+      "entity_type": "block_instance",
+      "member_object_ids": ["obj-blk-001"],
+      "source_refs": ["guid:blk-inst-001", "block:module_A"],
+      "formation_method": "block_context_inference",
+      "confidence": 0.95,
+      "observation_refs": ["obs:block-context:blk-001"],
+      "limitations": ["block_contents_not_expanded"],
+      "warnings": [],
+      "status": "observed",
+      "notes": ["Directly mapped from block instance context."]
+    },
+    {
+      "entity_id": "ent-inst-obj-001",
+      "entity_type": "instance_object",
+      "member_object_ids": ["obj-blk-001"],
+      "source_refs": ["guid:blk-inst-001"],
+      "formation_method": "instance_expansion",
+      "confidence": 0.72,
+      "observation_refs": ["obs:instance-base:blk-001"],
+      "limitations": ["base_definition_placeholder"],
+      "warnings": ["expansion_not_materialized"],
+      "status": "proposed",
+      "notes": ["Represents occurrence-level object from instance."]
+    }
+  ],
+  "relations": [
+    {
+      "relation_id": "rel-blk-inst-001",
+      "subject_id": "ent-inst-obj-001",
+      "predicate": "instanced_with",
+      "object_id": "ent-blk-001",
+      "relation_type": "organizational",
+      "directionality": "directed",
+      "confidence": 0.88,
+      "tolerance_context": {
+        "linear_tolerance": 0.0,
+        "angular_tolerance": 0.0,
+        "unit_system": "model_unit"
+      },
+      "observation_refs": ["obs:block-context:blk-001"],
+      "limitations": ["depends_on_extractor_instance_metadata"],
+      "derived_from": ["object_schema.v1.json"]
+    }
+  ]
+}

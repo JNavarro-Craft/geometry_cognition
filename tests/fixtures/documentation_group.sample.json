@@ -1,0 +1,70 @@
+{
+  "objects": [
+    {
+      "object_id": "obj-doc-001",
+      "source_system": "rhino",
+      "source_ref": "guid:doc-001",
+      "object_kind": "annotation_proxy",
+      "raw_type": "Curve",
+      "layer": "A::Docs::Groups",
+      "name": "doc_item_001",
+      "group_ids": ["grp-doc-01"],
+      "block_context": { "is_block_instance": false, "block_name": null },
+      "user_text": { "doc_group": "sequence_alpha" },
+      "material": null,
+      "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      "geometry_ref": "geom://doc-001",
+      "extraction_warnings": []
+    },
+    {
+      "object_id": "obj-doc-002",
+      "source_system": "rhino",
+      "source_ref": "guid:doc-002",
+      "object_kind": "annotation_proxy",
+      "raw_type": "Curve",
+      "layer": "A::Docs::Groups",
+      "name": "doc_item_002",
+      "group_ids": ["grp-doc-01"],
+      "block_context": { "is_block_instance": false, "block_name": null },
+      "user_text": { "doc_group": "sequence_alpha" },
+      "material": null,
+      "transform": [1, 0, 0, 1.0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      "geometry_ref": "geom://doc-002",
+      "extraction_warnings": []
+    }
+  ],
+  "entities": [
+    {
+      "entity_id": "ent-doc-group-001",
+      "entity_type": "group_candidate",
+      "member_object_ids": ["obj-doc-001", "obj-doc-002"],
+      "source_refs": ["grp-doc-01"],
+      "formation_method": "declared_grouping",
+      "confidence": 0.84,
+      "observation_refs": ["obs:group-id:grp-doc-01"],
+      "limitations": ["group_declared_not_geometrically_verified"],
+      "warnings": [],
+      "status": "observed",
+      "notes": ["Software grouping captured as candidate, not confirmed real assembly."]
+    }
+  ],
+  "relations": [
+    {
+      "relation_id": "rel-doc-group-001",
+      "subject_id": "obj-doc-001",
+      "predicate": "grouped_with",
+      "object_id": "obj-doc-002",
+      "relation_type": "organizational",
+      "directionality": "symmetric",
+      "confidence": 0.92,
+      "tolerance_context": {
+        "linear_tolerance": 0.0,
+        "angular_tolerance": 0.0,
+        "unit_system": "model_unit"
+      },
+      "observation_refs": ["obs:group-id:grp-doc-01"],
+      "limitations": ["declared_relation_only"],
+      "derived_from": ["object_schema.v1.json", "metadata_schema.v1.json"]
+    }
+  ]
+}

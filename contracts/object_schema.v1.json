@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "geometry_cognition/contracts/object_schema.v1.json",
+  "title": "Object Schema v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "object_id",
+    "source_system",
+    "source_ref",
+    "object_kind",
+    "raw_type",
+    "layer",
+    "name",
+    "group_ids",
+    "block_context",
+    "user_text",
+    "material",
+    "transform",
+    "geometry_ref",
+    "extraction_warnings"
+  ],
+  "properties": {
+    "object_id": { "type": "string", "minLength": 1 },
+    "source_system": { "type": "string", "minLength": 1 },
+    "source_ref": { "type": "string", "minLength": 1 },
+    "object_kind": { "type": "string", "minLength": 1 },
+    "raw_type": { "type": "string", "minLength": 1 },
+    "layer": { "type": "string" },
+    "name": { "type": "string" },
+    "group_ids": { "type": "array", "items": { "type": "string" } },
+    "group_names": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Nombres de grupo resueltos desde el modelo; opcional."
+    },
+    "block_context": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["is_block_instance", "block_name"],
+      "properties": {
+        "is_block_instance": { "type": "boolean" },
+        "block_name": { "type": ["string", "null"] }
+      }
+    },
+    "user_text": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "material": { "type": ["string", "null"] },
+    "transform": {
+      "type": "array",
+      "minItems": 16,
+      "maxItems": 16,
+      "items": { "type": "number" }
+    },
+    "geometry_ref": { "type": "string", "minLength": 1 },
+    "raw_geometry_summary": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Resumen geometrico observacional del extractor (p. ej. bbox en espacio modelo).",
+      "properties": {
+        "bbox": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min", "max"],
+          "properties": {
+            "min": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": { "type": "number" }
+            },
+            "max": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": { "type": "number" }
+            }
+          }
+        },
+        "source": { "type": "string" }
+      }
+    },
+    "extraction_warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

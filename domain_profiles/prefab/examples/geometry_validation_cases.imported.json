@@ -1,0 +1,21 @@
+{
+  "artifact_id": "prefab.geometry_validation_cases.imported.v1",
+  "source_repo": "rhino_prefab_context (user-provided extracted knowledge)",
+  "source_path": "scripts/demo_geometry_rule_engine.py (conceptual cases only)",
+  "imported_at": "2026-04-27",
+  "status": "in_review",
+  "items": [
+    {
+      "id": "prefab.example.validation_audit_summary",
+      "description": "Ejemplo de auditoria con resultados pass/fail/skipped e indicador de resumen.",
+      "source": "extracted_knowledge.case_evidence.3",
+      "conceptual_layer": "evidence",
+      "signals_used": ["validation_status_counts", "summary_metrics"],
+      "assumptions": ["Status buckets are pass/fail/skipped (+ optional inconclusive)"],
+      "limitations": ["Case is illustrative; no executable policy attached"],
+      "contamination_risk": "medium",
+      "status": "in_review",
+      "notes": ["Knowledge-only import; no runtime validator registration"]
+    }
+  ]
+}

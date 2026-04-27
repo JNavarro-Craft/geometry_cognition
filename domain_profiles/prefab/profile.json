@@ -1,0 +1,9 @@
+{
+  "profile_id": "prefab.v1",
+  "domain_name": "prefab",
+  "allowed_hypothesis_vocabulary": ["panel", "beam", "truss", "SIP", "connector"],
+  "forbidden_core_terms": ["panel", "beam", "truss", "SIP", "connector"],
+  "typical_evidence_patterns": ["linear_prismatic_alignment", "thin_plate_grouping", "declared_related_sequences"],
+  "validation_rule_names": ["prefab_connectivity_consistency", "prefab_repetition_coherence"],
+  "notes": "Domain vocabulary is allowed only here and in downstream hypothesis/validation logic."
+}

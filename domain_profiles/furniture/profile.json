@@ -1,0 +1,9 @@
+{
+  "profile_id": "furniture.v1",
+  "domain_name": "furniture",
+  "allowed_hypothesis_vocabulary": ["support_member", "surface_member", "joint_candidate"],
+  "forbidden_core_terms": ["leg", "tabletop", "drawer", "hinge", "cabinet"],
+  "typical_evidence_patterns": ["coplanar_surface_sets", "parallel_member_groups", "compact_solid_supports"],
+  "validation_rule_names": ["furniture_stability_pattern", "furniture_joinery_pattern"],
+  "notes": "Focuses on component arrangement patterns without forcing deterministic semantics."
+}

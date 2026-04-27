@@ -1,0 +1,9 @@
+{
+  "profile_id": "generic.v1",
+  "domain_name": "generic",
+  "allowed_hypothesis_vocabulary": ["assembly_element", "surface_element", "connection_candidate"],
+  "forbidden_core_terms": ["panel", "beam", "truss", "SIP", "connector"],
+  "typical_evidence_patterns": ["morphology_consistency", "naming_alignment", "spatial_repetition"],
+  "validation_rule_names": ["minimum_evidence_traceability", "confidence_threshold_generic"],
+  "notes": "Baseline neutral profile for cross-domain experiments."
+}

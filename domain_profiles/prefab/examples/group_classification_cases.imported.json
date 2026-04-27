@@ -1,0 +1,33 @@
+{
+  "artifact_id": "prefab.group_classification_cases.imported.v1",
+  "source_repo": "rhino_prefab_context (user-provided extracted knowledge)",
+  "source_path": "scripts/demo_group_classifier.py (conceptual cases only)",
+  "imported_at": "2026-04-27",
+  "status": "in_review",
+  "items": [
+    {
+      "id": "prefab.example.document_group_high_fragmentation",
+      "description": "Caso documental: nombre/capa con fragmentacion alta sugiere agrupacion documental.",
+      "source": "extracted_knowledge.case_evidence.1",
+      "conceptual_layer": "evidence",
+      "signals_used": ["name_signal", "layer_signal", "fragmentation_ratio"],
+      "assumptions": ["Fragmentation metric exists and is comparable across groups"],
+      "limitations": ["High local-office dependency; requires human review"],
+      "contamination_risk": "high",
+      "status": "in_review",
+      "notes": ["Use phrasing suggests_documentation_group", "requires_human_review", "reclassified_from_domain_interpretation_to_case_evidence"]
+    },
+    {
+      "id": "prefab.example.small_structural_group_guardrail",
+      "description": "Caso de grupo estructural pequeno para evitar falso positivo documental.",
+      "source": "extracted_knowledge.case_evidence.2",
+      "conceptual_layer": "evidence",
+      "signals_used": ["group_size", "name_signal", "layer_signal", "fragmentation_ratio"],
+      "assumptions": ["Small groups can be non-documental under specific context"],
+      "limitations": ["No deterministic threshold provided"],
+      "contamination_risk": "high",
+      "status": "in_review",
+      "notes": ["Use phrasing compatible_with_non_documental_group", "requires_human_review", "reclassified_from_domain_interpretation_to_guardrail_evidence"]
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+[
+  {
+    "object_id": "obj-001",
+    "bbox": {
+      "min": [0.0, 0.0, 0.0],
+      "max": [2.0, 1.0, 0.5]
+    },
+    "centroid": [1.0, 0.5, 0.25],
+    "volume": 1.0,
+    "area": 7.0,
+    "principal_dimensions": [2.0, 1.0, 0.5],
+    "aspect_ratios": {
+      "xy": 2.0,
+      "xz": 4.0,
+      "yz": 2.0
+    },
+    "local_frame": {
+      "origin": [0.0, 0.0, 0.0],
+      "x_axis": [1.0, 0.0, 0.0],
+      "y_axis": [0.0, 1.0, 0.0],
+      "z_axis": [0.0, 0.0, 1.0]
+    },
+    "morphology": "linear_prismatic",
+    "morphology_confidence": 0.82,
+    "geometric_warnings": [],
+    "derived_from": ["obj-001"]
+  }
+]

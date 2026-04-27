@@ -1,0 +1,16 @@
+[
+  {
+    "evidence_id": "ev-001",
+    "evidence_type": "geometry",
+    "source_mcp": "geometry_kernel",
+    "source_object_ids": ["obj-001"],
+    "claim": "object_has_linear_prismatic_morphology",
+    "observed_value": {
+      "morphology": "linear_prismatic"
+    },
+    "confidence": 0.82,
+    "supports": ["hyp-001"],
+    "contradicts": [],
+    "limitations": ["single_object_sample"]
+  }
+]

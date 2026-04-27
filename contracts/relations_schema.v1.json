@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "geometry_cognition/contracts/relations_schema.v1.json",
+  "title": "Relations Schema v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "relation_id",
+    "subject_id",
+    "predicate",
+    "object_id",
+    "relation_type",
+    "directionality",
+    "confidence",
+    "tolerance_context",
+    "observation_refs",
+    "limitations",
+    "derived_from"
+  ],
+  "properties": {
+    "relation_id": { "type": "string", "minLength": 1 },
+    "subject_id": { "type": "string", "minLength": 1 },
+    "predicate": {
+      "type": "string",
+      "oneOf": [
+        { "const": "touches", "description": "Contacto topologico observado sin asumir union funcional." },
+        { "const": "near", "description": "Proximidad espacial bajo un umbral definido en tolerances." },
+        { "const": "intersects", "description": "Interseccion geometrica observada entre volumenes/superficies." },
+        { "const": "contains", "description": "El sujeto contiene geometricamente al objeto." },
+        { "const": "contained_by", "description": "El sujeto esta contenido geometricamente por el objeto." },
+        { "const": "aligned_with", "description": "Alineacion de ejes o direcciones principales." },
+        { "const": "parallel_to", "description": "Paralelismo geometrico entre direcciones dominantes." },
+        { "const": "coplanar_with", "description": "Coincidencia de plano de referencia." },
+        { "const": "collinear_with", "description": "Coincidencia en una misma linea de direccion." },
+        { "const": "repeated_with", "description": "Patron de repeticion geometrica u organizacional." },
+        { "const": "grouped_with", "description": "Relacion de agrupacion declarada por software/usuario." },
+        { "const": "instanced_with", "description": "Relacion entre ocurrencias de una misma instancia base." },
+        { "const": "declared_related_to", "description": "Relacion declarativa no verificada geometricamente." }
+      ]
+    },
+    "object_id": { "type": "string", "minLength": 1 },
+    "relation_type": { "type": "string", "enum": ["spatial", "organizational", "declarative"] },
+    "directionality": { "type": "string", "enum": ["symmetric", "directed"] },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "tolerance_context": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["linear_tolerance", "angular_tolerance", "unit_system"],
+      "properties": {
+        "linear_tolerance": { "type": "number", "minimum": 0 },
+        "angular_tolerance": { "type": "number", "minimum": 0 },
+        "unit_system": { "type": "string", "minLength": 1 }
+      }
+    },
+    "observation_refs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Referencias observacionales previas al grafo de evidencia."
+    },
+    "limitations": { "type": "array", "items": { "type": "string" } },
+    "derived_from": { "type": "array", "items": { "type": "string" } }
+  }
+}

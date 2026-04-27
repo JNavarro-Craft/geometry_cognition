@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "geometry_cognition/contracts/entity_schema.v1.json",
+  "title": "Entity Schema v1",
+  "description": "Representa entidades analiticas intermedias sin imponer verdad de dominio ni reemplazar hipotesis.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "entity_id",
+    "entity_type",
+    "member_object_ids",
+    "source_refs",
+    "formation_method",
+    "confidence",
+    "observation_refs",
+    "limitations",
+    "warnings",
+    "status",
+    "notes"
+  ],
+  "properties": {
+    "entity_id": { "type": "string", "minLength": 1 },
+    "entity_type": {
+      "type": "string",
+      "enum": [
+        "source_object",
+        "instance_object",
+        "group_candidate",
+        "block_instance",
+        "cluster",
+        "aggregate",
+        "inferred_entity"
+      ]
+    },
+    "member_object_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "source_refs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "formation_method": {
+      "type": "string",
+      "enum": [
+        "direct_extraction",
+        "instance_expansion",
+        "declared_grouping",
+        "block_context_inference",
+        "geometric_clustering",
+        "relational_aggregation",
+        "analytic_inference"
+      ]
+    },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "observation_refs": { "type": "array", "items": { "type": "string" } },
+    "limitations": { "type": "array", "items": { "type": "string" } },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "status": {
+      "type": "string",
+      "enum": ["observed", "derived", "proposed", "rejected", "superseded"]
+    },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  }
+}

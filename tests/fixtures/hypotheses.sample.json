@@ -1,0 +1,14 @@
+[
+  {
+    "hypothesis_id": "hyp-001",
+    "entity_id": "obj-001",
+    "hypothesis_label": "elongated_structural_candidate",
+    "hypothesis_level": "morphological",
+    "confidence": 0.71,
+    "supporting_evidence": ["ev-001"],
+    "contradicting_evidence": [],
+    "alternatives": ["compact_element_candidate"],
+    "missing_information": ["adjacency_context", "declared_identity"],
+    "status": "candidate"
+  }
+]

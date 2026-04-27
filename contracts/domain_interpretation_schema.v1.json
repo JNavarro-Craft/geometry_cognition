@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "geometry_cognition/contracts/domain_interpretation_schema.v1.json",
+  "title": "Domain Interpretation Schema v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "interpretation_id",
+    "entity_id",
+    "domain",
+    "interpretation_label",
+    "confidence",
+    "supporting_evidence",
+    "derived_from_hypotheses",
+    "limitations",
+    "status"
+  ],
+  "properties": {
+    "interpretation_id": { "type": "string", "minLength": 1 },
+    "entity_id": { "type": "string", "minLength": 1 },
+    "domain": { "type": "string", "minLength": 1 },
+    "interpretation_label": { "type": "string", "minLength": 1 },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "supporting_evidence": { "type": "array", "items": { "type": "string" } },
+    "derived_from_hypotheses": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "limitations": { "type": "array", "items": { "type": "string" } },
+    "status": {
+      "type": "string",
+      "enum": ["tentative", "plausible", "weak", "unsupported"]
+    }
+  }
+}

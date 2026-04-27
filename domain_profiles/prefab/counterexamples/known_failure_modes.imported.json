@@ -1,0 +1,33 @@
+{
+  "artifact_id": "prefab.known_failure_modes.imported.v1",
+  "source_repo": "rhino_prefab_context (user-provided extracted knowledge)",
+  "source_path": "scripts/demo_group_classifier.py + scripts/demo_geometry_rule_engine.py (conceptual)",
+  "imported_at": "2026-04-27",
+  "status": "in_review",
+  "items": [
+    {
+      "id": "prefab.counterexample.false_positive_documentation_group",
+      "description": "Riesgo de falso positivo documental cuando hay fragmentacion alta sin contexto suficiente.",
+      "source": "extracted_knowledge.case_evidence.1+2",
+      "conceptual_layer": "evidence",
+      "signals_used": ["fragmentation_ratio", "name_signal", "layer_signal", "group_size"],
+      "assumptions": ["Signals may conflict in local drafting practices"],
+      "limitations": ["Requires contextual review before any interpretation"],
+      "contamination_risk": "high",
+      "status": "in_review",
+      "notes": ["requires_human_review", "do_not_promote_to_runtime"]
+    },
+    {
+      "id": "prefab.counterexample.incomplete_member_distribution",
+      "description": "Distribuciones incompletas de shape/orientacion no permiten conclusion confiable.",
+      "source": "extracted_knowledge.validation_rules.2+3",
+      "conceptual_layer": "validation_rule",
+      "signals_used": ["shape_distribution", "orientation_distribution", "total_members"],
+      "assumptions": ["Distribution completeness is required for consistency checks"],
+      "limitations": ["Cannot infer interpretation from incomplete counts"],
+      "contamination_risk": "medium",
+      "status": "in_review",
+      "notes": ["suggests_insufficient_evidence"]
+    }
+  ]
+}

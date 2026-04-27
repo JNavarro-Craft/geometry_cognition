@@ -1,0 +1,15 @@
+{
+  "workflow_id": "optimize_model.v1",
+  "description": "Ejecuta automatizaciones solo tras validación.",
+  "input_workflow": "validate_model.v1",
+  "input_contracts": [
+    "validation_schema.v1.json"
+  ],
+  "gates": [
+    "automation requires explicit validation results"
+  ],
+  "steps": [
+    "validate_model",
+    "automation"
+  ]
+}

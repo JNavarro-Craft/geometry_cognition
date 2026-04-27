@@ -1,0 +1,57 @@
+{
+  "trace_id": "prefab_extraction_trace.v1",
+  "extracted_at": "2026-04-27",
+  "mode": "no_direct_source_repo_access",
+  "source_mode": "user_provided_structured_knowledge",
+  "status": "in_review",
+  "items": [
+    {
+      "id": "trace.geometry_member_rules",
+      "description": "Reglas de member summary importadas como conocimiento inactivo.",
+      "source": "user_prompt.structured_input.rules_validation_geometrica",
+      "conceptual_layer": "validation_rule",
+      "signals_used": ["ambiguity_count", "shape_distribution", "orientation_distribution", "length_variability", "section_variability"],
+      "assumptions": ["Rule values are declarative and non-executable"],
+      "limitations": ["No direct file-level source text was provided"],
+      "contamination_risk": "medium",
+      "status": "in_review",
+      "notes": ["Stored under domain_profiles/prefab/rules only"]
+    },
+    {
+      "id": "trace.operational_context_guidelines",
+      "description": "Conocimiento operativo y guidelines importados como artefactos en revision.",
+      "source": "user_prompt.structured_input.conocimiento_operativo",
+      "conceptual_layer": "knowledge_artifact",
+      "signals_used": ["layer_conventions", "preexport_checklist", "context_priority", "conservative_interpretation"],
+      "assumptions": ["Guidelines are project/process recommendations"],
+      "limitations": ["Local office conventions may not generalize"],
+      "contamination_risk": "high",
+      "status": "in_review",
+      "notes": ["No runtime binding"]
+    },
+    {
+      "id": "trace.case_evidence",
+      "description": "Casos y contraejemplos importados para auditoria y referencia.",
+      "source": "user_prompt.structured_input.evidencia_de_casos",
+      "conceptual_layer": "evidence",
+      "signals_used": ["group_name_layer", "fragmentation_ratio", "group_size", "validation_status_summary"],
+      "assumptions": ["Cases are illustrative evidence and not rules"],
+      "limitations": ["Dataset specifics are not fully available"],
+      "contamination_risk": "medium",
+      "status": "in_review",
+      "notes": ["No implicit dependencies between case items"]
+    },
+    {
+      "id": "trace.high_risk_meta_knowledge",
+      "description": "Metaconocimiento de clasificador y motor de reglas, sin logica ejecutable.",
+      "source": "user_prompt.structured_input.elementos_opcionales_alto_riesgo",
+      "conceptual_layer": "knowledge_artifact",
+      "signals_used": ["name_layer_geometry_catalog", "preconditions_state_evidence_schema"],
+      "assumptions": ["Metadata only; no algorithm details allowed"],
+      "limitations": ["Requires refactor before any activation"],
+      "contamination_risk": "high",
+      "status": "in_review",
+      "notes": ["Explicitly inactive and isolated in imports/audit"]
+    }
+  ]
+}

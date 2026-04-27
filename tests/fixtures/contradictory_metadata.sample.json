@@ -1,0 +1,50 @@
+{
+  "objects": [
+    {
+      "object_id": "obj-meta-001",
+      "source_system": "rhino",
+      "source_ref": "guid:meta-001",
+      "object_kind": "solid",
+      "raw_type": "Brep",
+      "layer": "A::Declared::TypeA",
+      "name": "declared_type_B",
+      "group_ids": ["grp-declared-A"],
+      "block_context": { "is_block_instance": false, "block_name": null },
+      "user_text": { "declared_identity": "type_C" },
+      "material": null,
+      "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      "geometry_ref": "geom://meta-001",
+      "extraction_warnings": []
+    }
+  ],
+  "metadata": [
+    {
+      "object_id": "obj-meta-001",
+      "declared_identity_signals": ["layer:TypeA", "name:TypeB", "user_text:TypeC"],
+      "naming_signals": ["declared_type_B"],
+      "layer_signals": ["A::Declared::TypeA"],
+      "user_text_signals": ["declared_identity=type_C"],
+      "group_signals": ["grp-declared-A"],
+      "block_signals": [],
+      "consistency_score": 0.2,
+      "conflicts": ["declared_identity_conflict_across_channels"],
+      "limitations": ["no_external_authoritative_source"]
+    }
+  ],
+  "entities": [
+    {
+      "entity_id": "ent-meta-001",
+      "entity_type": "inferred_entity",
+      "member_object_ids": ["obj-meta-001"],
+      "source_refs": ["guid:meta-001"],
+      "formation_method": "analytic_inference",
+      "confidence": 0.31,
+      "observation_refs": ["obs:metadata-conflict:meta-001"],
+      "limitations": ["contradictory_metadata_signals"],
+      "warnings": ["low_confidence_due_to_conflicts"],
+      "status": "proposed",
+      "notes": ["Entity remains tentative due to unresolved declaration conflict."]
+    }
+  ],
+  "relations": []
+}

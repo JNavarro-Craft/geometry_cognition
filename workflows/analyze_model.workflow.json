@@ -1,0 +1,19 @@
+{
+  "workflow_id": "analyze_model.v1",
+  "description": "Observa e interpreta un modelo hacia evidencia e hipótesis.",
+  "output_contracts": [
+    "object_schema.v1.json",
+    "geometry_schema.v1.json",
+    "metadata_schema.v1.json",
+    "relations_schema.v1.json",
+    "evidence_schema.v1.json",
+    "hypothesis_schema.v1.json"
+  ],
+  "steps": [
+    "rhino_extractor",
+    "geometry_kernel",
+    "metadata_context",
+    "evidence_graph",
+    "hypothesis_engine"
+  ]
+}

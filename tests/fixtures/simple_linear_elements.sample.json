@@ -1,0 +1,70 @@
+{
+  "objects": [
+    {
+      "object_id": "obj-lin-001",
+      "source_system": "rhino",
+      "source_ref": "guid:lin-001",
+      "object_kind": "curve_or_solid",
+      "raw_type": "Brep",
+      "layer": "A::Linear",
+      "name": "linear_element_001",
+      "group_ids": [],
+      "block_context": { "is_block_instance": false, "block_name": null },
+      "user_text": { "hint": "primary axis X" },
+      "material": null,
+      "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      "geometry_ref": "geom://lin-001",
+      "extraction_warnings": []
+    },
+    {
+      "object_id": "obj-lin-002",
+      "source_system": "rhino",
+      "source_ref": "guid:lin-002",
+      "object_kind": "curve_or_solid",
+      "raw_type": "Brep",
+      "layer": "A::Linear",
+      "name": "linear_element_002",
+      "group_ids": [],
+      "block_context": { "is_block_instance": false, "block_name": null },
+      "user_text": {},
+      "material": null,
+      "transform": [1, 0, 0, 3.0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      "geometry_ref": "geom://lin-002",
+      "extraction_warnings": []
+    }
+  ],
+  "entities": [
+    {
+      "entity_id": "ent-lin-aggregate-001",
+      "entity_type": "aggregate",
+      "member_object_ids": ["obj-lin-001", "obj-lin-002"],
+      "source_refs": ["guid:lin-001", "guid:lin-002"],
+      "formation_method": "relational_aggregation",
+      "confidence": 0.73,
+      "observation_refs": ["obs:parallel:lin-001-002"],
+      "limitations": ["no_functional_semantics"],
+      "warnings": [],
+      "status": "derived",
+      "notes": ["Created from repeated linear alignment."]
+    }
+  ],
+  "relations": [
+    {
+      "relation_id": "rel-lin-001",
+      "subject_id": "obj-lin-001",
+      "predicate": "parallel_to",
+      "object_id": "obj-lin-002",
+      "relation_type": "spatial",
+      "directionality": "symmetric",
+      "confidence": 0.9,
+      "tolerance_context": {
+        "linear_tolerance": 0.01,
+        "angular_tolerance": 1.0,
+        "unit_system": "model_unit"
+      },
+      "observation_refs": ["obs:axis:lin-001", "obs:axis:lin-002"],
+      "limitations": [],
+      "derived_from": ["geometry_schema.v1.json"]
+    }
+  ]
+}

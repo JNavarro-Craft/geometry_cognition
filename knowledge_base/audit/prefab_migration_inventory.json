@@ -1,0 +1,83 @@
+{
+  "inventory_id": "prefab_migration_inventory.v1",
+  "updated_at": "2026-04-27",
+  "status": "in_review",
+  "scope": "conceptual_layer_normalization",
+  "items": [
+    {
+      "source_item_id": "prefab.guideline.conservative_interpretation_under_uncertainty",
+      "source_location": "knowledge_base/imports/prefab/context_rules_and_guidelines.imported.json",
+      "source_type": "user_extracted_knowledge",
+      "description": "Guideline for conservative interpretation under uncertainty.",
+      "conceptual_layer": {
+        "previous": "hypothesis",
+        "normalized": "knowledge_artifact"
+      },
+      "migration_target": "knowledge_base/imports/prefab/context_rules_and_guidelines.imported.json",
+      "migration_action": "refactor_required",
+      "migration_status": "accepted",
+      "contamination_risk": "low",
+      "notes": "Guideline is policy-level knowledge, not a hypothesis instance."
+    },
+    {
+      "source_item_id": "prefab.context.preexport_checklist_nominal_thickness_closed_geometry",
+      "source_location": "knowledge_base/imports/prefab/context_rules_and_guidelines.imported.json",
+      "source_type": "user_extracted_knowledge",
+      "description": "Pre-export checklist for nominal thickness and closed geometry.",
+      "conceptual_layer": {
+        "previous": "observation",
+        "normalized": "knowledge_artifact"
+      },
+      "migration_target": "knowledge_base/imports/prefab/context_rules_and_guidelines.imported.json",
+      "migration_action": "refactor_required",
+      "migration_status": "accepted",
+      "contamination_risk": "medium",
+      "notes": "Checklist is an operational policy artifact; observational signals remain in signals_used."
+    },
+    {
+      "source_item_id": "prefab.example.document_group_high_fragmentation",
+      "source_location": "domain_profiles/prefab/examples/group_classification_cases.imported.json",
+      "source_type": "user_extracted_knowledge",
+      "description": "Case: name/layer plus high fragmentation suggests documentation grouping.",
+      "conceptual_layer": {
+        "previous": "domain_interpretation",
+        "normalized": "evidence"
+      },
+      "migration_target": "domain_profiles/prefab/examples/group_classification_cases.imported.json",
+      "migration_action": "refactor_required",
+      "migration_status": "accepted",
+      "contamination_risk": "high",
+      "notes": "Stored as case evidence; not elevated to interpretation rule."
+    },
+    {
+      "source_item_id": "prefab.example.small_structural_group_guardrail",
+      "source_location": "domain_profiles/prefab/examples/group_classification_cases.imported.json",
+      "source_type": "user_extracted_knowledge",
+      "description": "Case guardrail to avoid documentary false positives in small groups.",
+      "conceptual_layer": {
+        "previous": "domain_interpretation",
+        "normalized": "evidence"
+      },
+      "migration_target": "domain_profiles/prefab/examples/group_classification_cases.imported.json",
+      "migration_action": "refactor_required",
+      "migration_status": "accepted",
+      "contamination_risk": "high",
+      "notes": "Retained as counter-bias evidence, not interpretation logic."
+    },
+    {
+      "source_item_id": "prefab.meta.classifier_signal_catalog",
+      "source_location": "knowledge_base/imports/prefab/context_rules_and_guidelines.imported.json",
+      "source_type": "user_extracted_knowledge",
+      "description": "Catalog of classifier signals (name/layer/geometry).",
+      "conceptual_layer": {
+        "previous": "metadata_signal",
+        "normalized": "metadata_signal"
+      },
+      "migration_target": "knowledge_base/imports/prefab/context_rules_and_guidelines.imported.json",
+      "migration_action": "copy_as_is",
+      "migration_status": "accepted",
+      "contamination_risk": "high",
+      "notes": "Kept unchanged as conservative signal catalog metadata."
+    }
+  ]
+}

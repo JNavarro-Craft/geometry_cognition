@@ -1,0 +1,16 @@
+{
+  "workflow_id": "validate_model.v1",
+  "description": "Valida hipótesis y consistencia posterior al análisis.",
+  "input_workflow": "analyze_model.v1",
+  "input_contracts": [
+    "hypothesis_schema.v1.json",
+    "evidence_schema.v1.json"
+  ],
+  "output_contracts": [
+    "validation_schema.v1.json"
+  ],
+  "steps": [
+    "analyze_model",
+    "validation_engine"
+  ]
+}

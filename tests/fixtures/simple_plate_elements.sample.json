@@ -1,0 +1,70 @@
+{
+  "objects": [
+    {
+      "object_id": "obj-plt-001",
+      "source_system": "rhino",
+      "source_ref": "guid:plt-001",
+      "object_kind": "surface_or_solid",
+      "raw_type": "Brep",
+      "layer": "A::Plates",
+      "name": "plate_element_001",
+      "group_ids": ["grp-plt-01"],
+      "block_context": { "is_block_instance": false, "block_name": null },
+      "user_text": {},
+      "material": "generic_sheet",
+      "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      "geometry_ref": "geom://plt-001",
+      "extraction_warnings": []
+    },
+    {
+      "object_id": "obj-plt-002",
+      "source_system": "rhino",
+      "source_ref": "guid:plt-002",
+      "object_kind": "surface_or_solid",
+      "raw_type": "Brep",
+      "layer": "A::Plates",
+      "name": "plate_element_002",
+      "group_ids": ["grp-plt-01"],
+      "block_context": { "is_block_instance": false, "block_name": null },
+      "user_text": {},
+      "material": "generic_sheet",
+      "transform": [1, 0, 0, 0, 0, 1, 0, 2.5, 0, 0, 1, 0, 0, 0, 0, 1],
+      "geometry_ref": "geom://plt-002",
+      "extraction_warnings": []
+    }
+  ],
+  "entities": [
+    {
+      "entity_id": "ent-plt-cluster-001",
+      "entity_type": "cluster",
+      "member_object_ids": ["obj-plt-001", "obj-plt-002"],
+      "source_refs": ["guid:plt-001", "guid:plt-002"],
+      "formation_method": "geometric_clustering",
+      "confidence": 0.78,
+      "observation_refs": ["obs:coplanar:plt-set-1"],
+      "limitations": ["derived_only_from_geometry"],
+      "warnings": [],
+      "status": "derived",
+      "notes": ["Clustered as nearby planar plates."]
+    }
+  ],
+  "relations": [
+    {
+      "relation_id": "rel-plt-001",
+      "subject_id": "obj-plt-001",
+      "predicate": "near",
+      "object_id": "obj-plt-002",
+      "relation_type": "spatial",
+      "directionality": "symmetric",
+      "confidence": 0.85,
+      "tolerance_context": {
+        "linear_tolerance": 0.05,
+        "angular_tolerance": 2.0,
+        "unit_system": "model_unit"
+      },
+      "observation_refs": ["obs:bbox-distance:plt-001-002"],
+      "limitations": ["distance_threshold_dependent"],
+      "derived_from": ["geometry_schema.v1.json"]
+    }
+  ]
+}

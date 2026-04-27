@@ -1,0 +1,100 @@
+{
+  "objects": [
+    {
+      "object_id": "obj-mix-001",
+      "source_system": "rhino",
+      "source_ref": "guid:mix-001",
+      "object_kind": "solid",
+      "raw_type": "Brep",
+      "layer": "A::Zone1",
+      "name": "mix_item_001",
+      "group_ids": ["grp-mix-A"],
+      "block_context": { "is_block_instance": false, "block_name": null },
+      "user_text": { "system_hint": "alpha" },
+      "material": "generic_mat_A",
+      "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      "geometry_ref": "geom://mix-001",
+      "extraction_warnings": []
+    },
+    {
+      "object_id": "obj-mix-002",
+      "source_system": "rhino",
+      "source_ref": "guid:mix-002",
+      "object_kind": "solid",
+      "raw_type": "Brep",
+      "layer": "A::Zone1",
+      "name": "mix_item_002",
+      "group_ids": ["grp-mix-A"],
+      "block_context": { "is_block_instance": true, "block_name": "module_M" },
+      "user_text": { "system_hint": "beta" },
+      "material": "generic_mat_A",
+      "transform": [1, 0, 0, 4.0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      "geometry_ref": "geom://mix-002",
+      "extraction_warnings": ["missing_display_color"]
+    }
+  ],
+  "entities": [
+    {
+      "entity_id": "ent-mix-src-001",
+      "entity_type": "source_object",
+      "member_object_ids": ["obj-mix-001"],
+      "source_refs": ["guid:mix-001"],
+      "formation_method": "direct_extraction",
+      "confidence": 1.0,
+      "observation_refs": ["obs:extract:mix-001"],
+      "limitations": [],
+      "warnings": [],
+      "status": "observed",
+      "notes": ["Direct wrapper entity for extractor object."]
+    },
+    {
+      "entity_id": "ent-mix-inst-002",
+      "entity_type": "instance_object",
+      "member_object_ids": ["obj-mix-002"],
+      "source_refs": ["guid:mix-002", "block:module_M"],
+      "formation_method": "instance_expansion",
+      "confidence": 0.8,
+      "observation_refs": ["obs:block-context:mix-002"],
+      "limitations": ["nested_instances_not_processed"],
+      "warnings": ["partial_instance_context"],
+      "status": "derived",
+      "notes": ["Derived from instance context in mixed dataset."]
+    }
+  ],
+  "relations": [
+    {
+      "relation_id": "rel-mix-touch-001",
+      "subject_id": "obj-mix-001",
+      "predicate": "touches",
+      "object_id": "obj-mix-002",
+      "relation_type": "spatial",
+      "directionality": "symmetric",
+      "confidence": 0.66,
+      "tolerance_context": {
+        "linear_tolerance": 0.02,
+        "angular_tolerance": 1.0,
+        "unit_system": "model_unit"
+      },
+      "observation_refs": ["obs:min-distance:mix-001-002"],
+      "limitations": ["contact_from_bbox_proxy"],
+      "derived_from": ["geometry_schema.v1.json"]
+    },
+    {
+      "relation_id": "rel-mix-group-001",
+      "subject_id": "obj-mix-001",
+      "predicate": "grouped_with",
+      "object_id": "obj-mix-002",
+      "relation_type": "organizational",
+      "directionality": "symmetric",
+      "confidence": 0.9,
+      "tolerance_context": {
+        "linear_tolerance": 0.0,
+        "angular_tolerance": 0.0,
+        "unit_system": "model_unit"
+      },
+      "observation_refs": ["obs:group-id:grp-mix-A"],
+      "limitations": ["declared_grouping_not_semantic_truth"],
+      "derived_from": ["object_schema.v1.json", "metadata_schema.v1.json"]
+    }
+  ]
+}

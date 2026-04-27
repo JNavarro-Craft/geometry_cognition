@@ -1,0 +1,9 @@
+{
+  "profile_id": "industrial.v1",
+  "domain_name": "industrial",
+  "allowed_hypothesis_vocabulary": ["flow_segment", "support_frame", "junction_candidate"],
+  "forbidden_core_terms": ["pipe", "valve", "duct", "pump", "flange"],
+  "typical_evidence_patterns": ["collinear_runs", "junction_density", "instanced_component_families"],
+  "validation_rule_names": ["industrial_network_continuity", "industrial_clearance_constraints"],
+  "notes": "Prepared for process/system models while keeping geometry kernel neutral."
+}

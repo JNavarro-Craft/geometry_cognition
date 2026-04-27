@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "geometry_cognition/contracts/geometry_schema.v1.json",
+  "title": "Geometry Schema v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "object_id",
+    "bbox",
+    "centroid",
+    "volume",
+    "area",
+    "principal_dimensions",
+    "aspect_ratios",
+    "local_frame",
+    "morphology",
+    "morphology_confidence",
+    "geometric_warnings",
+    "derived_from"
+  ],
+  "properties": {
+    "object_id": { "type": "string", "minLength": 1 },
+    "bbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "max"],
+      "properties": {
+        "min": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "type": "number" }
+        },
+        "max": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "type": "number" }
+        }
+      }
+    },
+    "centroid": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "type": "number" }
+    },
+    "volume": { "type": ["number", "null"] },
+    "area": { "type": ["number", "null"] },
+    "principal_dimensions": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "type": "number" }
+    },
+    "aspect_ratios": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["xy", "xz", "yz"],
+      "properties": {
+        "xy": { "type": "number" },
+        "xz": { "type": "number" },
+        "yz": { "type": "number" }
+      }
+    },
+    "local_frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "x_axis", "y_axis", "z_axis"],
+      "properties": {
+        "origin": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } },
+        "x_axis": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } },
+        "y_axis": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } },
+        "z_axis": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } }
+      }
+    },
+    "morphology": {
+      "type": "string",
+      "enum": [
+        "unknown",
+        "linear_prismatic",
+        "thin_plate",
+        "compact_solid",
+        "planar_surface",
+        "irregular_solid",
+        "repeated_element_candidate"
+      ]
+    },
+    "morphology_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "geometric_warnings": { "type": "array", "items": { "type": "string" } },
+    "derived_from": { "type": "array", "items": { "type": "string" } }
+  }
+}

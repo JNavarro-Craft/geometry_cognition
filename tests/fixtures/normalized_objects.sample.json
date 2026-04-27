@@ -1,0 +1,23 @@
+[
+  {
+    "object_id": "obj-001",
+    "source_system": "rhino",
+    "source_ref": "guid:abc-123",
+    "object_kind": "solid",
+    "raw_type": "Brep",
+    "layer": "A::Geometry",
+    "name": "element_001",
+    "group_ids": ["grp-01"],
+    "block_context": {
+      "is_block_instance": true,
+      "block_name": "module_A"
+    },
+    "user_text": {
+      "tag": "sample"
+    },
+    "material": "generic_material",
+    "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+    "geometry_ref": "geom://obj-001",
+    "extraction_warnings": []
+  }
+]

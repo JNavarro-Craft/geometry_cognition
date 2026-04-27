@@ -1,0 +1,69 @@
+{
+  "artifact_id": "prefab.geometry_member_summary_rules.imported.v1",
+  "source_repo": "rhino_prefab_context (user-provided extracted knowledge)",
+  "source_path": "data/geometry_member_summary_rules.json (conceptual)",
+  "imported_at": "2026-04-27",
+  "status": "inactive",
+  "items": [
+    {
+      "id": "prefab.rule.ambiguity_requires_review",
+      "description": "Ambiguedad mayor que cero sugiere revision humana.",
+      "source": "extracted_knowledge.validation_rules.1",
+      "conceptual_layer": "validation_rule",
+      "signals_used": ["ambiguity_count"],
+      "assumptions": ["ambiguity_count is available in member summary"],
+      "limitations": ["Does not define thresholds beyond greater-than-zero"],
+      "contamination_risk": "low",
+      "status": "inactive",
+      "notes": ["Use conservative language: requires_human_review"]
+    },
+    {
+      "id": "prefab.rule.shape_distribution_matches_total_members",
+      "description": "La suma de la distribucion de shape debe coincidir con total_members.",
+      "source": "extracted_knowledge.validation_rules.2",
+      "conceptual_layer": "validation_rule",
+      "signals_used": ["shape_distribution", "total_members"],
+      "assumptions": ["shape_distribution is counted in member units"],
+      "limitations": ["No tolerance model provided"],
+      "contamination_risk": "low",
+      "status": "inactive",
+      "notes": ["Consistency check only; no runtime activation"]
+    },
+    {
+      "id": "prefab.rule.orientation_distribution_matches_total_members",
+      "description": "La suma de la distribucion de orientacion debe coincidir con total_members.",
+      "source": "extracted_knowledge.validation_rules.3",
+      "conceptual_layer": "validation_rule",
+      "signals_used": ["orientation_distribution", "total_members"],
+      "assumptions": ["orientation buckets are mutually exclusive"],
+      "limitations": ["No handling for unknown orientation category specified"],
+      "contamination_risk": "low",
+      "status": "inactive",
+      "notes": ["Consistency check only; no runtime activation"]
+    },
+    {
+      "id": "prefab.rule.length_variability_as_relational_signal",
+      "description": "La variabilidad de longitudes puede sugerir patron relacional.",
+      "source": "extracted_knowledge.validation_rules.4",
+      "conceptual_layer": "relation",
+      "signals_used": ["length_variability"],
+      "assumptions": ["Length measures are normalized to same unit context"],
+      "limitations": ["Cannot classify final identity from variability alone"],
+      "contamination_risk": "medium",
+      "status": "inactive",
+      "notes": ["Use phrasing suggests_relational_pattern"]
+    },
+    {
+      "id": "prefab.rule.section_variability_as_relational_signal",
+      "description": "La variabilidad de secciones puede sugerir patron relacional.",
+      "source": "extracted_knowledge.validation_rules.5",
+      "conceptual_layer": "relation",
+      "signals_used": ["section_variability"],
+      "assumptions": ["Section values are comparable in same representation"],
+      "limitations": ["Cannot conclude definitive typology"],
+      "contamination_risk": "medium",
+      "status": "inactive",
+      "notes": ["Use phrasing compatible_with_non_uniform_membership"]
+    }
+  ]
+}

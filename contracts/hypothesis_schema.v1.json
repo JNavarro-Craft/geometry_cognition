@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "geometry_cognition/contracts/hypothesis_schema.v1.json",
+  "title": "Hypothesis Schema v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "hypothesis_id",
+    "entity_id",
+    "hypothesis_label",
+    "hypothesis_level",
+    "confidence",
+    "supporting_evidence",
+    "contradicting_evidence",
+    "alternatives",
+    "missing_information",
+    "status"
+  ],
+  "properties": {
+    "hypothesis_id": { "type": "string", "minLength": 1 },
+    "entity_id": { "type": "string", "minLength": 1 },
+    "hypothesis_label": { "type": "string", "minLength": 1 },
+    "hypothesis_level": {
+      "type": "string",
+      "enum": ["morphological", "relational", "functional", "domain_specific"]
+    },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "supporting_evidence": { "type": "array", "items": { "type": "string" } },
+    "contradicting_evidence": { "type": "array", "items": { "type": "string" } },
+    "alternatives": { "type": "array", "items": { "type": "string" } },
+    "missing_information": { "type": "array", "items": { "type": "string" } },
+    "status": {
+      "type": "string",
+      "enum": ["candidate", "supported", "contested", "rejected"],
+      "description": "Estado de hipotesis; no representa verdad final."
+    }
+  }
+}

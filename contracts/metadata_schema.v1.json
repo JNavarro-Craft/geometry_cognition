@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "geometry_cognition/contracts/metadata_schema.v1.json",
+  "title": "Metadata Schema v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "object_id",
+    "declared_identity_signals",
+    "naming_signals",
+    "layer_signals",
+    "user_text_signals",
+    "group_signals",
+    "block_signals",
+    "consistency_score",
+    "conflicts",
+    "limitations"
+  ],
+  "properties": {
+    "object_id": { "type": "string", "minLength": 1 },
+    "declared_identity_signals": { "type": "array", "items": { "type": "string" } },
+    "naming_signals": { "type": "array", "items": { "type": "string" } },
+    "layer_signals": { "type": "array", "items": { "type": "string" } },
+    "user_text_signals": { "type": "array", "items": { "type": "string" } },
+    "group_signals": { "type": "array", "items": { "type": "string" } },
+    "block_signals": { "type": "array", "items": { "type": "string" } },
+    "consistency_score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "conflicts": { "type": "array", "items": { "type": "string" } },
+    "limitations": { "type": "array", "items": { "type": "string" } }
+  }
+}

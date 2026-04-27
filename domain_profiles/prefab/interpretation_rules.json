@@ -1,0 +1,78 @@
+{
+  "profile_id": "prefab.v1",
+  "artifact_id": "prefab.interpretation_rules.v1",
+  "status": "in_review",
+  "imported_at": "2026-04-27",
+  "rules": [
+    {
+      "rule_id": "prefab.map.repeated_linear_pattern",
+      "status": "in_review",
+      "contamination_risk": "low",
+      "hypothesis_label": "repeated_linear_pattern",
+      "interpretation_label": "compatible_with_linear_structure",
+      "interpretation_status": "plausible",
+      "confidence_multiplier": 0.9,
+      "notes": ["Conservative mapping from abstract repeated pattern."]
+    },
+    {
+      "rule_id": "prefab.map.plate_like_cluster",
+      "status": "in_review",
+      "contamination_risk": "low",
+      "hypothesis_label": "plate_like_cluster",
+      "interpretation_label": "compatible_with_planar_assembly",
+      "interpretation_status": "plausible",
+      "confidence_multiplier": 0.85,
+      "notes": ["No definitive typology claim."]
+    },
+    {
+      "rule_id": "prefab.map.compact_cluster",
+      "status": "in_review",
+      "contamination_risk": "medium",
+      "hypothesis_label": "compact_cluster",
+      "interpretation_label": "suggests_compact_grouping",
+      "interpretation_status": "tentative",
+      "confidence_multiplier": 0.8,
+      "notes": ["Requires_human_review for domain interpretation."]
+    },
+    {
+      "rule_id": "prefab.map.relational_pattern",
+      "status": "in_review",
+      "contamination_risk": "low",
+      "hypothesis_label": "relational_pattern",
+      "interpretation_label": "suggests_relational_coherence",
+      "interpretation_status": "tentative",
+      "confidence_multiplier": 0.8,
+      "notes": ["Relational-only interpretation."]
+    },
+    {
+      "rule_id": "prefab.map.ambiguous_entity",
+      "status": "in_review",
+      "contamination_risk": "low",
+      "hypothesis_label": "ambiguous_entity",
+      "interpretation_label": "requires_human_review",
+      "interpretation_status": "weak",
+      "confidence_multiplier": 0.7,
+      "notes": ["Explicitly non-definitive."]
+    },
+    {
+      "rule_id": "prefab.map.insufficient_evidence",
+      "status": "in_review",
+      "contamination_risk": "low",
+      "hypothesis_label": "insufficient_evidence",
+      "interpretation_label": "requires_human_review",
+      "interpretation_status": "unsupported",
+      "confidence_multiplier": 0.6,
+      "notes": ["No interpretation conclusion beyond review requirement."]
+    },
+    {
+      "rule_id": "prefab.map.morphological_pattern.high_risk_placeholder",
+      "status": "in_review",
+      "contamination_risk": "high",
+      "hypothesis_label": "morphological_pattern",
+      "interpretation_label": "compatible_with_profile_specific_shape",
+      "interpretation_status": "tentative",
+      "confidence_multiplier": 0.75,
+      "notes": ["High-risk placeholder; must not be used by runtime mapping."]
+    }
+  ]
+}

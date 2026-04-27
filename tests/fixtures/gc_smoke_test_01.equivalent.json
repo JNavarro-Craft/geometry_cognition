@@ -1,0 +1,94 @@
+[
+  {
+    "object_id": "obj_test_compact",
+    "source_system": "rhino",
+    "source_ref": "fixture:obj_test_compact",
+    "object_kind": "geometric_object",
+    "raw_type": "Brep",
+    "layer": "Default",
+    "name": "obj_test_compact",
+    "group_ids": [],
+    "block_context": { "is_block_instance": false, "block_name": null },
+    "user_text": {},
+    "material": null,
+    "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+    "geometry_ref": "fixture://obj_test_compact",
+    "raw_geometry_summary": {
+      "bbox": { "min": [0.0, 0.0, 0.0], "max": [2.0, 2.0, 2.0] },
+      "source": "gc_smoke_test_01.equivalent"
+    },
+    "extraction_warnings": []
+  },
+  {
+    "object_id": "obj_test_linear",
+    "source_system": "rhino",
+    "source_ref": "fixture:obj_test_linear",
+    "object_kind": "geometric_object",
+    "raw_type": "Brep",
+    "layer": "Default",
+    "name": "obj_test_linear",
+    "group_ids": ["group_index:0", "group_name:grp_test_linear_plate"],
+    "group_names": ["grp_test_linear_plate"],
+    "block_context": { "is_block_instance": false, "block_name": null },
+    "user_text": {
+      "Nombre": "linear_fixture",
+      "Subgrupo": "smoke_A"
+    },
+    "material": null,
+    "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+    "geometry_ref": "fixture://obj_test_linear",
+    "raw_geometry_summary": {
+      "bbox": { "min": [0.0, 0.0, 0.0], "max": [12.0, 0.3, 0.3] },
+      "source": "gc_smoke_test_01.equivalent"
+    },
+    "extraction_warnings": []
+  },
+  {
+    "object_id": "obj_test_plate",
+    "source_system": "rhino",
+    "source_ref": "fixture:obj_test_plate",
+    "object_kind": "geometric_object",
+    "raw_type": "Brep",
+    "layer": "Default",
+    "name": "obj_test_plate",
+    "group_ids": ["group_index:0", "group_name:grp_test_linear_plate"],
+    "group_names": ["grp_test_linear_plate"],
+    "block_context": { "is_block_instance": false, "block_name": null },
+    "user_text": {
+      "Nombre": "plate_fixture",
+      "Subgrupo": "smoke_A"
+    },
+    "material": null,
+    "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+    "geometry_ref": "fixture://obj_test_plate",
+    "raw_geometry_summary": {
+      "bbox": { "min": [0.0, 0.0, 0.0], "max": [10.0, 8.0, 0.04] },
+      "source": "gc_smoke_test_01.equivalent"
+    },
+    "extraction_warnings": []
+  },
+  {
+    "object_id": "obj_block_instance_smoke",
+    "source_system": "rhino",
+    "source_ref": "fixture:block-inst",
+    "object_kind": "instance_reference",
+    "raw_type": "InstanceReference",
+    "layer": "Default",
+    "name": "block_instance_smoke",
+    "group_ids": [],
+    "block_context": {
+      "is_block_instance": true,
+      "block_name": "module_test_A",
+      "instance_definition_id": "00000000-0000-0000-0000-0000000000a1"
+    },
+    "user_text": {},
+    "material": null,
+    "transform": [1, 0, 0, 5.0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+    "geometry_ref": "fixture://obj_block_instance_smoke",
+    "raw_geometry_summary": {
+      "bbox": { "min": [4.0, -0.5, -0.5], "max": [6.0, 0.5, 0.5] },
+      "source": "gc_smoke_test_01.equivalent"
+    },
+    "extraction_warnings": ["block_definition_not_expanded"]
+  }
+]
