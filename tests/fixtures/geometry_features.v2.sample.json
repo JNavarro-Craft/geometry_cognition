@@ -1,0 +1,65 @@
+[
+  {
+    "object_id": "obj-001",
+    "bbox": {
+      "min": [0.0, 0.0, 0.0],
+      "max": [2.0, 1.0, 0.5]
+    },
+    "centroid": [1.0, 0.5, 0.25],
+    "volume": 1.0,
+    "area": 7.0,
+    "principal_dimensions": [2.0, 1.0, 0.5],
+    "aspect_ratios": { "xy": 2.0, "xz": 4.0, "yz": 2.0 },
+    "local_frame": {
+      "origin": [0.0, 0.0, 0.0],
+      "x_axis": [1.0, 0.0, 0.0],
+      "y_axis": [0.0, 1.0, 0.0],
+      "z_axis": [0.0, 0.0, 1.0]
+    },
+    "morphology": "linear_prismatic",
+    "morphology_confidence": 0.82,
+    "geometric_warnings": [],
+    "derived_from": ["obj-001"],
+    "oriented_bbox": {
+      "center": [1.0, 0.5, 0.25],
+      "axes": [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0]
+      ],
+      "extents": [2.0, 1.0, 0.5]
+    },
+    "face_analysis": {
+      "face_count": 6,
+      "dominant_faces": [
+        { "face_id": "f-top", "area": 2.0, "normal": [0.0, 0.0, 1.0] },
+        { "face_id": "f-bottom", "area": 2.0, "normal": [0.0, 0.0, -1.0] }
+      ],
+      "area_distribution": {
+        "total_area": 7.0,
+        "dominant_area_ratio": 0.57,
+        "bins": [
+          { "range": "0-1", "count": 2 },
+          { "range": "1-3", "count": 4 }
+        ]
+      }
+    },
+    "normal_vectors": {
+      "dominant_normals": [
+        [0.0, 0.0, 1.0],
+        [0.0, 0.0, -1.0]
+      ],
+      "clusters": [
+        { "cluster_id": "n1", "normal": [0.0, 0.0, 1.0], "support_count": 3 },
+        { "cluster_id": "n2", "normal": [0.0, 0.0, -1.0], "support_count": 3 }
+      ]
+    },
+    "proximity_metrics": {
+      "min_distance_to_neighbors": 0.12,
+      "contact_candidates": ["obj-002", "obj-003"]
+    },
+    "geometry_quality": {
+      "warnings": ["low_resolution_proxy"]
+    }
+  }
+]

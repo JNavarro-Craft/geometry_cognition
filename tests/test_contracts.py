@@ -25,6 +25,12 @@ def test_geometry_features_fixture_matches_geometry_schema():
         validate_payload("geometry_schema.v1.json", payload)
 
 
+def test_geometry_features_v2_fixture_matches_geometry_schema_v2():
+    payloads = _load_json("geometry_features.v2.sample.json")
+    for payload in payloads:
+        validate_payload("geometry_schema.v2.json", payload)
+
+
 def test_evidence_fixture_matches_evidence_schema():
     payloads = _load_json("evidence_graph.sample.json")
     for payload in payloads:
