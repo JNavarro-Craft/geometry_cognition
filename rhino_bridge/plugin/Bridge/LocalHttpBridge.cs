@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Json;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -91,7 +94,7 @@ public class LocalHttpBridge
         var allowedMethod =
             (!isGeometryPath && method == "GET")
             || (isGeometryPath && path == "/geometry/health" && method == "GET")
-            || (isGeometryPath && (path == "/geometry/extract_scene" || path == "/geometry/extract_objects") && method == "POST");
+            || (isGeometryPath && (path == "/geometry/extract_scene" || path == "/geometry/extract_objects" || path == "/geometry/verify_relations") && method == "POST");
         if (!allowedMethod)
         {
             HttpJson.Write(res, 405, HttpJson.Error("Method not allowed", "bad_request"));
@@ -137,6 +140,20 @@ public class LocalHttpBridge
                         return _neutralGeometryService.ExtractObjects(doc, requestedObjectIds);
                     });
                     HttpJson.Write(res, 200, objectsExtraction);
+                    break;
+                case "/geometry/verify_relations":
+                    var verifyBody = ReadRequestBody(req);
+                    var verifyRequest = ParseVerifyRelationsRequest(verifyBody);
+                    var verifyOutput = ExecuteOnUiThread(() =>
+                    {
+                        var doc = RequireActiveDoc();
+                        return _neutralGeometryService.VerifyRelations(
+                            doc,
+                            verifyRequest.Relations,
+                            verifyRequest.Tolerance ?? new NeutralGeometryService.VerificationTolerance()
+                        );
+                    });
+                    HttpJson.Write(res, 200, verifyOutput);
                     break;
 
                 case "/doc-info":
@@ -400,6 +417,33 @@ public class LocalHttpBridge
             .ToList();
     }
 
+    private static VerifyRelationsEnvelope ParseVerifyRelationsRequest(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            throw new InvalidOperationException("Missing request body for /geometry/verify_relations.");
+        }
+        try
+        {
+            using var ms = new MemoryStream(Encoding.UTF8.GetBytes(body));
+            var serializer = new DataContractJsonSerializer(typeof(VerifyRelationsEnvelope));
+            var parsed = serializer.ReadObject(ms) as VerifyRelationsEnvelope;
+            if (parsed is null)
+            {
+                throw new InvalidOperationException("Invalid verify_relations payload.");
+            }
+            if (parsed.Relations is null || parsed.Relations.Count == 0)
+            {
+                throw new InvalidOperationException("verify_relations requires a non-empty relations list.");
+            }
+            return parsed;
+        }
+        catch (SerializationException ex)
+        {
+            throw new InvalidOperationException($"Invalid JSON payload: {ex.Message}");
+        }
+    }
+
     private static T ExecuteOnUiThread<T>(Func<T> action)
     {
         var tcs = new TaskCompletionSource<T>();
@@ -415,6 +459,16 @@ public class LocalHttpBridge
             }
         });
         return tcs.Task.GetAwaiter().GetResult();
+    }
+
+    [DataContract]
+    private sealed class VerifyRelationsEnvelope
+    {
+        [DataMember(Name = "relations")]
+        public List<NeutralGeometryService.RelationVerificationRequest> Relations { get; set; } = new();
+
+        [DataMember(Name = "tolerance")]
+        public NeutralGeometryService.VerificationTolerance? Tolerance { get; set; }
     }
 }
 

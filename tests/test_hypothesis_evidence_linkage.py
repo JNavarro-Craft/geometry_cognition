@@ -242,3 +242,262 @@ def test_r7_requires_missing_information_when_needed(tmp_path):
     r7 = [r for r in bundle["validation_results"] if r["rule_id"] == "R7"]
     assert r7
     assert all(r["status"] == "pass" for r in r7)
+
+
+def test_candidate_relation_evidence_requires_verified_geometric_interaction():
+    entities = [
+        {
+            "entity_id": "ent-src-oa",
+            "entity_type": "source_object",
+            "member_object_ids": ["oa"],
+            "source_refs": ["oa"],
+            "formation_method": "direct_extraction",
+            "confidence": 1.0,
+            "observation_refs": [],
+            "limitations": [],
+            "warnings": [],
+            "status": "observed",
+            "notes": [],
+        }
+    ]
+    evidence_items = [
+        {
+            "evidence_id": "ev-ent-ent-src-oa",
+            "evidence_type": "derived",
+            "source_mcp": "evidence_graph",
+            "source_object_ids": ["oa"],
+            "claim": "entity formation observed from extraction",
+            "observed_value": {},
+            "confidence": 1.0,
+            "supports": [],
+            "contradicts": [],
+            "limitations": [],
+        },
+        {
+            "evidence_id": "ev-geom-oa",
+            "evidence_type": "geometry",
+            "source_mcp": "evidence_graph",
+            "source_object_ids": ["oa"],
+            "claim": "geometry feature observed for object",
+            "observed_value": {"morphology": "compact_solid"},
+            "confidence": 0.8,
+            "supports": [],
+            "contradicts": [],
+            "limitations": [],
+        },
+        {
+            "evidence_id": "ev-rel-rel-cand-1",
+            "evidence_type": "relation",
+            "source_mcp": "evidence_graph",
+            "source_object_ids": ["oa", "ob"],
+            "claim": "candidate relation observed between objects",
+            "observed_value": {
+                "predicate": "touches",
+                "assertion_level": "candidate",
+                "verification_required": ["brep_contact_check"],
+            },
+            "confidence": 0.76,
+            "supports": [],
+            "contradicts": [],
+            "limitations": ["bbox_based", "candidate_relation"],
+        },
+    ]
+    relations = [
+        {
+            "relation_id": "rel-cand-1",
+            "subject_id": "oa",
+            "predicate": "touches",
+            "object_id": "ob",
+            "relation_type": "spatial",
+            "directionality": "symmetric",
+            "confidence": 0.76,
+            "tolerance_context": {"linear_tolerance": 0.05, "angular_tolerance": 2.0, "unit_system": "model_unit"},
+            "observation_refs": ["obs:touching_candidate:oa:ob"],
+            "limitations": ["bbox_based", "candidate_relation", "requires_brep_contact_check"],
+            "derived_from": ["geometry_schema.v2.json"],
+            "assertion_level": "candidate",
+            "inference_basis": "bbox_gap_within_tolerance",
+            "measurement_method": "aabb_gap",
+            "verification_status": "unverified",
+            "verification_required": ["brep_contact_check"],
+            "confidence_basis": ["aabb gap within tolerance"],
+        }
+    ]
+    out = generate_hypotheses({"evidence_items": evidence_items, "entities": entities, "relations": relations})
+    hyp = out["hypotheses"][0]
+    assert "verified geometric interaction required" in hyp["missing_information"]
+    assert "pending: brep_contact_check" in hyp["missing_information"]
+
+
+def test_measured_partially_verified_relation_requires_missing_information():
+    entities = [
+        {
+            "entity_id": "ent-src-oa",
+            "entity_type": "source_object",
+            "member_object_ids": ["oa"],
+            "source_refs": ["oa"],
+            "formation_method": "direct_extraction",
+            "confidence": 1.0,
+            "observation_refs": [],
+            "limitations": [],
+            "warnings": [],
+            "status": "observed",
+            "notes": [],
+        }
+    ]
+    evidence_items = [
+        {
+            "evidence_id": "ev-ent-ent-src-oa",
+            "evidence_type": "derived",
+            "source_mcp": "evidence_graph",
+            "source_object_ids": ["oa"],
+            "claim": "entity formation observed from extraction",
+            "observed_value": {},
+            "confidence": 1.0,
+            "supports": [],
+            "contradicts": [],
+            "limitations": [],
+        },
+        {
+            "evidence_id": "ev-geom-oa",
+            "evidence_type": "geometry",
+            "source_mcp": "evidence_graph",
+            "source_object_ids": ["oa"],
+            "claim": "geometry feature observed for object",
+            "observed_value": {"morphology": "compact_solid"},
+            "confidence": 0.8,
+            "supports": [],
+            "contradicts": [],
+            "limitations": [],
+        },
+        {
+            "evidence_id": "ev-rel-rel-meas-1",
+            "evidence_type": "relation",
+            "source_mcp": "evidence_graph",
+            "source_object_ids": ["oa", "ob"],
+            "claim": "measured relation observed between objects",
+            "observed_value": {
+                "predicate": "coplanar_with",
+                "assertion_level": "measured",
+                "verification_status": "partially_verified",
+                "verification_required": ["face_adjacency_check", "tolerance_review"],
+            },
+            "confidence": 0.81,
+            "supports": [],
+            "contradicts": [],
+            "limitations": [],
+        },
+    ]
+    relations = [
+        {
+            "relation_id": "rel-meas-1",
+            "subject_id": "oa",
+            "predicate": "coplanar_with",
+            "object_id": "ob",
+            "relation_type": "spatial",
+            "directionality": "symmetric",
+            "confidence": 0.81,
+            "tolerance_context": {"linear_tolerance": 0.05, "angular_tolerance": 2.0, "unit_system": "model_unit"},
+            "observation_refs": ["obs:coplanar_candidate:oa:ob"],
+            "limitations": [],
+            "derived_from": ["geometry_schema.v2.json"],
+            "assertion_level": "measured",
+            "inference_basis": "face_normal_similarity",
+            "measurement_method": "face_normal_dot_product",
+            "verification_status": "partially_verified",
+            "verification_required": ["face_adjacency_check", "tolerance_review"],
+            "confidence_basis": ["measured with pending checks"],
+        }
+    ]
+    out = generate_hypotheses({"evidence_items": evidence_items, "entities": entities, "relations": relations})
+    hyp = out["hypotheses"][0]
+    assert hyp["missing_information"]
+    assert "verified geometric interaction required" in hyp["missing_information"]
+    assert "pending: face_adjacency_check" in hyp["missing_information"]
+    assert "pending: tolerance_review" in hyp["missing_information"]
+
+
+def test_confirmed_verified_relation_without_pending_checks_can_remain_without_pending_missing():
+    entities = [
+        {
+            "entity_id": "ent-src-oa",
+            "entity_type": "source_object",
+            "member_object_ids": ["oa"],
+            "source_refs": ["oa"],
+            "formation_method": "direct_extraction",
+            "confidence": 1.0,
+            "observation_refs": [],
+            "limitations": [],
+            "warnings": [],
+            "status": "observed",
+            "notes": [],
+        }
+    ]
+    evidence_items = [
+        {
+            "evidence_id": "ev-ent-ent-src-oa",
+            "evidence_type": "derived",
+            "source_mcp": "evidence_graph",
+            "source_object_ids": ["oa"],
+            "claim": "entity formation observed from extraction",
+            "observed_value": {},
+            "confidence": 1.0,
+            "supports": [],
+            "contradicts": [],
+            "limitations": [],
+        },
+        {
+            "evidence_id": "ev-geom-oa",
+            "evidence_type": "geometry",
+            "source_mcp": "evidence_graph",
+            "source_object_ids": ["oa"],
+            "claim": "geometry feature observed for object",
+            "observed_value": {"morphology": "compact_solid"},
+            "confidence": 0.8,
+            "supports": [],
+            "contradicts": [],
+            "limitations": [],
+        },
+        {
+            "evidence_id": "ev-rel-rel-conf-1",
+            "evidence_type": "relation",
+            "source_mcp": "evidence_graph",
+            "source_object_ids": ["oa", "ob"],
+            "claim": "confirmed relation observed between objects",
+            "observed_value": {
+                "predicate": "intersects",
+                "assertion_level": "confirmed",
+                "verification_status": "verified",
+                "verification_required": [],
+            },
+            "confidence": 0.9,
+            "supports": [],
+            "contradicts": [],
+            "limitations": [],
+        },
+    ]
+    relations = [
+        {
+            "relation_id": "rel-conf-1",
+            "subject_id": "oa",
+            "predicate": "intersects",
+            "object_id": "ob",
+            "relation_type": "spatial",
+            "directionality": "symmetric",
+            "confidence": 0.9,
+            "tolerance_context": {"linear_tolerance": 0.05, "angular_tolerance": 2.0, "unit_system": "model_unit"},
+            "observation_refs": ["obs:brep-intersection:oa:ob"],
+            "limitations": [],
+            "derived_from": ["geometry_schema.v2.json"],
+            "assertion_level": "confirmed",
+            "inference_basis": "brep_intersection",
+            "measurement_method": "brep_intersection_curve",
+            "verification_status": "verified",
+            "verification_required": [],
+            "confidence_basis": ["verified intersection"],
+        }
+    ]
+    out = generate_hypotheses({"evidence_items": evidence_items, "entities": entities, "relations": relations})
+    hyp = out["hypotheses"][0]
+    assert "verified geometric interaction required" not in hyp["missing_information"]
+    assert not any(str(x).startswith("pending: ") for x in hyp["missing_information"])

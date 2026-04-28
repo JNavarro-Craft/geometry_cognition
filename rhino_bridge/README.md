@@ -63,6 +63,64 @@ Notas de empaquetado:
 - `GET /geometry/health`
 - `POST /geometry/extract_scene`
 - `POST /geometry/extract_objects`
+- `POST /geometry/verify_relations`
+
+### `POST /geometry/verify_relations`
+
+Verifica relaciones geometricas con chequeos neutrales. Este endpoint mide/verifica geometria y **no** interpreta dominio.
+
+Input ejemplo:
+
+```json
+{
+  "relations": [
+    {
+      "relation_id": "rel-001",
+      "subject_id": "11111111-1111-1111-1111-111111111111",
+      "object_id": "22222222-2222-2222-2222-222222222222",
+      "check": "mesh_distance_check"
+    }
+  ],
+  "tolerance": {
+    "linear_tolerance": 0.05,
+    "angular_tolerance": 2.0,
+    "unit_system": "model_unit"
+  }
+}
+```
+
+Output ejemplo:
+
+```json
+{
+  "source": "rhino_bridge",
+  "results": [
+    {
+      "relation_id": "rel-001",
+      "subject_id": "11111111-1111-1111-1111-111111111111",
+      "object_id": "22222222-2222-2222-2222-222222222222",
+      "check": "mesh_distance_check",
+      "verification_status": "verified",
+      "assertion_level": "confirmed",
+      "method": "mesh_distance",
+      "measurements": {
+        "distance": 0.0,
+        "intersection_count": 0,
+        "contact_area_estimate": null
+      },
+      "confidence": 0.88,
+      "limitations": [],
+      "notes": []
+    }
+  ]
+}
+```
+
+Checks minimos implementados:
+- `mesh_distance_check`
+- `brep_intersection_check`
+- `face_adjacency_check` (estado inicial inconclusive)
+- `tolerance_review`
 
 ## Notas
 

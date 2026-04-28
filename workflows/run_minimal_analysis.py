@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 from typing import Any
@@ -67,6 +68,10 @@ def _load_input(path: Path) -> dict[str, Any]:
     raise ValueError("Input must be a .json fixture or .3dm Rhino model.")
 
 
+def _is_bridge_mode() -> bool:
+    return str(os.environ.get("GC_BACKEND_MODE", "")).strip().lower() == "bridge"
+
+
 def _validate_outputs(result: dict[str, Any]) -> None:
     for obj in result.get("objects", []):
         validate_payload("object_schema.v1.json", obj)
@@ -93,7 +98,7 @@ def _write_json(path: Path, payload: Any) -> None:
 
 
 def run(
-    input_path: Path,
+    input_path: Path | None,
     output_dir: Path,
     include_evidence_graph: bool = False,
     include_hypotheses: bool = False,
@@ -105,11 +110,19 @@ def run(
     rhino_extractor → geometry_kernel → evidence_graph → hypothesis_engine
     → validation_engine → domain_interpreter (optional flags gate later stages; domain implies validation+hypotheses+evidence in memory).
     """
-    extractor_output = extract_objects(_load_input(input_path))
+    if _is_bridge_mode():
+        extractor_payload: dict[str, Any] = {}
+    else:
+        if input_path is None:
+            raise ValueError("input_path is required in local mode (use .json or .3dm).")
+        extractor_payload = _load_input(input_path)
+
+    extractor_output = extract_objects(extractor_payload)
     if str(extractor_output.get("status", "")).lower() != "ok":
         msg = extractor_output.get("message", "extract_objects failed")
+        input_label = str(input_path) if input_path is not None else "<bridge-mode-no-input>"
         raise RuntimeError(
-            f"rhino_extractor did not return ok: {msg}. input_path was {input_path!s}."
+            f"rhino_extractor did not return ok: {msg}. input_path was {input_label}."
         )
     if "objects" not in extractor_output or not isinstance(extractor_output.get("objects"), list):
         raise RuntimeError("rhino_extractor response missing a list objects key.")
@@ -193,7 +206,12 @@ def run(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run minimal geometry_cognition analysis.")
-    parser.add_argument("input_path", help="Path to Rhino .3dm file or JSON fixture.")
+    parser.add_argument(
+        "input_path",
+        nargs="?",
+        default=None,
+        help="Path to Rhino .3dm/.json in local mode; optional in bridge mode.",
+    )
     parser.add_argument(
         "--output-dir",
         default="outputs",
@@ -221,8 +239,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    input_path: Path | None = Path(args.input_path) if args.input_path else None
     bundle = run(
-        Path(args.input_path),
+        input_path,
         Path(args.output_dir),
         include_evidence_graph=args.include_evidence_graph,
         include_hypotheses=args.include_hypotheses,

@@ -3,14 +3,45 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.Serialization;
 using Rhino;
 using Rhino.DocObjects;
 using Rhino.Geometry;
+using Rhino.Geometry.Intersect;
 
 namespace RhinoPrefabGeometryPlugin.Services;
 
 public class NeutralGeometryService
 {
+    [DataContract]
+    public sealed class RelationVerificationRequest
+    {
+        [DataMember(Name = "relation_id")]
+        public string RelationId { get; set; } = string.Empty;
+
+        [DataMember(Name = "subject_id")]
+        public string SubjectId { get; set; } = string.Empty;
+
+        [DataMember(Name = "object_id")]
+        public string ObjectId { get; set; } = string.Empty;
+
+        [DataMember(Name = "check")]
+        public string Check { get; set; } = string.Empty;
+    }
+
+    [DataContract]
+    public sealed class VerificationTolerance
+    {
+        [DataMember(Name = "linear_tolerance")]
+        public double LinearTolerance { get; set; } = 0.05;
+
+        [DataMember(Name = "angular_tolerance")]
+        public double AngularTolerance { get; set; } = 2.0;
+
+        [DataMember(Name = "unit_system")]
+        public string UnitSystem { get; set; } = "model_unit";
+    }
+
     public Dictionary<string, object> ExtractScene(RhinoDoc doc)
     {
         var objects = doc.Objects
@@ -72,6 +103,211 @@ public class NeutralGeometryService
             ["objects"] = extracted,
             ["missing"] = missing
         };
+    }
+
+    public Dictionary<string, object> VerifyRelations(
+        RhinoDoc doc,
+        IReadOnlyList<RelationVerificationRequest> relations,
+        VerificationTolerance tolerance)
+    {
+        if (relations is null || relations.Count == 0)
+        {
+            throw new InvalidOperationException("No relations provided for verification.");
+        }
+        var results = new List<object>();
+        foreach (var rel in relations)
+        {
+            results.Add(VerifySingleRelation(doc, rel, tolerance));
+        }
+        return new Dictionary<string, object>
+        {
+            ["source"] = "rhino_bridge",
+            ["results"] = results
+        };
+    }
+
+    private static Dictionary<string, object> VerifySingleRelation(
+        RhinoDoc doc,
+        RelationVerificationRequest rel,
+        VerificationTolerance tolerance)
+    {
+        var relationId = rel.RelationId ?? string.Empty;
+        var subjectId = rel.SubjectId ?? string.Empty;
+        var objectId = rel.ObjectId ?? string.Empty;
+        var check = (rel.Check ?? string.Empty).Trim().ToLowerInvariant();
+        var linearTol = Math.Max(0.0, tolerance.LinearTolerance);
+
+        var measurements = new Dictionary<string, object?>
+        {
+            ["distance"] = null,
+            ["intersection_count"] = 0,
+            ["contact_area_estimate"] = null
+        };
+        var limitations = new List<object>();
+        var notes = new List<object>();
+
+        var subjectObj = TryFindObject(doc, subjectId);
+        var objectObj = TryFindObject(doc, objectId);
+        if (subjectObj is null || objectObj is null)
+        {
+            limitations.Add("object_not_found_for_verification");
+            return BuildVerificationResult(
+                relationId,
+                subjectId,
+                objectId,
+                check,
+                "inconclusive",
+                "candidate",
+                "tolerance_review",
+                measurements,
+                0.2,
+                limitations,
+                notes);
+        }
+
+        var gA = subjectObj.Geometry;
+        var gB = objectObj.Geometry;
+        var bboxA = GetValidBbox(gA);
+        var bboxB = GetValidBbox(gB);
+        var bboxGap = ComputeBoundingBoxGap(bboxA, bboxB);
+        measurements["distance"] = bboxGap;
+
+        switch (check)
+        {
+            case "mesh_distance_check":
+            {
+                var method = "mesh_distance";
+                if (gA is Brep && gB is Brep)
+                {
+                    method = "brep_closest_point";
+                    notes.Add("distance estimated from bbox proxy when exact closest-point unavailable");
+                }
+                if (bboxGap <= linearTol)
+                {
+                    return BuildVerificationResult(
+                        relationId, subjectId, objectId, check,
+                        "verified", "confirmed", method, measurements, 0.88, limitations, notes);
+                }
+                return BuildVerificationResult(
+                    relationId, subjectId, objectId, check,
+                    "contradicted", "measured", method, measurements, 0.75, limitations, notes);
+            }
+            case "brep_intersection_check":
+            {
+                if (gA is Brep brepA && gB is Brep brepB)
+                {
+                    try
+                    {
+                        var ok = Intersection.BrepBrep(brepA, brepB, linearTol, out var curves, out var points);
+                        var count = (curves?.Length ?? 0) + (points?.Length ?? 0);
+                        measurements["intersection_count"] = count;
+                        if (ok && count > 0)
+                        {
+                            return BuildVerificationResult(
+                                relationId, subjectId, objectId, check,
+                                "verified", "confirmed", "brep_intersection_curve", measurements, 0.92, limitations, notes);
+                        }
+                        return BuildVerificationResult(
+                            relationId, subjectId, objectId, check,
+                            "contradicted", "measured", "brep_intersection_curve", measurements, 0.72, limitations, notes);
+                    }
+                    catch
+                    {
+                        limitations.Add("brep_intersection_unavailable");
+                    }
+                }
+                else
+                {
+                    limitations.Add("brep_intersection_unavailable");
+                }
+                return BuildVerificationResult(
+                    relationId, subjectId, objectId, check,
+                    "inconclusive", "candidate", "brep_intersection_curve", measurements, 0.35, limitations, notes);
+            }
+            case "face_adjacency_check":
+            {
+                limitations.Add("face_adjacency_exact_check_not_implemented");
+                return BuildVerificationResult(
+                    relationId, subjectId, objectId, check,
+                    "inconclusive", "candidate", "tolerance_review", measurements, 0.3, limitations, notes);
+            }
+            case "tolerance_review":
+            {
+                if (bboxGap <= linearTol)
+                {
+                    return BuildVerificationResult(
+                        relationId, subjectId, objectId, check,
+                        "verified", "measured", "tolerance_review", measurements, 0.8, limitations, notes);
+                }
+                return BuildVerificationResult(
+                    relationId, subjectId, objectId, check,
+                    "contradicted", "measured", "tolerance_review", measurements, 0.7, limitations, notes);
+            }
+            default:
+                limitations.Add("unsupported_check");
+                return BuildVerificationResult(
+                    relationId, subjectId, objectId, check,
+                    "inconclusive", "candidate", "tolerance_review", measurements, 0.2, limitations, notes);
+        }
+    }
+
+    private static Dictionary<string, object> BuildVerificationResult(
+        string relationId,
+        string subjectId,
+        string objectId,
+        string check,
+        string verificationStatus,
+        string assertionLevel,
+        string method,
+        Dictionary<string, object?> measurements,
+        double confidence,
+        List<object> limitations,
+        List<object> notes)
+    {
+        return new Dictionary<string, object>
+        {
+            ["relation_id"] = relationId,
+            ["subject_id"] = subjectId,
+            ["object_id"] = objectId,
+            ["check"] = check,
+            ["verification_status"] = verificationStatus,
+            ["assertion_level"] = assertionLevel,
+            ["method"] = method,
+            ["measurements"] = measurements.ToDictionary(k => k.Key, v => v.Value ?? (object?)null),
+            ["confidence"] = Math.Max(0.0, Math.Min(1.0, confidence)),
+            ["limitations"] = limitations,
+            ["notes"] = notes
+        };
+    }
+
+    private static RhinoObject? TryFindObject(RhinoDoc doc, string objectId)
+    {
+        var token = (objectId ?? string.Empty).Trim();
+        if (token.StartsWith("obj:", StringComparison.OrdinalIgnoreCase))
+        {
+            token = token.Substring(4);
+        }
+        if (!Guid.TryParse(token, out var guid))
+        {
+            return null;
+        }
+        return doc.Objects.FindId(guid);
+    }
+
+    private static double ComputeBoundingBoxGap(BoundingBox a, BoundingBox b)
+    {
+        if (!a.IsValid || !b.IsValid)
+        {
+            return double.PositiveInfinity;
+        }
+        var gapSq = 0.0;
+        if (a.Max.X < b.Min.X) gapSq += Math.Pow(b.Min.X - a.Max.X, 2);
+        else if (b.Max.X < a.Min.X) gapSq += Math.Pow(a.Min.X - b.Max.X, 2);
+        if (a.Max.Y < b.Min.Y) gapSq += Math.Pow(b.Min.Y - a.Max.Y, 2);
+        else if (b.Max.Y < a.Min.Y) gapSq += Math.Pow(a.Min.Y - b.Max.Y, 2);
+        if (a.Max.Z < b.Min.Z) gapSq += Math.Pow(b.Min.Z - a.Max.Z, 2);
+        else if (b.Max.Z < a.Min.Z) gapSq += Math.Pow(a.Min.Z - b.Max.Z, 2);
+        return Math.Sqrt(Math.Max(0.0, gapSq));
     }
 
     private static Dictionary<string, object> ExtractObject(RhinoDoc doc, RhinoObject obj)

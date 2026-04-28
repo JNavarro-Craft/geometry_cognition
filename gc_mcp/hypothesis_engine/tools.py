@@ -105,6 +105,39 @@ def _relation_evidence_weight(ev: dict[str, Any]) -> float:
     return 0.35
 
 
+def _requires_verified_interaction(ev: dict[str, Any]) -> bool:
+    observed = ev.get("observed_value", {})
+    assertion_level = ""
+    verification_status = ""
+    verification_required: list[Any] = []
+    if isinstance(observed, dict):
+        assertion_level = str(observed.get("assertion_level", ""))
+        verification_status = str(observed.get("verification_status", ""))
+        raw_req = observed.get("verification_required", [])
+        if isinstance(raw_req, list):
+            verification_required = raw_req
+    if assertion_level and assertion_level != "confirmed":
+        return True
+    if verification_status and verification_status != "verified":
+        return True
+    return len(verification_required) > 0
+
+
+def _pending_checks(ev: dict[str, Any]) -> list[str]:
+    observed = ev.get("observed_value", {})
+    if not isinstance(observed, dict):
+        return []
+    raw_req = observed.get("verification_required", [])
+    if not isinstance(raw_req, list):
+        return []
+    checks: list[str] = []
+    for item in raw_req:
+        check = str(item).strip()
+        if check:
+            checks.append(check)
+    return checks
+
+
 def _build_hypothesis(
     hypothesis_id: str,
     entity_id: str,
@@ -250,6 +283,10 @@ def generate_hypotheses(payload: dict[str, Any]) -> dict[str, Any]:
             if rel_strength <= 0.4:
                 if "verified geometric interaction required" not in missing_information:
                     missing_information.append("verified geometric interaction required")
+        requires_verified_interaction = any(_requires_verified_interaction(ev) for ev in relation_evidence)
+        pending_checks: list[str] = []
+        for ev in relation_evidence:
+            pending_checks.extend(_pending_checks(ev))
 
         evidence_incomplete = not has_relation
         if confidence < 0.35:
@@ -263,6 +300,12 @@ def generate_hypotheses(payload: dict[str, Any]) -> dict[str, Any]:
             missing_information = ["insufficient relational evidence", "additional spatial relationships required"]
         elif confidence >= 0.7:
             status = "supported"
+        if requires_verified_interaction and "verified geometric interaction required" not in missing_information:
+            missing_information.append("verified geometric interaction required")
+        for check in _dedupe_preserve_order(pending_checks):
+            pending_entry = f"pending: {check}"
+            if pending_entry not in missing_information:
+                missing_information.append(pending_entry)
 
         hypothesis = _build_hypothesis(
             hypothesis_id=f"hyp-{sequence:04d}",

@@ -9,6 +9,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from workflows.run_minimal_analysis import run  # noqa: E402
+import workflows.run_minimal_analysis as run_minimal_analysis_module  # noqa: E402
 
 
 FIXTURES_DIR = PROJECT_ROOT / "tests" / "fixtures"
@@ -194,3 +195,34 @@ def test_minimal_workflow_mixed_system_with_domain_interpreter(tmp_path):
     assert "domain_interpretations" in bundle
     assert "automation_results" not in bundle
     assert not _contains_forbidden(loaded["domain_interpretations.json"])
+
+
+def test_minimal_workflow_bridge_mode_does_not_require_input_path(monkeypatch, tmp_path):
+    monkeypatch.setenv("GC_BACKEND_MODE", "bridge")
+
+    fixture_objects = json.loads((FIXTURES_DIR / "normalized_objects.sample.json").read_text(encoding="utf-8"))
+
+    def _mock_extract_objects(payload):
+        assert payload == {}
+        return {
+            "status": "ok",
+            "objects": fixture_objects,
+        }
+
+    def _boom_load_input(_path):
+        raise AssertionError("_load_input should not be called in bridge mode")
+
+    monkeypatch.setattr(run_minimal_analysis_module, "extract_objects", _mock_extract_objects)
+    monkeypatch.setattr(run_minimal_analysis_module, "_load_input", _boom_load_input)
+
+    output_dir = tmp_path / "bridge_mode_outputs"
+    bundle = run(None, output_dir, include_domain=True)
+    loaded = _validate_output_files(
+        output_dir,
+        include_evidence_graph=True,
+        include_hypotheses=True,
+        include_validation=True,
+        include_domain=True,
+    )
+    assert bundle["objects"]
+    assert loaded["objects.json"]
