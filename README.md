@@ -37,6 +37,13 @@ Fase por dependencia, tal como se encadena en `workflows/run_minimal_analysis.py
 
 Los MCPs se comunican exclusivamente con contratos JSON versionados en `contracts/`.
 
+## Integración Rhino bridge
+
+- `rhino_bridge/plugin/` contiene el plugin Rhino (.rhp) en C#.
+- `gc_mcp/` contiene los MCP Python de observación/razonamiento.
+- El bridge neutral expone rutas `/geometry/*` para extracción agnóstica.
+- Endpoints legacy del plugin siguen disponibles por compatibilidad durante la transición.
+
 - MCPs fijos de plataforma:
   - `geometry_kernel`
   - `metadata_context`

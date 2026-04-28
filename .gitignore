@@ -20,3 +20,14 @@ Thumbs.db
 *.pyc
 outputs/
 test_models/
+
+# Rhino / .NET build artifacts
+rhino_bridge/bin/
+rhino_bridge/obj/
+rhino_bridge/plugin/bin/
+rhino_bridge/plugin/obj/
+rhino_bridge/**/*.dll
+rhino_bridge/**/*.pdb
+rhino_bridge/**/*.exe
+rhino_bridge/**/*.user
+rhino_bridge/**/*.suo
