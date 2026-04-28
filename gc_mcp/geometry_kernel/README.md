@@ -4,7 +4,7 @@
 - Puede: calcular features geométricos abstractos y relaciones básicas.
 - NO puede: usar vocabulario de dominio ni concluir función constructiva.
 - Input esperado: `object_schema.v1.json`.
-- Output esperado: `geometry_schema.v1.json` y `relations_schema.v1.json`.
+- Output esperado: `geometry_schema.v2.json` y `relations_schema.v2.json`.
 - Prohibiciones: términos de dominio dentro del kernel.
 - Relación con otros MCPs: produce observaciones geométricas estructuradas para `evidence_graph`.
 
@@ -51,3 +51,36 @@ Importante:
 - Estas relaciones son observacionales y trazables.
 - `declared_related_to` representa coincidencia metadata, no inferencia de dominio constructivo.
 - Límites actuales: aproximaciones desde bbox/OBB; no hay contacto/intersección geométrica exacta.
+
+## Interaction Layer (núcleo fijo, agnóstico)
+
+El kernel incluye una capa de interacción geométrica sin vocabulario de dominio:
+- `near`: proximidad general por distancia/gap.
+- `touches` (touching candidate): posible contacto cuando `bbox_gap ~= tolerance`.
+- `intersects` (intersecting/overlapping bbox candidate): solape de AABB.
+- `contains` / `contained_by` (contained_in candidate): contención por AABB.
+- `coplanar_with` (coplanar candidate): normales compatibles + compatibilidad de planos de bbox.
+
+Diferencia clave:
+- `near` no implica contacto.
+- `touches` aquí es candidato bbox-based, no contacto Brep exacto.
+- `intersects` aquí es candidato por solape de AABB.
+
+Para relaciones candidatas bbox-based, el kernel adjunta limitaciones explícitas:
+- `bbox_based`
+- `candidate_relation`
+- `requires_brep_contact_check`
+
+Esto mantiene el núcleo fijo geométrico y evita inferencia de dominio.
+
+## Niveles de certeza en relaciones
+
+Cada relación emitida incorpora certeza explícita (`relations_schema.v2.json`):
+- `assertion_level`: `candidate`, `measured`, `confirmed`
+- `verification_status`: `unverified`, `partially_verified`, `verified`, `contradicted`
+- `verification_required`: checks pendientes (por ejemplo contacto/intersección Brep o revisión de tolerancias)
+
+Lectura correcta:
+- `candidate` != `measured` != `confirmed`
+- `intersects` por AABB en este kernel es candidato observacional, no intersección exacta de geometría libre
+- `touches` por gap de bbox es candidato, no contacto real

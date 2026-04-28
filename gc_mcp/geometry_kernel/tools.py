@@ -367,6 +367,85 @@ def _bbox_gap(a: dict[str, Any], b: dict[str, Any]) -> float:
     return math.sqrt(sum(g * g for g in gaps))
 
 
+def _bbox_overlap_extents(a: dict[str, Any], b: dict[str, Any]) -> list[float]:
+    a_min, a_max = a["min"], a["max"]
+    b_min, b_max = b["min"], b["max"]
+    return [
+        max(0.0, min(a_max[i], b_max[i]) - max(a_min[i], b_min[i]))
+        for i in range(3)
+    ]
+
+
+def _bbox_overlap_volume(a: dict[str, Any], b: dict[str, Any]) -> float:
+    ext = _bbox_overlap_extents(a, b)
+    return ext[0] * ext[1] * ext[2]
+
+
+def _bbox_contains(inner: dict[str, Any], outer: dict[str, Any], tol: float = 1e-6) -> bool:
+    in_min, in_max = inner["min"], inner["max"]
+    out_min, out_max = outer["min"], outer["max"]
+    return all(in_min[i] >= out_min[i] - tol and in_max[i] <= out_max[i] + tol for i in range(3))
+
+
+def _extract_face_normals(obj: dict[str, Any]) -> list[list[float]]:
+    rgs = obj.get("raw_geometry_summary")
+    if not isinstance(rgs, dict):
+        return []
+    raw = rgs.get("face_normals")
+    if not isinstance(raw, list):
+        return []
+    normals: list[list[float]] = []
+    for n in raw:
+        if not isinstance(n, list) or len(n) != 3:
+            continue
+        try:
+            nn = _normalize([float(n[0]), float(n[1]), float(n[2])])
+        except (TypeError, ValueError):
+            continue
+        if _norm(nn) > 1e-8:
+            normals.append(nn)
+    return normals
+
+
+def _coplanar_candidate(
+    a_obj: dict[str, Any],
+    b_obj: dict[str, Any],
+    a_feat: dict[str, Any],
+    b_feat: dict[str, Any],
+    linear_tol: float = 0.05,
+    angular_dot_tol: float = 0.985,
+) -> bool:
+    a_normals = _extract_face_normals(a_obj)
+    b_normals = _extract_face_normals(b_obj)
+    if not a_normals or not b_normals:
+        return False
+
+    compatible = False
+    for na in a_normals:
+        for nb in b_normals:
+            if abs(_dot(na, nb)) >= angular_dot_tol:
+                compatible = True
+                break
+        if compatible:
+            break
+    if not compatible:
+        return False
+
+    a_bb = a_feat["bbox"]
+    b_bb = b_feat["bbox"]
+    # Approximate coplanarity from bbox face compatibility along any axis.
+    for i in range(3):
+        if abs(a_bb["min"][i] - b_bb["min"][i]) <= linear_tol:
+            return True
+        if abs(a_bb["min"][i] - b_bb["max"][i]) <= linear_tol:
+            return True
+        if abs(a_bb["max"][i] - b_bb["min"][i]) <= linear_tol:
+            return True
+        if abs(a_bb["max"][i] - b_bb["max"][i]) <= linear_tol:
+            return True
+    return False
+
+
 def _dominant_axis(feature: dict[str, Any]) -> list[float]:
     obb = feature.get("oriented_bbox")
     if isinstance(obb, dict):
@@ -427,6 +506,12 @@ def _relation_payload(
     observation_refs: list[str],
     limitations: list[str],
     derived_from: list[str],
+    assertion_level: str,
+    inference_basis: str,
+    measurement_method: str,
+    verification_status: str,
+    verification_required: list[str],
+    confidence_basis: list[str],
 ) -> dict[str, Any]:
     rel = {
         "relation_id": relation_id,
@@ -444,8 +529,14 @@ def _relation_payload(
         "observation_refs": observation_refs,
         "limitations": limitations,
         "derived_from": derived_from,
+        "assertion_level": assertion_level,
+        "inference_basis": inference_basis,
+        "measurement_method": measurement_method,
+        "verification_status": verification_status,
+        "verification_required": verification_required,
+        "confidence_basis": confidence_basis,
     }
-    validate_payload("relations_schema.v1.json", rel)
+    validate_payload("relations_schema.v2.json", rel)
     return rel
 
 
@@ -461,6 +552,9 @@ def _build_relations(objects: list[dict[str, Any]], features: list[dict[str, Any
         b_center = feature_by_object[b_id]["centroid"]
         d = _distance(a_center, b_center)
         gap = _bbox_gap(feature_by_object[a_id]["bbox"], feature_by_object[b_id]["bbox"])
+        overlap_ext = _bbox_overlap_extents(feature_by_object[a_id]["bbox"], feature_by_object[b_id]["bbox"])
+        overlap_vol = _bbox_overlap_volume(feature_by_object[a_id]["bbox"], feature_by_object[b_id]["bbox"])
+        touch_tol = 0.05
 
         if d <= 3.0 or gap <= 0.5:
             relations.append(
@@ -475,6 +569,223 @@ def _build_relations(objects: list[dict[str, Any]], features: list[dict[str, Any
                     observation_refs=[f"obs:distance:{a_id}:{b_id}", f"obs:bbox-gap:{a_id}:{b_id}"],
                     limitations=["threshold_dependent", "bbox_proximity_proxy"],
                     derived_from=["geometry_schema.v1.json"],
+                    assertion_level="candidate",
+                    inference_basis="centroid_distance" if d <= 3.0 else "bbox_gap_within_tolerance",
+                    measurement_method="centroid_distance" if d <= 3.0 else "aabb_gap",
+                    verification_status="unverified",
+                    verification_required=["tolerance_review"],
+                    confidence_basis=["distance threshold and bbox gap proxy"],
+                )
+            )
+            relation_idx += 1
+
+        # interaction layer (agnostic, candidate-only when bbox-based)
+        if overlap_vol > 1e-6:
+            relations.append(
+                _relation_payload(
+                    relation_id=f"rel-overlapping-bbox-{relation_idx}",
+                    subject_id=a_id,
+                    predicate="intersects",
+                    object_id=b_id,
+                    relation_type="spatial",
+                    directionality="symmetric",
+                    confidence=0.78,
+                    observation_refs=[
+                        f"obs:overlapping_bbox:{a_id}:{b_id}",
+                        f"obs:bbox-overlap-volume:{overlap_vol:.6f}",
+                    ],
+                    limitations=["bbox_based", "candidate_relation", "requires_brep_contact_check"],
+                    derived_from=["geometry_schema.v2.json"],
+                    assertion_level="candidate",
+                    inference_basis="bbox_overlap",
+                    measurement_method="aabb_overlap",
+                    verification_status="unverified",
+                    verification_required=["brep_intersection_check"],
+                    confidence_basis=["aabb overlap volume proxy"],
+                )
+            )
+            relation_idx += 1
+
+        if gap > touch_tol:
+            relations.append(
+                _relation_payload(
+                    relation_id=f"rel-separated-by-gap-{relation_idx}",
+                    subject_id=a_id,
+                    predicate="near",
+                    object_id=b_id,
+                    relation_type="spatial",
+                    directionality="symmetric",
+                    confidence=0.74,
+                    observation_refs=[f"obs:separated_by_gap:{a_id}:{b_id}", f"obs:bbox-gap:{gap:.6f}"],
+                    limitations=["bbox_based", "candidate_relation", "requires_brep_contact_check"],
+                    derived_from=["geometry_schema.v2.json"],
+                    assertion_level="candidate",
+                    inference_basis="bbox_gap_within_tolerance",
+                    measurement_method="aabb_gap",
+                    verification_status="unverified",
+                    verification_required=["mesh_distance_check", "tolerance_review"],
+                    confidence_basis=["positive aabb gap indicates separation"],
+                )
+            )
+            relation_idx += 1
+
+        if gap <= touch_tol:
+            relations.append(
+                _relation_payload(
+                    relation_id=f"rel-touching-candidate-{relation_idx}",
+                    subject_id=a_id,
+                    predicate="touches",
+                    object_id=b_id,
+                    relation_type="spatial",
+                    directionality="symmetric",
+                    confidence=0.76,
+                    observation_refs=[f"obs:touching_candidate:{a_id}:{b_id}", f"obs:bbox-gap:{gap:.6f}"],
+                    limitations=["bbox_based", "candidate_relation", "requires_brep_contact_check"],
+                    derived_from=["geometry_schema.v2.json"],
+                    assertion_level="candidate",
+                    inference_basis="bbox_gap_within_tolerance",
+                    measurement_method="aabb_gap",
+                    verification_status="unverified",
+                    verification_required=["brep_contact_check"],
+                    confidence_basis=["aabb gap within contact tolerance"],
+                )
+            )
+            relation_idx += 1
+
+        if overlap_vol > 1e-6:
+            relations.append(
+                _relation_payload(
+                    relation_id=f"rel-intersecting-candidate-{relation_idx}",
+                    subject_id=a_id,
+                    predicate="intersects",
+                    object_id=b_id,
+                    relation_type="spatial",
+                    directionality="symmetric",
+                    confidence=0.82,
+                    observation_refs=[
+                        f"obs:intersecting_candidate:{a_id}:{b_id}",
+                        f"obs:bbox-overlap-volume:{overlap_vol:.6f}",
+                    ],
+                    limitations=["bbox_based", "candidate_relation", "requires_brep_contact_check"],
+                    derived_from=["geometry_schema.v2.json"],
+                    assertion_level="candidate",
+                    inference_basis="bbox_overlap",
+                    measurement_method="aabb_overlap",
+                    verification_status="unverified",
+                    verification_required=["brep_intersection_check"],
+                    confidence_basis=["non-zero aabb overlap volume"],
+                )
+            )
+            relation_idx += 1
+
+        a_contains_b = _bbox_contains(feature_by_object[b_id]["bbox"], feature_by_object[a_id]["bbox"])
+        b_contains_a = _bbox_contains(feature_by_object[a_id]["bbox"], feature_by_object[b_id]["bbox"])
+        if a_contains_b and not b_contains_a:
+            relations.append(
+                _relation_payload(
+                    relation_id=f"rel-contained-in-candidate-{relation_idx}",
+                    subject_id=b_id,
+                    predicate="contained_by",
+                    object_id=a_id,
+                    relation_type="spatial",
+                    directionality="directed",
+                    confidence=0.84,
+                    observation_refs=[f"obs:contained_in_candidate:{b_id}:{a_id}"],
+                    limitations=["bbox_based", "candidate_relation", "requires_brep_contact_check"],
+                    derived_from=["geometry_schema.v2.json"],
+                    assertion_level="candidate",
+                    inference_basis="bbox_containment",
+                    measurement_method="aabb_overlap",
+                    verification_status="unverified",
+                    verification_required=["brep_intersection_check", "tolerance_review"],
+                    confidence_basis=["inner aabb bounds lie inside outer aabb"],
+                )
+            )
+            relation_idx += 1
+            relations.append(
+                _relation_payload(
+                    relation_id=f"rel-contains-candidate-{relation_idx}",
+                    subject_id=a_id,
+                    predicate="contains",
+                    object_id=b_id,
+                    relation_type="spatial",
+                    directionality="directed",
+                    confidence=0.84,
+                    observation_refs=[f"obs:contained_in_candidate:{b_id}:{a_id}"],
+                    limitations=["bbox_based", "candidate_relation", "requires_brep_contact_check"],
+                    derived_from=["geometry_schema.v2.json"],
+                    assertion_level="candidate",
+                    inference_basis="bbox_containment",
+                    measurement_method="aabb_overlap",
+                    verification_status="unverified",
+                    verification_required=["brep_intersection_check", "tolerance_review"],
+                    confidence_basis=["outer aabb encloses inner aabb"],
+                )
+            )
+            relation_idx += 1
+        elif b_contains_a and not a_contains_b:
+            relations.append(
+                _relation_payload(
+                    relation_id=f"rel-contained-in-candidate-{relation_idx}",
+                    subject_id=a_id,
+                    predicate="contained_by",
+                    object_id=b_id,
+                    relation_type="spatial",
+                    directionality="directed",
+                    confidence=0.84,
+                    observation_refs=[f"obs:contained_in_candidate:{a_id}:{b_id}"],
+                    limitations=["bbox_based", "candidate_relation", "requires_brep_contact_check"],
+                    derived_from=["geometry_schema.v2.json"],
+                    assertion_level="candidate",
+                    inference_basis="bbox_containment",
+                    measurement_method="aabb_overlap",
+                    verification_status="unverified",
+                    verification_required=["brep_intersection_check", "tolerance_review"],
+                    confidence_basis=["inner aabb bounds lie inside outer aabb"],
+                )
+            )
+            relation_idx += 1
+            relations.append(
+                _relation_payload(
+                    relation_id=f"rel-contains-candidate-{relation_idx}",
+                    subject_id=b_id,
+                    predicate="contains",
+                    object_id=a_id,
+                    relation_type="spatial",
+                    directionality="directed",
+                    confidence=0.84,
+                    observation_refs=[f"obs:contained_in_candidate:{a_id}:{b_id}"],
+                    limitations=["bbox_based", "candidate_relation", "requires_brep_contact_check"],
+                    derived_from=["geometry_schema.v2.json"],
+                    assertion_level="candidate",
+                    inference_basis="bbox_containment",
+                    measurement_method="aabb_overlap",
+                    verification_status="unverified",
+                    verification_required=["brep_intersection_check", "tolerance_review"],
+                    confidence_basis=["outer aabb encloses inner aabb"],
+                )
+            )
+            relation_idx += 1
+
+        if _coplanar_candidate(a, b, feature_by_object[a_id], feature_by_object[b_id]):
+            relations.append(
+                _relation_payload(
+                    relation_id=f"rel-coplanar-candidate-{relation_idx}",
+                    subject_id=a_id,
+                    predicate="coplanar_with",
+                    object_id=b_id,
+                    relation_type="spatial",
+                    directionality="symmetric",
+                    confidence=0.73,
+                    observation_refs=[f"obs:coplanar_candidate:{a_id}:{b_id}"],
+                    limitations=["bbox_based", "candidate_relation", "requires_brep_contact_check"],
+                    derived_from=["geometry_schema.v2.json"],
+                    assertion_level="candidate",
+                    inference_basis="face_normal_similarity",
+                    measurement_method="face_normal_dot_product",
+                    verification_status="partially_verified",
+                    verification_required=["face_adjacency_check"],
+                    confidence_basis=["face normal compatibility plus bbox plane alignment"],
                 )
             )
             relation_idx += 1
@@ -497,6 +808,12 @@ def _build_relations(objects: list[dict[str, Any]], features: list[dict[str, Any
                     observation_refs=[f"obs:principal-axis:{a_id}:{b_id}", f"obs:obb-axis-dot:{axis_dot:.3f}"],
                     limitations=["principal_axis_proxy", "obb_axis_proxy"],
                     derived_from=["geometry_schema.v1.json"],
+                    assertion_level="measured",
+                    inference_basis="oriented_bbox_alignment",
+                    measurement_method="obb_axis_comparison",
+                    verification_status="partially_verified",
+                    verification_required=["tolerance_review"],
+                    confidence_basis=["dominant axis similarity from oriented bbox"],
                 )
             )
             relation_idx += 1
@@ -512,6 +829,12 @@ def _build_relations(objects: list[dict[str, Any]], features: list[dict[str, Any
                     observation_refs=[f"obs:axis-orientation:{a_id}:{b_id}", f"obs:obb-axis-dot:{axis_dot:.3f}"],
                     limitations=["axis_orientation_proxy", "obb_axis_proxy"],
                     derived_from=["geometry_schema.v1.json"],
+                    assertion_level="measured",
+                    inference_basis="oriented_bbox_alignment",
+                    measurement_method="obb_axis_comparison",
+                    verification_status="partially_verified",
+                    verification_required=["tolerance_review"],
+                    confidence_basis=["axis dot product from oriented bbox"],
                 )
             )
             relation_idx += 1
@@ -531,6 +854,12 @@ def _build_relations(objects: list[dict[str, Any]], features: list[dict[str, Any
                     observation_refs=[f"obs:group-overlap:{a_id}:{b_id}"],
                     limitations=["declared_grouping_only"],
                     derived_from=["object_schema.v1.json"],
+                    assertion_level="candidate",
+                    inference_basis="shared_metadata",
+                    measurement_method="metadata_key_match",
+                    verification_status="unverified",
+                    verification_required=["human_review"],
+                    confidence_basis=["shared declared grouping identifiers"],
                 )
             )
             relation_idx += 1
@@ -551,6 +880,12 @@ def _build_relations(objects: list[dict[str, Any]], features: list[dict[str, Any
                         observation_refs=[f"obs:block-name:{a_id}:{b_id}"],
                         limitations=["depends_on_extractor_block_context"],
                         derived_from=["object_schema.v1.json"],
+                        assertion_level="candidate",
+                        inference_basis="shared_metadata",
+                        measurement_method="metadata_key_match",
+                        verification_status="unverified",
+                        verification_required=["human_review"],
+                        confidence_basis=["matching block instance names"],
                     )
                 )
                 relation_idx += 1
@@ -572,6 +907,12 @@ def _build_relations(objects: list[dict[str, Any]], features: list[dict[str, Any
                     observation_refs=[f"obs:metadata-shared:{a_id}:{b_id}"] + shared_meta[:3],
                     limitations=["metadata_observational_only", "no_domain_inference"],
                     derived_from=["object_schema.v1.json"],
+                    assertion_level="candidate",
+                    inference_basis="shared_metadata",
+                    measurement_method="metadata_key_match",
+                    verification_status="unverified",
+                    verification_required=["human_review"],
+                    confidence_basis=["shared explicit metadata tokens"],
                 )
             )
             relation_idx += 1
@@ -600,7 +941,7 @@ def compute_geometry_features(payload: dict[str, Any]) -> dict[str, Any]:
         "output_contract": [
             "geometry_schema.v2.json",
             "entity_schema.v1.json",
-            "relations_schema.v1.json",
+            "relations_schema.v2.json",
         ],
         "geometry_features": geometry_features,
         "entities": entities,

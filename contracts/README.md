@@ -17,3 +17,18 @@ Principios:
 - `relation`: vínculo observado o derivado entre objetos/entidades, con contexto de tolerancia y limitaciones.
 - `evidence`: formalización trazable de claims observacionales para sustentar o contradecir hipótesis.
 - `hypothesis`: propuesta interpretativa probabilística y refutable, nunca hecho definitivo por sí sola.
+
+## Relaciones v1 vs v2
+
+- `relations_schema.v1.json`: relación observacional básica (predicado, confianza y tolerancias).
+- `relations_schema.v2.json`: misma base + certeza epistemológica explícita:
+  - `assertion_level`: `candidate` | `measured` | `confirmed`
+  - `inference_basis` y `measurement_method`
+  - `verification_status` y `verification_required`
+  - `confidence_basis`
+
+Notas de interpretación:
+- `candidate` no equivale a verdad geométrica confirmada.
+- `bbox overlap` no implica intersección Brep real.
+- `near` no implica contacto.
+- relaciones por metadata siguen siendo observacionales y no funcionales.

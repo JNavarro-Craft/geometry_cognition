@@ -1,0 +1,71 @@
+[
+  {
+    "relation_id": "rel-v2-001",
+    "subject_id": "obj-a",
+    "predicate": "intersects",
+    "object_id": "obj-b",
+    "relation_type": "spatial",
+    "directionality": "symmetric",
+    "confidence": 0.78,
+    "tolerance_context": {
+      "linear_tolerance": 0.05,
+      "angular_tolerance": 2.0,
+      "unit_system": "model_unit"
+    },
+    "observation_refs": ["obs:overlapping_bbox:obj-a:obj-b"],
+    "limitations": ["bbox_based", "candidate_relation", "requires_brep_contact_check"],
+    "derived_from": ["geometry_schema.v2.json"],
+    "assertion_level": "candidate",
+    "inference_basis": "bbox_overlap",
+    "measurement_method": "aabb_overlap",
+    "verification_status": "unverified",
+    "verification_required": ["brep_intersection_check"],
+    "confidence_basis": ["aabb overlap volume proxy"]
+  },
+  {
+    "relation_id": "rel-v2-002",
+    "subject_id": "obj-c",
+    "predicate": "touches",
+    "object_id": "obj-d",
+    "relation_type": "spatial",
+    "directionality": "symmetric",
+    "confidence": 0.76,
+    "tolerance_context": {
+      "linear_tolerance": 0.05,
+      "angular_tolerance": 2.0,
+      "unit_system": "model_unit"
+    },
+    "observation_refs": ["obs:touching_candidate:obj-c:obj-d"],
+    "limitations": ["bbox_based", "candidate_relation", "requires_brep_contact_check"],
+    "derived_from": ["geometry_schema.v2.json"],
+    "assertion_level": "candidate",
+    "inference_basis": "bbox_gap_within_tolerance",
+    "measurement_method": "aabb_gap",
+    "verification_status": "unverified",
+    "verification_required": ["brep_contact_check"],
+    "confidence_basis": ["aabb gap within tolerance"]
+  },
+  {
+    "relation_id": "rel-v2-003",
+    "subject_id": "obj-e",
+    "predicate": "declared_related_to",
+    "object_id": "obj-f",
+    "relation_type": "organizational",
+    "directionality": "symmetric",
+    "confidence": 0.85,
+    "tolerance_context": {
+      "linear_tolerance": 0.05,
+      "angular_tolerance": 2.0,
+      "unit_system": "model_unit"
+    },
+    "observation_refs": ["obs:metadata-shared:obj-e:obj-f", "assemblyid:A-01"],
+    "limitations": ["metadata_observational_only", "no_domain_inference"],
+    "derived_from": ["object_schema.v1.json"],
+    "assertion_level": "candidate",
+    "inference_basis": "shared_metadata",
+    "measurement_method": "metadata_key_match",
+    "verification_status": "unverified",
+    "verification_required": ["human_review"],
+    "confidence_basis": ["shared metadata keys only"]
+  }
+]

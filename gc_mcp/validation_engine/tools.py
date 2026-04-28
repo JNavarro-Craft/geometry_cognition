@@ -207,7 +207,7 @@ def validate_hypotheses(payload: dict[str, Any]) -> dict[str, Any]:
         "role": "validation",
         "status": "ok",
         "message": f"Validated {len(hypotheses)} hypotheses with {len(results)} rule results.",
-        "expected_input_contract": "hypothesis_schema.v1.json + evidence_schema.v1.json + entity_schema.v1.json + relations_schema.v1.json",
+        "expected_input_contract": "hypothesis_schema.v1.json + evidence_schema.v1.json + entity_schema.v1.json + relations_schema.v2.json",
         "output_contract": "validation_schema.v1.json",
         "validation_results": results,
         "evaluated_hypothesis_count": len(hypotheses),

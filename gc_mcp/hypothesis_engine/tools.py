@@ -92,6 +92,19 @@ def _contains_forbidden_term(text: str) -> bool:
     return any(term in lowered for term in FORBIDDEN_TERMS)
 
 
+def _relation_evidence_weight(ev: dict[str, Any]) -> float:
+    observed = ev.get("observed_value", {})
+    if isinstance(observed, dict):
+        level = str(observed.get("assertion_level", "candidate"))
+    else:
+        level = "candidate"
+    if level == "confirmed":
+        return 1.0
+    if level == "measured":
+        return 0.65
+    return 0.35
+
+
 def _build_hypothesis(
     hypothesis_id: str,
     entity_id: str,
@@ -195,6 +208,7 @@ def generate_hypotheses(payload: dict[str, Any]) -> dict[str, Any]:
 
         has_geom = any(ev.get("evidence_type") == "geometry" for ev in unique_relevant.values())
         has_relation = any(ev.get("evidence_type") == "relation" for ev in unique_relevant.values())
+        relation_evidence = [ev for ev in unique_relevant.values() if ev.get("evidence_type") == "relation"]
 
         morph_values = [
             str(ev.get("observed_value", {}).get("morphology", ""))
@@ -225,6 +239,17 @@ def generate_hypotheses(payload: dict[str, Any]) -> dict[str, Any]:
             alternatives = ["ambiguous_entity"]
         else:
             missing_information = ["clear_morphology_or_relation_pattern"]
+
+        # Relational consistency weighting: confirmed > measured > candidate.
+        if relation_evidence:
+            rel_weights = [_relation_evidence_weight(ev) for ev in relation_evidence]
+            rel_strength = sum(rel_weights) / len(rel_weights)
+            confidence = min(0.9, confidence * 0.75 + rel_strength * 0.25)
+            if len(relation_evidence) >= 2 and rel_strength >= 0.6:
+                confidence = min(0.92, confidence + 0.04)
+            if rel_strength <= 0.4:
+                if "verified geometric interaction required" not in missing_information:
+                    missing_information.append("verified geometric interaction required")
 
         evidence_incomplete = not has_relation
         if confidence < 0.35:

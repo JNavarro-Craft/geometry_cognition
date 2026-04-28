@@ -107,16 +107,27 @@ def build_evidence_graph(payload: dict[str, Any]) -> dict[str, Any]:
         edges.append(_edge("has_relation", f"obj:{subject_id}", rel_node_id))
         edges.append(_edge("has_relation", rel_node_id, f"obj:{object_id}"))
         edges.append(_edge("supports_observation", rel_node_id, f"obj:{subject_id}"))
+        assertion_level = str(rel.get("assertion_level", "candidate"))
+        conservative_claim = f"{assertion_level} relation observed between objects"
+        predicate = str(rel.get("predicate", "declared_related_to"))
+        if predicate == "touches" and assertion_level == "candidate":
+            conservative_claim = "candidate touching relation observed between objects"
         evidence_items.append(
             _evidence_item(
                 evidence_id=f"ev-rel-{relation_id}",
                 evidence_type="relation",
                 source_object_ids=[subject_id, object_id],
-                claim=f"relation {str(rel.get('predicate', 'declared_related_to'))} observed between objects",
+                claim=conservative_claim,
                 observed_value={
-                    "predicate": rel.get("predicate"),
+                    "predicate": predicate,
                     "relation_type": rel.get("relation_type"),
                     "directionality": rel.get("directionality"),
+                    "assertion_level": assertion_level,
+                    "inference_basis": rel.get("inference_basis"),
+                    "measurement_method": rel.get("measurement_method"),
+                    "verification_status": rel.get("verification_status"),
+                    "verification_required": rel.get("verification_required", []),
+                    "confidence_basis": rel.get("confidence_basis", []),
                 },
                 confidence=float(rel.get("confidence", 0.5)),
                 limitations=[str(x) for x in rel.get("limitations", [])],
@@ -148,7 +159,7 @@ def build_evidence_graph(payload: dict[str, Any]) -> dict[str, Any]:
         "role": "graph",
         "status": "ok",
         "message": "Evidence graph built from observations and relations.",
-        "expected_input_contract": "geometry_schema.v1.json + entity_schema.v1.json + relations_schema.v1.json (+ metadata_schema.v1.json optional)",
+        "expected_input_contract": "geometry_schema.v2.json + entity_schema.v1.json + relations_schema.v2.json (+ metadata_schema.v1.json optional)",
         "output_contract": "evidence_schema.v1.json",
         "nodes": nodes,
         "edges": edges,

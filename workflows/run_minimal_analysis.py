@@ -75,7 +75,7 @@ def _validate_outputs(result: dict[str, Any]) -> None:
     for ent in result.get("entities", []):
         validate_payload("entity_schema.v1.json", ent)
     for rel in result.get("relations", []):
-        validate_payload("relations_schema.v1.json", rel)
+        validate_payload("relations_schema.v2.json", rel)
     for item in result.get("evidence_items", []):
         validate_payload("evidence_schema.v1.json", item)
     for item in result.get("hypotheses", []):

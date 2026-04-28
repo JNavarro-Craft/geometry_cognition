@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "geometry_cognition/contracts/relations_schema.v2.json",
+  "title": "Relations Schema v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "relation_id",
+    "subject_id",
+    "predicate",
+    "object_id",
+    "relation_type",
+    "directionality",
+    "confidence",
+    "tolerance_context",
+    "observation_refs",
+    "limitations",
+    "derived_from",
+    "assertion_level",
+    "inference_basis",
+    "measurement_method",
+    "verification_status",
+    "verification_required",
+    "confidence_basis"
+  ],
+  "properties": {
+    "relation_id": { "type": "string", "minLength": 1 },
+    "subject_id": { "type": "string", "minLength": 1 },
+    "predicate": {
+      "type": "string",
+      "oneOf": [
+        { "const": "touches", "description": "Contacto topologico observado sin asumir union funcional." },
+        { "const": "near", "description": "Proximidad espacial bajo un umbral definido en tolerances." },
+        { "const": "intersects", "description": "Interseccion geometrica observada entre volumenes/superficies." },
+        { "const": "contains", "description": "El sujeto contiene geometricamente al objeto." },
+        { "const": "contained_by", "description": "El sujeto esta contenido geometricamente por el objeto." },
+        { "const": "aligned_with", "description": "Alineacion de ejes o direcciones principales." },
+        { "const": "parallel_to", "description": "Paralelismo geometrico entre direcciones dominantes." },
+        { "const": "coplanar_with", "description": "Coincidencia de plano de referencia." },
+        { "const": "collinear_with", "description": "Coincidencia en una misma linea de direccion." },
+        { "const": "repeated_with", "description": "Patron de repeticion geometrica u organizacional." },
+        { "const": "grouped_with", "description": "Relacion de agrupacion declarada por software/usuario." },
+        { "const": "instanced_with", "description": "Relacion entre ocurrencias de una misma instancia base." },
+        { "const": "declared_related_to", "description": "Relacion declarativa no verificada geometricamente." }
+      ]
+    },
+    "object_id": { "type": "string", "minLength": 1 },
+    "relation_type": { "type": "string", "enum": ["spatial", "organizational", "declarative"] },
+    "directionality": { "type": "string", "enum": ["symmetric", "directed"] },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "tolerance_context": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["linear_tolerance", "angular_tolerance", "unit_system"],
+      "properties": {
+        "linear_tolerance": { "type": "number", "minimum": 0 },
+        "angular_tolerance": { "type": "number", "minimum": 0 },
+        "unit_system": { "type": "string", "minLength": 1 }
+      }
+    },
+    "observation_refs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "limitations": { "type": "array", "items": { "type": "string" } },
+    "derived_from": { "type": "array", "items": { "type": "string" } },
+    "assertion_level": { "type": "string", "enum": ["candidate", "measured", "confirmed"] },
+    "inference_basis": {
+      "type": "string",
+      "enum": [
+        "bbox_overlap",
+        "bbox_gap_within_tolerance",
+        "bbox_containment",
+        "oriented_bbox_alignment",
+        "centroid_distance",
+        "face_normal_similarity",
+        "shared_metadata",
+        "brep_distance",
+        "brep_intersection",
+        "brep_contact",
+        "mesh_proxy",
+        "point_sample_distance",
+        "bbox_plane_alignment"
+      ]
+    },
+    "measurement_method": {
+      "type": "string",
+      "enum": [
+        "aabb_gap",
+        "aabb_overlap",
+        "obb_axis_comparison",
+        "centroid_distance",
+        "face_normal_dot_product",
+        "metadata_key_match",
+        "brep_closest_point",
+        "brep_intersection_curve",
+        "mesh_distance",
+        "point_cloud_sampling",
+        "aabb_plane_alignment"
+      ]
+    },
+    "verification_status": {
+      "type": "string",
+      "enum": ["unverified", "partially_verified", "verified", "contradicted"]
+    },
+    "verification_required": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "brep_contact_check",
+          "brep_intersection_check",
+          "mesh_distance_check",
+          "face_adjacency_check",
+          "tolerance_review",
+          "human_review"
+        ]
+      }
+    },
+    "confidence_basis": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

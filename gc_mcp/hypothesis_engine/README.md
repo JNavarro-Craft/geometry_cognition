@@ -22,3 +22,16 @@ Para cada entidad, el motor prioriza IDs oficiales de evidencia:
 - `ev-rel-{relation_id}` cuando el `subject_id` u `object_id` pertenece a la entidad
 
 Esto mantiene trazabilidad para R1/R2/R3 sin introducir términos de dominio.
+
+## Ponderación por certeza de relaciones
+
+Cuando existe evidencia relacional (`ev-rel-*`), la confianza de hipótesis pondera
+`assertion_level`:
+- `confirmed` aporta mayor peso
+- `measured` aporta peso intermedio
+- `candidate` aporta peso menor
+
+Si una hipótesis depende solo de evidencia relacional candidata, se conserva limitación explícita:
+- `verified geometric interaction required`
+
+Esto evita tratar relaciones geométricas como verdades binarias.

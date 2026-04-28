@@ -64,6 +64,33 @@ def test_relations_schema_sample_is_valid():
     validate_payload("relations_schema.v1.json", relation)
 
 
+def test_relations_schema_v2_sample_is_valid():
+    relation = {
+        "relation_id": "rel-sample-v2-001",
+        "subject_id": "obj-001",
+        "predicate": "intersects",
+        "object_id": "obj-002",
+        "relation_type": "spatial",
+        "directionality": "symmetric",
+        "confidence": 0.7,
+        "tolerance_context": {
+            "linear_tolerance": 0.01,
+            "angular_tolerance": 1.0,
+            "unit_system": "model_unit",
+        },
+        "observation_refs": ["obs:aabb-overlap:001-002"],
+        "limitations": ["bbox_based", "candidate_relation"],
+        "derived_from": ["geometry_schema.v2.json"],
+        "assertion_level": "candidate",
+        "inference_basis": "bbox_overlap",
+        "measurement_method": "aabb_overlap",
+        "verification_status": "unverified",
+        "verification_required": ["brep_intersection_check"],
+        "confidence_basis": ["aabb overlap proxy"],
+    }
+    validate_payload("relations_schema.v2.json", relation)
+
+
 def test_entity_schema_sample_is_valid():
     entity = {
         "entity_id": "ent-sample-001",
@@ -125,7 +152,7 @@ def test_geometry_kernel_outputs_validate_against_contracts():
     for item in result["entities"]:
         validate_payload("entity_schema.v1.json", item)
     for item in result["relations"]:
-        validate_payload("relations_schema.v1.json", item)
+        validate_payload("relations_schema.v2.json", item)
 
 
 def test_geometry_kernel_does_not_emit_forbidden_domain_vocabulary():
