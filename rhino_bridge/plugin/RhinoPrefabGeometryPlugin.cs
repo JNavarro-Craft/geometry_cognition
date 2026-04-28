@@ -3,9 +3,11 @@ using Rhino.PlugIns;
 using RhinoPrefabGeometryPlugin.Bridge;
 using System;
 using System.Net;
+using System.Runtime.InteropServices;
 
 namespace RhinoPrefabGeometryPlugin.Plugin;
 
+[System.Runtime.InteropServices.Guid("6F1F9B67-3F11-4A5C-A2D8-9A5E94B5C1D3")]
 public class RhinoPrefabGeometryPlugin : PlugIn
 {
     public static RhinoPrefabGeometryPlugin? Instance { get; private set; }
@@ -19,6 +21,9 @@ public class RhinoPrefabGeometryPlugin : PlugIn
     {
         Instance = this;
     }
+
+    // Keep plugin registered and loaded across Rhino restarts.
+    public override PlugInLoadTime LoadTime => PlugInLoadTime.AtStartup;
 
     protected override LoadReturnCode OnLoad(ref string errorMessage)
     {

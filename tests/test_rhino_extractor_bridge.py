@@ -38,6 +38,16 @@ def _bridge_sample_payload():
     }
 
 
+def _bridge_sample_payload_with_bbox_center():
+    payload = _bridge_sample_payload()
+    payload["objects"][0]["bbox"] = {
+        "min": [0, 0, 0],
+        "max": [1, 2, 3],
+        "center": [0.5, 1.0, 1.5],
+    }
+    return payload
+
+
 def test_bridge_mode_maps_plugin_response_to_object_schema(monkeypatch):
     monkeypatch.setenv("GC_BACKEND_MODE", "bridge")
     monkeypatch.setenv("GC_BRIDGE_FALLBACK_LOCAL", "false")
@@ -55,6 +65,26 @@ def test_bridge_mode_maps_plugin_response_to_object_schema(monkeypatch):
     assert obj["source_system"] == "rhino_bridge"
     assert obj["raw_type"] == "Brep"
     assert obj["raw_geometry_summary"]["source"] == "rhino_bridge"
+    assert len(obj["raw_geometry_summary"]["bbox_corners"]) == 8
+
+
+def test_bridge_bbox_center_is_normalized_out_of_bbox(monkeypatch):
+    monkeypatch.setenv("GC_BACKEND_MODE", "bridge")
+    monkeypatch.setenv("GC_BRIDGE_FALLBACK_LOCAL", "false")
+    monkeypatch.setattr(
+        backend_adapter,
+        "extract_objects_bridge",
+        lambda base_url, timeout_seconds: _bridge_sample_payload_with_bbox_center(),
+    )
+    out = extract_objects({})
+    assert out["status"] == "ok"
+    obj = out["objects"][0]
+    validate_payload("object_schema.v1.json", obj)
+    bbox = obj["raw_geometry_summary"]["bbox"]
+    assert "center" not in bbox
+    assert bbox["min"] == [0, 0, 0]
+    assert bbox["max"] == [1, 2, 3]
+    assert obj["raw_geometry_summary"]["bbox_center"] == [0.5, 1.0, 1.5]
     assert len(obj["raw_geometry_summary"]["bbox_corners"]) == 8
 
 

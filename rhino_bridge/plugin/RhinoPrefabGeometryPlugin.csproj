@@ -3,8 +3,8 @@
     <TargetFramework>net48</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <AssemblyName>RhinoPrefabGeometryPlugin</AssemblyName>
-    <RootNamespace>RhinoPrefabGeometryPlugin</RootNamespace>
+    <AssemblyName>rhino_bridge</AssemblyName>
+    <RootNamespace>rhino_bridge</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

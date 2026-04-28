@@ -30,6 +30,28 @@ def _normalize_transform(value: Any, warnings: list[str]) -> list[float]:
     return _identity_transform()
 
 
+def _normalize_raw_geometry_summary(src: dict[str, Any]) -> dict[str, Any]:
+    raw_geometry_summary = src.get("raw_geometry_summary") if isinstance(src.get("raw_geometry_summary"), dict) else {}
+    for key in ("bbox", "bbox_corners", "sample_points", "face_count", "face_normals", "face_areas", "edge_count", "is_closed", "volume", "area"):
+        if key in src and key not in raw_geometry_summary:
+            raw_geometry_summary[key] = src.get(key)
+
+    # object_schema.v1 enforces bbox.additionalProperties=false -> keep only min/max.
+    bbox = raw_geometry_summary.get("bbox")
+    if isinstance(bbox, dict):
+        if "center" in bbox and "bbox_center" not in raw_geometry_summary:
+            raw_geometry_summary["bbox_center"] = bbox.get("center")
+        cleaned_bbox: dict[str, Any] = {}
+        if "min" in bbox:
+            cleaned_bbox["min"] = bbox.get("min")
+        if "max" in bbox:
+            cleaned_bbox["max"] = bbox.get("max")
+        raw_geometry_summary["bbox"] = cleaned_bbox
+
+    raw_geometry_summary["source"] = "rhino_bridge"
+    return raw_geometry_summary
+
+
 def _normalize_bridge_objects(payload: dict[str, Any]) -> list[dict[str, Any]]:
     candidates: list[Any]
     if isinstance(payload.get("objects"), list):
@@ -59,11 +81,7 @@ def _normalize_bridge_objects(payload: dict[str, Any]) -> list[dict[str, Any]]:
         block_name = block_info.get("block_name")
         instance_definition_id = block_info.get("instance_definition_id") or block_info.get("instance_definition_index")
 
-        raw_geometry_summary = src.get("raw_geometry_summary") if isinstance(src.get("raw_geometry_summary"), dict) else {}
-        for key in ("bbox", "bbox_corners", "sample_points", "face_count", "face_normals", "face_areas", "edge_count", "is_closed", "volume", "area"):
-            if key in src and key not in raw_geometry_summary:
-                raw_geometry_summary[key] = src.get(key)
-        raw_geometry_summary["source"] = "rhino_bridge"
+        raw_geometry_summary = _normalize_raw_geometry_summary(src)
 
         transform_src = src.get("transform")
         if transform_src is None and isinstance(metadata, dict):
