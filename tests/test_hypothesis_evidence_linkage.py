@@ -212,3 +212,33 @@ def test_missing_inputs_returns_clear_warning():
     assert "warnings" in out
     assert "missing_evidence_items_input" in out["warnings"]
     assert "missing_entities_input" in out["warnings"]
+
+
+def test_full_evidence_coverage_for_entities(tmp_path):
+    bundle = run(
+        FIXTURES / "bridge_like_objects.sample.json",
+        tmp_path / "full_evidence_coverage",
+        include_hypotheses=True,
+    )
+    ent_ids = {e["entity_id"] for e in bundle["entities"]}
+    assert bundle["hypotheses"]
+    for hyp in bundle["hypotheses"]:
+        assert hyp["entity_id"] in ent_ids
+        assert hyp.get("supporting_evidence"), f"missing evidence for {hyp['hypothesis_id']}"
+
+
+def test_r7_requires_missing_information_when_needed(tmp_path):
+    bundle = run(
+        FIXTURES / "bridge_like_objects.sample.json",
+        tmp_path / "r7_missing_info",
+        include_validation=True,
+    )
+    low_conf = [h for h in bundle["hypotheses"] if float(h.get("confidence", 0.0)) < 0.5]
+    for h in low_conf:
+        miss = h.get("missing_information", [])
+        assert "insufficient relational evidence" in miss
+        assert "additional spatial relationships required" in miss
+
+    r7 = [r for r in bundle["validation_results"] if r["rule_id"] == "R7"]
+    assert r7
+    assert all(r["status"] == "pass" for r in r7)

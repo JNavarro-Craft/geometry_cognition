@@ -69,6 +69,21 @@ def _supporting_evidence_ids_for_entity(
         if rel_eid in evidence_by_id:
             ordered.append(rel_eid)
 
+    # Fallback by evidence index when relation list is absent/incomplete but evidence exists.
+    # Keep this observational: match by source_object_ids/member ids and entity-level id.
+    for eid, ev in evidence_by_id.items():
+        if not isinstance(ev, dict):
+            continue
+        source_ids = {str(x) for x in ev.get("source_object_ids", []) if str(x)}
+        if eid.startswith("ev-ent-") and eid.endswith(entity_id):
+            ordered.append(eid)
+            continue
+        if eid.startswith("ev-geom-") and source_ids.intersection(members):
+            ordered.append(eid)
+            continue
+        if eid.startswith("ev-rel-") and source_ids.intersection(members):
+            ordered.append(eid)
+
     return _dedupe_preserve_order(ordered)
 
 
@@ -164,7 +179,7 @@ def generate_hypotheses(payload: dict[str, Any]) -> dict[str, Any]:
                     supporting_evidence=[],
                     contradicting_evidence=[],
                     alternatives=["ambiguous_entity"],
-                    missing_information=["no_evidence_items_in_graph", "evidence_graph_required"],
+                    missing_information=["insufficient relational evidence", "additional spatial relationships required"],
                     status="candidate",
                 )
             )
@@ -211,13 +226,16 @@ def generate_hypotheses(payload: dict[str, Any]) -> dict[str, Any]:
         else:
             missing_information = ["clear_morphology_or_relation_pattern"]
 
+        evidence_incomplete = not has_relation
         if confidence < 0.35:
             label = "insufficient_evidence"
             alternatives = ["ambiguous_entity"]
-            missing_information = ["additional_observation_refs", "additional_relation_evidence"]
+            missing_information = ["insufficient relational evidence", "additional spatial relationships required"]
         elif confidence < 0.5:
             label = "ambiguous_entity"
-            missing_information = ["higher_confidence_evidence"]
+            missing_information = ["insufficient relational evidence", "additional spatial relationships required"]
+        elif evidence_incomplete and len(missing_information) == 0:
+            missing_information = ["insufficient relational evidence", "additional spatial relationships required"]
         elif confidence >= 0.7:
             status = "supported"
 

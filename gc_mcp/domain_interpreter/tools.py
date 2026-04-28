@@ -9,7 +9,7 @@ from shared.contracts import validate_payload
 
 FORBIDDEN_TERMS = {"beam", "panel", "truss", "sip", "connector"}
 ALLOWED_PREFIXES = ("compatible_with_", "suggests_")
-ALLOWED_EXACT_LABELS = {"requires_human_review", "no_domain_mapping_available"}
+ALLOWED_EXACT_LABELS = {"requires_human_review", "no_domain_mapping_available", "observed_structural_pattern"}
 
 
 def _project_root() -> Path:
@@ -92,7 +92,29 @@ def generate_domain_interpretations(payload: dict[str, Any], profile: str = "pre
     for hyp in hypotheses:
         hypothesis_id = str(hyp.get("hypothesis_id", ""))
         label = str(hyp.get("hypothesis_label", ""))
+        confidence = float(hyp.get("confidence", 0.0))
+        supporting = [str(x) for x in hyp.get("supporting_evidence", [])]
         mapping = active_map.get(label)
+        # Minimal activation path: ambiguous + enough confidence + evidence.
+        if label == "ambiguous_entity" and confidence >= 0.5 and len(supporting) > 0:
+            interpretation = {
+                "interpretation_id": f"int-{idx:04d}",
+                "entity_id": str(hyp.get("entity_id", "")),
+                "domain": profile,
+                "interpretation_label": "observed_structural_pattern",
+                "confidence": max(0.0, min(1.0, confidence)),
+                "supporting_evidence": supporting,
+                "derived_from_hypotheses": [hypothesis_id],
+                "limitations": [
+                    "consistent geometric pattern observed with stable relational evidence; domain mapping not available",
+                    "requires human review before downstream decisions",
+                ],
+                "status": "weak",
+            }
+            validate_payload("domain_interpretation_schema.v1.json", interpretation)
+            interpretations.append(interpretation)
+            idx += 1
+            continue
         if not mapping:
             interpretations.append(
                 _fallback_interpretation(

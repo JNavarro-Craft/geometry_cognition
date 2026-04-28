@@ -164,3 +164,28 @@ def test_domain_interpreter_never_silently_omits_hypotheses():
     out = generate_domain_interpretations(payload, profile="prefab")
     assert len(out["domain_interpretations"]) == len(payload["hypotheses"])
     assert not out["skipped_hypotheses"]
+
+
+def test_domain_interpreter_returns_minimal_output_with_evidence_for_ambiguous():
+    payload = {
+        "hypotheses": [
+            {
+                "hypothesis_id": "hyp-min-001",
+                "entity_id": "ent-min-001",
+                "hypothesis_label": "ambiguous_entity",
+                "hypothesis_level": "relational",
+                "confidence": 0.7,
+                "supporting_evidence": ["ev-ent-ent-min-001", "ev-geom-obj-1"],
+                "contradicting_evidence": [],
+                "alternatives": [],
+                "missing_information": [],
+                "status": "candidate",
+            }
+        ]
+    }
+    out = generate_domain_interpretations(payload, profile="prefab")
+    assert len(out["domain_interpretations"]) == 1
+    item = out["domain_interpretations"][0]
+    assert item["interpretation_label"] == "observed_structural_pattern"
+    assert item["status"] == "weak"
+    assert item["derived_from_hypotheses"] == ["hyp-min-001"]
