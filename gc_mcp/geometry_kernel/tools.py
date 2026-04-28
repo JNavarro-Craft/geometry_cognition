@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import json
 from itertools import combinations
 from typing import Any
 
@@ -349,6 +350,72 @@ def _distance(a: list[float], b: list[float]) -> float:
     return math.sqrt(sum((a[i] - b[i]) ** 2 for i in range(3)))
 
 
+def _bbox_gap(a: dict[str, Any], b: dict[str, Any]) -> float:
+    """
+    Minimum separation between two axis-aligned bbox volumes (0 when touching/overlapping).
+    """
+    a_min, a_max = a["min"], a["max"]
+    b_min, b_max = b["min"], b["max"]
+    gaps: list[float] = []
+    for i in range(3):
+        if a_max[i] < b_min[i]:
+            gaps.append(b_min[i] - a_max[i])
+        elif b_max[i] < a_min[i]:
+            gaps.append(a_min[i] - b_max[i])
+        else:
+            gaps.append(0.0)
+    return math.sqrt(sum(g * g for g in gaps))
+
+
+def _dominant_axis(feature: dict[str, Any]) -> list[float]:
+    obb = feature.get("oriented_bbox")
+    if isinstance(obb, dict):
+        axes = obb.get("axes")
+        extents = obb.get("extents")
+        if (
+            isinstance(axes, list)
+            and isinstance(extents, list)
+            and len(axes) == 3
+            and len(extents) == 3
+            and all(isinstance(ax, list) and len(ax) == 3 for ax in axes)
+        ):
+            idx = max(range(3), key=lambda i: float(extents[i]))
+            axis = [float(x) for x in axes[idx]]
+            n = math.sqrt(sum(c * c for c in axis))
+            if n > 1e-12:
+                return [axis[0] / n, axis[1] / n, axis[2] / n]
+    return [1.0, 0.0, 0.0]
+
+
+def _parse_metadata_tokens(obj: dict[str, Any]) -> set[str]:
+    """
+    Observational metadata tokens only; no domain inference.
+    """
+    tokens: set[str] = set()
+    user_text = obj.get("user_text", {})
+    if not isinstance(user_text, dict):
+        return tokens
+
+    keys_of_interest = {"assemblyid", "envelopeid", "cf.partid"}
+    for k, v in user_text.items():
+        key_l = str(k).strip().lower()
+        if key_l in keys_of_interest and str(v).strip():
+            tokens.add(f"{key_l}:{str(v).strip()}")
+
+    payload_json = user_text.get("PayloadJson") or user_text.get("payloadjson")
+    if isinstance(payload_json, str) and payload_json.strip():
+        try:
+            parsed = json.loads(payload_json)
+            if isinstance(parsed, dict):
+                for k in ("AssemblyId", "EnvelopeId", "CF.PartId"):
+                    value = parsed.get(k)
+                    if value is not None and str(value).strip():
+                        tokens.add(f"{k.lower()}:{str(value).strip()}")
+        except json.JSONDecodeError:
+            pass
+    return tokens
+
+
 def _relation_payload(
     relation_id: str,
     subject_id: str,
@@ -393,8 +460,9 @@ def _build_relations(objects: list[dict[str, Any]], features: list[dict[str, Any
         a_center = feature_by_object[a_id]["centroid"]
         b_center = feature_by_object[b_id]["centroid"]
         d = _distance(a_center, b_center)
+        gap = _bbox_gap(feature_by_object[a_id]["bbox"], feature_by_object[b_id]["bbox"])
 
-        if d <= 3.0:
+        if d <= 3.0 or gap <= 0.5:
             relations.append(
                 _relation_payload(
                     relation_id=f"rel-near-{relation_idx}",
@@ -404,8 +472,8 @@ def _build_relations(objects: list[dict[str, Any]], features: list[dict[str, Any
                     relation_type="spatial",
                     directionality="symmetric",
                     confidence=0.8,
-                    observation_refs=[f"obs:distance:{a_id}:{b_id}"],
-                    limitations=["threshold_dependent"],
+                    observation_refs=[f"obs:distance:{a_id}:{b_id}", f"obs:bbox-gap:{a_id}:{b_id}"],
+                    limitations=["threshold_dependent", "bbox_proximity_proxy"],
                     derived_from=["geometry_schema.v1.json"],
                 )
             )
@@ -413,7 +481,10 @@ def _build_relations(objects: list[dict[str, Any]], features: list[dict[str, Any
 
         a_dims = feature_by_object[a_id]["principal_dimensions"]
         b_dims = feature_by_object[b_id]["principal_dimensions"]
-        if abs(max(a_dims) - max(b_dims)) <= 0.5:
+        a_axis = _dominant_axis(feature_by_object[a_id])
+        b_axis = _dominant_axis(feature_by_object[b_id])
+        axis_dot = abs(a_axis[0] * b_axis[0] + a_axis[1] * b_axis[1] + a_axis[2] * b_axis[2])
+        if abs(max(a_dims) - max(b_dims)) <= 0.5 or axis_dot >= 0.96:
             relations.append(
                 _relation_payload(
                     relation_id=f"rel-aligned-{relation_idx}",
@@ -422,9 +493,9 @@ def _build_relations(objects: list[dict[str, Any]], features: list[dict[str, Any
                     object_id=b_id,
                     relation_type="spatial",
                     directionality="symmetric",
-                    confidence=0.7,
-                    observation_refs=[f"obs:principal-axis:{a_id}:{b_id}"],
-                    limitations=["principal_axis_proxy"],
+                    confidence=0.72 if axis_dot >= 0.96 else 0.7,
+                    observation_refs=[f"obs:principal-axis:{a_id}:{b_id}", f"obs:obb-axis-dot:{axis_dot:.3f}"],
+                    limitations=["principal_axis_proxy", "obb_axis_proxy"],
                     derived_from=["geometry_schema.v1.json"],
                 )
             )
@@ -437,9 +508,9 @@ def _build_relations(objects: list[dict[str, Any]], features: list[dict[str, Any
                     object_id=b_id,
                     relation_type="spatial",
                     directionality="symmetric",
-                    confidence=0.7,
-                    observation_refs=[f"obs:axis-orientation:{a_id}:{b_id}"],
-                    limitations=["axis_orientation_proxy"],
+                    confidence=0.72 if axis_dot >= 0.96 else 0.7,
+                    observation_refs=[f"obs:axis-orientation:{a_id}:{b_id}", f"obs:obb-axis-dot:{axis_dot:.3f}"],
+                    limitations=["axis_orientation_proxy", "obb_axis_proxy"],
                     derived_from=["geometry_schema.v1.json"],
                 )
             )
@@ -483,6 +554,27 @@ def _build_relations(objects: list[dict[str, Any]], features: list[dict[str, Any
                     )
                 )
                 relation_idx += 1
+
+        # Observational metadata relation from explicit identifiers only.
+        meta_a = _parse_metadata_tokens(a)
+        meta_b = _parse_metadata_tokens(b)
+        shared_meta = sorted(meta_a.intersection(meta_b))
+        if shared_meta:
+            relations.append(
+                _relation_payload(
+                    relation_id=f"rel-meta-{relation_idx}",
+                    subject_id=a_id,
+                    predicate="declared_related_to",
+                    object_id=b_id,
+                    relation_type="organizational",
+                    directionality="symmetric",
+                    confidence=0.85,
+                    observation_refs=[f"obs:metadata-shared:{a_id}:{b_id}"] + shared_meta[:3],
+                    limitations=["metadata_observational_only", "no_domain_inference"],
+                    derived_from=["object_schema.v1.json"],
+                )
+            )
+            relation_idx += 1
 
     return relations
 

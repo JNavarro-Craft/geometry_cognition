@@ -64,7 +64,7 @@ def build_evidence_graph(payload: dict[str, Any]) -> dict[str, Any]:
                 evidence_id=f"ev-geom-{object_id}",
                 evidence_type="geometry",
                 source_object_ids=[object_id],
-                claim="geometry_feature_observed",
+                claim="geometry feature observed for object",
                 observed_value={
                     "morphology": feature.get("morphology"),
                     "principal_dimensions": feature.get("principal_dimensions"),
@@ -87,7 +87,7 @@ def build_evidence_graph(payload: dict[str, Any]) -> dict[str, Any]:
                 evidence_id=f"ev-ent-{entity_id}",
                 evidence_type="derived",
                 source_object_ids=member_ids or [entity_id],
-                claim="entity_formation_observed",
+                claim="entity formation observed from extraction",
                 observed_value={
                     "entity_type": ent.get("entity_type"),
                     "formation_method": ent.get("formation_method"),
@@ -112,7 +112,7 @@ def build_evidence_graph(payload: dict[str, Any]) -> dict[str, Any]:
                 evidence_id=f"ev-rel-{relation_id}",
                 evidence_type="relation",
                 source_object_ids=[subject_id, object_id],
-                claim="relation_observed",
+                claim=f"relation {str(rel.get('predicate', 'declared_related_to'))} observed between objects",
                 observed_value={
                     "predicate": rel.get("predicate"),
                     "relation_type": rel.get("relation_type"),

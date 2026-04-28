@@ -13,3 +13,12 @@ Diferencia conceptual:
 - Evidencia: observaciones trazables (`claim`, `observed_value`, `confidence`) sin concluir significado final.
 - Hipótesis: interpretación tentativa y refutable basada en evidencia, con alternativas y faltantes.
 - Validación: etapa posterior que evalúa reglas/consistencia; no ocurre dentro de este MCP.
+
+## Enlace de supporting_evidence
+
+Para cada entidad, el motor prioriza IDs oficiales de evidencia:
+- `ev-ent-{entity_id}`
+- `ev-geom-{member_object_id}`
+- `ev-rel-{relation_id}` cuando el `subject_id` u `object_id` pertenece a la entidad
+
+Esto mantiene trazabilidad para R1/R2/R3 sin introducir términos de dominio.

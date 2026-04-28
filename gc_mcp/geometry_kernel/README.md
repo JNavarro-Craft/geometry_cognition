@@ -37,3 +37,17 @@ Notas:
   - `oriented_bbox_pca_from_sample_points`
   - `oriented_bbox_approximation` (fallback sin puntos suficientes)
 - `bbox` axis-aligned actual se mantiene sin cambios para no romper compatibilidad funcional previa.
+
+## Relaciones observacionales mínimas (bridge/local)
+
+Cuando hay información suficiente por objeto, el kernel puede emitir relaciones mínimas:
+- `near` (distancia de centroides y/o gap de bbox bajo tolerancia proxy)
+- `aligned_with` (similitud de ejes dominantes, incluyendo OBB cuando está disponible)
+- `parallel_to` (orientación de eje dominante)
+- `grouped_with` (coincidencia observada de `group_ids`/`group_names`)
+- `declared_related_to` (señales compartidas de metadata neutral como `AssemblyId`, `EnvelopeId`, `CF.PartId`)
+
+Importante:
+- Estas relaciones son observacionales y trazables.
+- `declared_related_to` representa coincidencia metadata, no inferencia de dominio constructivo.
+- Límites actuales: aproximaciones desde bbox/OBB; no hay contacto/intersección geométrica exacta.
