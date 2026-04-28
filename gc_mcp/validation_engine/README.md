@@ -3,7 +3,12 @@
 - Rol: `validation` (fijo).
 - Puede: evaluar reglas de consistencia sobre hipótesis existentes y su trazabilidad.
 - NO puede: ejecutar acciones ni crear hipótesis nuevas.
-- Input esperado: `hypothesis_schema.v1.json`, `evidence_schema.v1.json`, `entity_schema.v1.json`, `relations_schema.v1.json`.
+- Input esperado (payload de tool):  
+  - `hypotheses` (`hypothesis_schema.v1.json[]`)  
+  - `evidence_items` (`evidence_schema.v1.json[]`)  
+  - `entities` (`entity_schema.v1.json[]`)  
+  - `relations` (`relations_schema.v1.json[]`)  
+  Nota: `entities` y `relations` son requeridos para evaluaciones completas (ej. R2).
 - Output esperado: `validation_schema.v1.json`.
 - Prohibiciones: validar sin evidencias o sin explicar estados `skipped/inconclusive`.
 - Relación con otros MCPs: puerta previa a persistencia y automatización.

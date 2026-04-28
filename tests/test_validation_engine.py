@@ -216,3 +216,41 @@ def test_validation_r3_fails_when_supporting_not_in_evidence():
     )
     r3 = next(r for r in out["validation_results"] if r["rule_id"] == "R3")
     assert r3["status"] == "fail"
+
+
+def test_mcp_direct_call_flat_args_includes_entities_relations_and_r2_pass(tmp_path):
+    from gc_mcp.validation_engine.server import validate_hypotheses_tool
+
+    bundle = run(
+        FIXTURES_DIR / "mixed_system.sample.json",
+        tmp_path / "mcp_validation_flat",
+        include_hypotheses=True,
+    )
+    out = validate_hypotheses_tool(
+        hypotheses=bundle["hypotheses"],
+        evidence_items=bundle["evidence_items"],
+        entities=bundle["entities"],
+        relations=bundle["relations"],
+    )
+    r2 = [r for r in out["validation_results"] if r["rule_id"] == "R2"]
+    assert r2
+    assert all(r["status"] == "pass" for r in r2)
+
+
+def test_mcp_direct_call_without_entities_makes_r2_fail_with_clear_recommendation(tmp_path):
+    from gc_mcp.validation_engine.server import validate_hypotheses_tool
+
+    bundle = run(
+        FIXTURES_DIR / "mixed_system.sample.json",
+        tmp_path / "mcp_validation_missing_entities",
+        include_hypotheses=True,
+    )
+    out = validate_hypotheses_tool(
+        hypotheses=bundle["hypotheses"],
+        evidence_items=bundle["evidence_items"],
+        relations=bundle["relations"],
+    )
+    r2 = [r for r in out["validation_results"] if r["rule_id"] == "R2"]
+    assert r2
+    assert all(r["status"] == "fail" for r in r2)
+    assert all("existing entity_id" in (r.get("recommendation") or "") for r in r2)

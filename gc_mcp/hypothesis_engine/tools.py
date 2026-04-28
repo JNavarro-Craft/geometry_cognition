@@ -111,10 +111,25 @@ def _build_hypothesis(
 
 def generate_hypotheses(payload: dict[str, Any]) -> dict[str, Any]:
     evidence_items = payload.get("evidence_items", [])
+    evidence_graph = payload.get("evidence_graph", {})
+    if (not isinstance(evidence_items, list) or len(evidence_items) == 0) and isinstance(evidence_graph, dict):
+        nested = evidence_graph.get("evidence_items", [])
+        if isinstance(nested, list):
+            evidence_items = nested
     entities = payload.get("entities", [])
     relations = payload.get("relations", [])
+    warnings: list[str] = []
     if not isinstance(relations, list):
         relations = []
+    if not isinstance(evidence_items, list):
+        evidence_items = []
+    if not isinstance(entities, list):
+        entities = []
+
+    if not evidence_items:
+        warnings.append("missing_evidence_items_input")
+    if not entities:
+        warnings.append("missing_entities_input")
 
     evidence_by_id: dict[str, dict[str, Any]] = {str(item["evidence_id"]): item for item in evidence_items}
 
@@ -225,9 +240,14 @@ def generate_hypotheses(payload: dict[str, Any]) -> dict[str, Any]:
         "mcp_name": "hypothesis_engine",
         "role": "hypothesis",
         "status": "ok",
-        "message": f"Generated {len(hypotheses)} abstract hypotheses from evidence.",
+        "message": (
+            f"Generated {len(hypotheses)} abstract hypotheses from evidence."
+            if not warnings
+            else f"Generated {len(hypotheses)} abstract hypotheses with input warnings: {', '.join(warnings)}."
+        ),
         "expected_input_contract": "evidence_schema.v1.json + entities + relations (optional, from same pipeline as evidence_graph)",
         "output_contract": "hypothesis_schema.v1.json",
         "hypotheses": hypotheses,
         "evidence_index": list(evidence_by_id.keys()),
+        "warnings": warnings,
     }

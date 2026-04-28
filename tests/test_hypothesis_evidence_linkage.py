@@ -8,6 +8,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from gc_mcp.evidence_graph.tools import build_evidence_graph
+from gc_mcp.hypothesis_engine.server import generate_hypotheses_tool
 from gc_mcp.hypothesis_engine.tools import generate_hypotheses
 from gc_mcp.validation_engine.tools import validate_hypotheses
 from workflows.run_minimal_analysis import run  # noqa: E402
@@ -141,3 +142,73 @@ def test_build_supporting_includes_rel_when_member_touches_edge():
     assert h_a and h_b
     assert "ev-rel-rel-t-1" in h_a["supporting_evidence"]
     assert "ev-rel-rel-t-1" in h_b["supporting_evidence"]
+
+
+def test_mcp_style_flat_args_produces_supporting_and_r1_r2_r3_pass(tmp_path):
+    bundle = run(
+        FIXTURES / "mixed_system.sample.json",
+        tmp_path / "mcp_flat_hyp",
+        include_evidence_graph=True,
+    )
+    hyp_out = generate_hypotheses_tool(
+        evidence_items=bundle["evidence_items"],
+        entities=bundle["entities"],
+        relations=bundle["relations"],
+    )
+    assert hyp_out["hypotheses"]
+    assert all(h["supporting_evidence"] for h in hyp_out["hypotheses"])
+
+    val = validate_hypotheses(
+        {
+            "hypotheses": hyp_out["hypotheses"],
+            "evidence_items": bundle["evidence_items"],
+            "entities": bundle["entities"],
+            "relations": bundle["relations"],
+        }
+    )
+    for rule in ("R1", "R2", "R3"):
+        rows = [r for r in val["validation_results"] if r["rule_id"] == rule]
+        assert rows and all(r["status"] == "pass" for r in rows), rule
+
+
+def test_mcp_style_nested_evidence_graph_supported():
+    objects = [
+        {
+            "object_id": "ox",
+            "source_system": "rhino",
+            "source_ref": "r1",
+            "object_kind": "geometric_object",
+            "raw_type": "Brep",
+            "layer": "L",
+            "name": "x",
+            "group_ids": [],
+            "block_context": {"is_block_instance": False, "block_name": None},
+            "user_text": {},
+            "material": None,
+            "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+            "geometry_ref": "g://ox",
+            "extraction_warnings": [],
+        }
+    ]
+    from gc_mcp.geometry_kernel.tools import compute_geometry_features
+
+    ker = compute_geometry_features({"objects": objects})
+    evg = build_evidence_graph(
+        {
+            "objects": objects,
+            "geometry_features": ker["geometry_features"],
+            "entities": ker["entities"],
+            "relations": ker["relations"],
+        }
+    )
+    out = generate_hypotheses_tool(evidence_graph={"evidence_items": evg["evidence_items"]}, entities=ker["entities"])
+    assert out["hypotheses"]
+    assert out["hypotheses"][0]["supporting_evidence"]
+
+
+def test_missing_inputs_returns_clear_warning():
+    out = generate_hypotheses_tool()
+    assert out["status"] == "ok"
+    assert "warnings" in out
+    assert "missing_evidence_items_input" in out["warnings"]
+    assert "missing_entities_input" in out["warnings"]

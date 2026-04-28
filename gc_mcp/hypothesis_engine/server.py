@@ -20,9 +20,11 @@ mcp = FastMCP("hypothesis_engine")
 
 def _normalize_generate_hypotheses_args(
     *,
+    hypotheses: list[Any] | None = None,
     entities: list[Any] | None = None,
     evidence_items: list[Any] | None = None,
     relations: list[Any] | None = None,
+    evidence_graph: dict[str, Any] | None = None,
     payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
@@ -32,35 +34,44 @@ def _normalize_generate_hypotheses_args(
     merged: dict[str, Any] = {}
     if isinstance(payload, dict):
         merged.update(payload)
+    if hypotheses is not None:
+        merged["hypotheses"] = hypotheses
     if entities is not None:
         merged["entities"] = entities
     if evidence_items is not None:
         merged["evidence_items"] = evidence_items
     if relations is not None:
         merged["relations"] = relations
+    if evidence_graph is not None:
+        merged["evidence_graph"] = evidence_graph
     logger.info(
-        "hypothesis_engine MCP: merged keys=%s entity_count=%s evidence_count=%s relation_count=%s",
+        "hypothesis_engine MCP: merged keys=%s entity_count=%s evidence_count=%s relation_count=%s evidence_graph_keys=%s",
         sorted(merged.keys()),
         len(merged.get("entities") or []),
         len(merged.get("evidence_items") or []),
         len(merged.get("relations") or []),
+        sorted((merged.get("evidence_graph") or {}).keys()) if isinstance(merged.get("evidence_graph"), dict) else None,
     )
     return merged
 
 
 @mcp.tool(name="generate_hypotheses")
 def generate_hypotheses_tool(
+    hypotheses: list[Any] | None = None,
     entities: list[Any] | None = None,
     evidence_items: list[Any] | None = None,
     relations: list[Any] | None = None,
+    evidence_graph: dict[str, Any] | None = None,
     payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build hypotheses from evidence_graph outputs (include relations to attach ev-rel-*)."""
     return generate_hypotheses(
         _normalize_generate_hypotheses_args(
+            hypotheses=hypotheses,
             entities=entities,
             evidence_items=evidence_items,
             relations=relations,
+            evidence_graph=evidence_graph,
             payload=payload,
         )
     )
