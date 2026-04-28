@@ -79,6 +79,129 @@ def _compute_morphology(dimensions: list[float], raw_type: str) -> tuple[str, fl
     return "unknown", 0.5
 
 
+def _dot(a: list[float], b: list[float]) -> float:
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+
+def _cross(a: list[float], b: list[float]) -> list[float]:
+    return [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+
+
+def _norm(v: list[float]) -> float:
+    return math.sqrt(max(0.0, _dot(v, v)))
+
+
+def _normalize(v: list[float]) -> list[float]:
+    n = _norm(v)
+    if n <= 1e-12:
+        return [0.0, 0.0, 0.0]
+    return [v[0] / n, v[1] / n, v[2] / n]
+
+
+def _mat_vec(m: list[list[float]], v: list[float]) -> list[float]:
+    return [
+        m[0][0] * v[0] + m[0][1] * v[1] + m[0][2] * v[2],
+        m[1][0] * v[0] + m[1][1] * v[1] + m[1][2] * v[2],
+        m[2][0] * v[0] + m[2][1] * v[1] + m[2][2] * v[2],
+    ]
+
+
+def _power_iteration_symmetric(m: list[list[float]], seed: list[float]) -> tuple[float, list[float]]:
+    v = _normalize(seed)
+    if _norm(v) <= 1e-12:
+        v = [1.0, 0.0, 0.0]
+    for _ in range(24):
+        mv = _mat_vec(m, v)
+        if _norm(mv) <= 1e-12:
+            break
+        v = _normalize(mv)
+    lam = _dot(v, _mat_vec(m, v))
+    return lam, v
+
+
+def _extract_point_cloud_for_obb(obj: dict[str, Any]) -> tuple[list[list[float]], str | None]:
+    rgs = obj.get("raw_geometry_summary")
+    if not isinstance(rgs, dict):
+        return [], None
+
+    def _parse_points(raw: Any) -> list[list[float]]:
+        pts: list[list[float]] = []
+        if not isinstance(raw, list):
+            return pts
+        for p in raw:
+            if not isinstance(p, list) or len(p) != 3:
+                continue
+            try:
+                pts.append([float(p[0]), float(p[1]), float(p[2])])
+            except (TypeError, ValueError):
+                continue
+        return pts
+
+    corners = _parse_points(rgs.get("bbox_corners"))
+    if len(corners) >= 4:
+        return corners, "bbox_corners"
+    samples = _parse_points(rgs.get("sample_points"))
+    if len(samples) >= 3:
+        return samples, "sample_points"
+    return [], None
+
+
+def _oriented_bbox_from_points_pca(points: list[list[float]]) -> dict[str, Any] | None:
+    if len(points) < 3:
+        return None
+    center = [
+        sum(p[0] for p in points) / len(points),
+        sum(p[1] for p in points) / len(points),
+        sum(p[2] for p in points) / len(points),
+    ]
+    centered = [[p[0] - center[0], p[1] - center[1], p[2] - center[2]] for p in points]
+
+    cov = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+    inv_n = 1.0 / max(1, len(centered))
+    for p in centered:
+        cov[0][0] += p[0] * p[0]
+        cov[0][1] += p[0] * p[1]
+        cov[0][2] += p[0] * p[2]
+        cov[1][0] += p[1] * p[0]
+        cov[1][1] += p[1] * p[1]
+        cov[1][2] += p[1] * p[2]
+        cov[2][0] += p[2] * p[0]
+        cov[2][1] += p[2] * p[1]
+        cov[2][2] += p[2] * p[2]
+    cov = [[cov[r][c] * inv_n for c in range(3)] for r in range(3)]
+
+    lam1, e1 = _power_iteration_symmetric(cov, [1.0, 0.0, 0.0])
+    c2 = [
+        [cov[r][c] - lam1 * e1[r] * e1[c] for c in range(3)]
+        for r in range(3)
+    ]
+    _, e2_raw = _power_iteration_symmetric(c2, [0.0, 1.0, 0.0])
+    e2 = _normalize([e2_raw[i] - _dot(e2_raw, e1) * e1[i] for i in range(3)])
+    if _norm(e2) <= 1e-8:
+        e2 = _normalize(_cross(e1, [0.0, 0.0, 1.0]))
+        if _norm(e2) <= 1e-8:
+            e2 = _normalize(_cross(e1, [0.0, 1.0, 0.0]))
+    e3 = _normalize(_cross(e1, e2))
+    if _norm(e3) <= 1e-8:
+        e1, e2, e3 = [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]
+
+    axes = [e1, e2, e3]
+    extents: list[float] = []
+    for axis in axes:
+        projections = [_dot(p, axis) for p in centered]
+        extents.append(max(projections) - min(projections))
+
+    return {
+        "center": [float(center[0]), float(center[1]), float(center[2])],
+        "axes": [[float(c) for c in ax] for ax in axes],
+        "extents": [float(extents[0]), float(extents[1]), float(extents[2])],
+    }
+
+
 def _oriented_bbox_approximation(
     center: list[float],
     dims: list[float],
@@ -143,8 +266,15 @@ def _build_geometry(obj: dict[str, Any]) -> dict[str, Any]:
 
     area = 2.0 * (dims[0] * dims[1] + dims[0] * dims[2] + dims[1] * dims[2])
     volume = dims[0] * dims[1] * dims[2]
-    oriented_bbox = _oriented_bbox_approximation(center=center, dims=dims, transform=transform)
-    geometric_warnings.append("oriented_bbox_approximation")
+    points, point_source = _extract_point_cloud_for_obb(obj)
+    oriented_bbox = _oriented_bbox_from_points_pca(points) if points else None
+    if oriented_bbox is not None and point_source == "bbox_corners":
+        geometric_warnings.append("oriented_bbox_pca_from_bbox_corners")
+    elif oriented_bbox is not None and point_source == "sample_points":
+        geometric_warnings.append("oriented_bbox_pca_from_sample_points")
+    else:
+        oriented_bbox = _oriented_bbox_approximation(center=center, dims=dims, transform=transform)
+        geometric_warnings.append("oriented_bbox_approximation")
 
     feature = {
         "object_id": object_id,

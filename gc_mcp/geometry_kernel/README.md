@@ -25,11 +25,15 @@ Compatibilidad:
 ## oriented_bbox (primer paso v2)
 
 Implementación actual (conservadora / aproximada):
-- `center`: se toma del centro geométrico actualmente calculado por el kernel.
-- `extents`: se toma de las dimensiones actuales (`principal_dimensions` proxy vigentes).
-- `axes`: se toman de la base del `transform` del objeto cuando está disponible; si no, identidad.
+- Si hay `raw_geometry_summary.bbox_corners`: se ejecuta PCA simple sobre esos puntos para estimar `center`, `axes` y `extents`.
+- Si no hay corners pero hay `raw_geometry_summary.sample_points`: se ejecuta PCA simple sobre esos samples.
+- Si no hay puntos suficientes: fallback al modo previo (ejes desde `transform` o identidad, extents proxy).
 
 Notas:
-- En esta fase no se calcula OBB exacta por intersección/casco convexo/PCA de malla completa.
-- Se agrega advertencia `oriented_bbox_approximation` en `geometric_warnings`.
+- Aun no se calcula OBB exacta de Brep/malla completa; el PCA depende de puntos de extractor.
+- Si los puntos provienen de AABB (`bbox_corners`), la OBB resultante sigue siendo una aproximación basada en AABB.
+- Advertencias emitidas:
+  - `oriented_bbox_pca_from_bbox_corners`
+  - `oriented_bbox_pca_from_sample_points`
+  - `oriented_bbox_approximation` (fallback sin puntos suficientes)
 - `bbox` axis-aligned actual se mantiene sin cambios para no romper compatibilidad funcional previa.
