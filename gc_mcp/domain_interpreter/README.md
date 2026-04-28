@@ -11,6 +11,19 @@
   - no usar `knowledge_base/imports/prefab/*` como fuente de runtime
 - Relacion con otros MCPs: consume hipotesis y produce interpretaciones tentativas para revision humana.
 
+## Regla de trazabilidad (sin omisiones silenciosas)
+
+El interprete **nunca** debe omitir hipotesis de entrada sin salida.
+Cada hipotesis debe generar exactamente una de estas rutas:
+
+- mapeo de dominio conservador (si existe regla aplicable), o
+- fallback conservador con trazabilidad:
+  - `no_domain_mapping_available` (cuando hay evidencia pero no existe mapping claro), o
+  - `requires_human_review` (cuando la evidencia es insuficiente o la confianza es baja).
+
+En ambos casos, `derived_from_hypotheses` debe incluir el `hypothesis_id` origen y
+`supporting_evidence` debe copiar las referencias disponibles de la hipotesis.
+
 ## Diferencia conceptual
 
 - No es clasificacion: no determina "que es" una entidad como verdad.

@@ -57,7 +57,7 @@ def test_domain_interpreter_has_no_forbidden_terms_and_no_knowledge_base_usage(t
 
 
 def test_domain_interpreter_ignores_high_risk_rules():
-    # Hypothesis label with only high-risk mapping in interpretation_rules should be skipped.
+    # High-risk-only mapping should produce conservative fallback, never silent skip.
     payload = {
         "hypotheses": [
             {
@@ -75,4 +75,92 @@ def test_domain_interpreter_ignores_high_risk_rules():
         ]
     }
     result = generate_domain_interpretations(payload, profile="prefab")
-    assert result["domain_interpretations"] == []
+    assert len(result["domain_interpretations"]) == 1
+    item = result["domain_interpretations"][0]
+    assert item["derived_from_hypotheses"] == ["hyp-test-001"]
+    assert item["interpretation_label"] in {"no_domain_mapping_available", "requires_human_review"}
+
+
+def test_domain_interpreter_no_mapping_with_evidence_uses_no_domain_mapping_available():
+    payload = {
+        "hypotheses": [
+            {
+                "hypothesis_id": "hyp-nomap-001",
+                "entity_id": "ent-test-001",
+                "hypothesis_label": "label_without_profile_mapping",
+                "hypothesis_level": "relational",
+                "confidence": 0.82,
+                "supporting_evidence": ["ev-001", "ev-002"],
+                "contradicting_evidence": [],
+                "alternatives": [],
+                "missing_information": [],
+                "status": "candidate",
+            }
+        ]
+    }
+    out = generate_domain_interpretations(payload, profile="prefab")
+    assert len(out["domain_interpretations"]) == 1
+    item = out["domain_interpretations"][0]
+    assert item["interpretation_label"] == "no_domain_mapping_available"
+    assert item["status"] == "unsupported"
+    assert item["supporting_evidence"] == ["ev-001", "ev-002"]
+    assert item["derived_from_hypotheses"] == ["hyp-nomap-001"]
+
+
+def test_domain_interpreter_insufficient_evidence_uses_requires_human_review():
+    payload = {
+        "hypotheses": [
+            {
+                "hypothesis_id": "hyp-low-001",
+                "entity_id": "ent-test-001",
+                "hypothesis_label": "label_without_profile_mapping",
+                "hypothesis_level": "relational",
+                "confidence": 0.2,
+                "supporting_evidence": [],
+                "contradicting_evidence": [],
+                "alternatives": [],
+                "missing_information": ["evidence needed"],
+                "status": "candidate",
+            }
+        ]
+    }
+    out = generate_domain_interpretations(payload, profile="prefab")
+    assert len(out["domain_interpretations"]) == 1
+    item = out["domain_interpretations"][0]
+    assert item["interpretation_label"] == "requires_human_review"
+    assert item["status"] == "weak"
+    assert item["derived_from_hypotheses"] == ["hyp-low-001"]
+
+
+def test_domain_interpreter_never_silently_omits_hypotheses():
+    payload = {
+        "hypotheses": [
+            {
+                "hypothesis_id": "hyp-a",
+                "entity_id": "ent-a",
+                "hypothesis_label": "label_without_profile_mapping",
+                "hypothesis_level": "relational",
+                "confidence": 0.8,
+                "supporting_evidence": ["ev-a"],
+                "contradicting_evidence": [],
+                "alternatives": [],
+                "missing_information": [],
+                "status": "candidate",
+            },
+            {
+                "hypothesis_id": "hyp-b",
+                "entity_id": "ent-b",
+                "hypothesis_label": "label_without_profile_mapping",
+                "hypothesis_level": "relational",
+                "confidence": 0.2,
+                "supporting_evidence": [],
+                "contradicting_evidence": [],
+                "alternatives": [],
+                "missing_information": ["missing"],
+                "status": "candidate",
+            },
+        ]
+    }
+    out = generate_domain_interpretations(payload, profile="prefab")
+    assert len(out["domain_interpretations"]) == len(payload["hypotheses"])
+    assert not out["skipped_hypotheses"]
