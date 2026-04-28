@@ -108,8 +108,23 @@ def _geometry_bounding_box(geom: Any) -> dict[str, Any] | None:
         mx = [float(bb.Max.X), float(bb.Max.Y), float(bb.Max.Z)]
         if any(mx[i] < mn[i] for i in range(3)):
             return None
+        x0, y0, z0 = mn
+        x1, y1, z1 = mx
+        corners = [
+            [x0, y0, z0],
+            [x0, y0, z1],
+            [x0, y1, z0],
+            [x0, y1, z1],
+            [x1, y0, z0],
+            [x1, y0, z1],
+            [x1, y1, z0],
+            [x1, y1, z1],
+        ]
+        center = [(x0 + x1) / 2.0, (y0 + y1) / 2.0, (z0 + z1) / 2.0]
         return {
             "bbox": {"min": mn, "max": mx},
+            "bbox_corners": corners,
+            "sample_points": [center, mn, mx],
             "source": "rhino3dm.GeometryBase.GetBoundingBox",
         }
     except Exception:
@@ -205,6 +220,8 @@ def _to_dict_from_rhino_object(
 
     if raw_geometry_summary is None:
         raw_geometry_summary = {}
+    if "bbox_corners" not in raw_geometry_summary:
+        extraction_warnings.append("bbox_corners_not_available")
 
     return {
         "object_id": object_id,
