@@ -79,6 +79,41 @@ def _compute_morphology(dimensions: list[float], raw_type: str) -> tuple[str, fl
     return "unknown", 0.5
 
 
+def _oriented_bbox_approximation(
+    center: list[float],
+    dims: list[float],
+    transform: Any,
+) -> dict[str, Any]:
+    """
+    First-step OBB approximation from current proxy geometry:
+    - center from current feature center
+    - extents from current principal dimensions
+    - axes from transform basis (fallback identity)
+    """
+    axes = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    if isinstance(transform, list) and len(transform) == 16:
+        candidate_axes = [
+            [float(transform[0]), float(transform[1]), float(transform[2])],
+            [float(transform[4]), float(transform[5]), float(transform[6])],
+            [float(transform[8]), float(transform[9]), float(transform[10])],
+        ]
+
+        norm_axes: list[list[float]] = []
+        for axis in candidate_axes:
+            n = math.sqrt(sum(c * c for c in axis))
+            if n <= 1e-12:
+                norm_axes.append([1.0, 0.0, 0.0])
+            else:
+                norm_axes.append([axis[0] / n, axis[1] / n, axis[2] / n])
+        axes = norm_axes
+
+    return {
+        "center": [float(center[0]), float(center[1]), float(center[2])],
+        "axes": axes,
+        "extents": [float(dims[0]), float(dims[1]), float(dims[2])],
+    }
+
+
 def _build_geometry(obj: dict[str, Any]) -> dict[str, Any]:
     object_id = str(obj["object_id"])
     transform = obj.get("transform", [0.0] * 16)
@@ -108,6 +143,8 @@ def _build_geometry(obj: dict[str, Any]) -> dict[str, Any]:
 
     area = 2.0 * (dims[0] * dims[1] + dims[0] * dims[2] + dims[1] * dims[2])
     volume = dims[0] * dims[1] * dims[2]
+    oriented_bbox = _oriented_bbox_approximation(center=center, dims=dims, transform=transform)
+    geometric_warnings.append("oriented_bbox_approximation")
 
     feature = {
         "object_id": object_id,
@@ -127,8 +164,9 @@ def _build_geometry(obj: dict[str, Any]) -> dict[str, Any]:
         "morphology_confidence": morphology_confidence,
         "geometric_warnings": geometric_warnings,
         "derived_from": derived_from,
+        "oriented_bbox": oriented_bbox,
     }
-    validate_payload("geometry_schema.v1.json", feature)
+    validate_payload("geometry_schema.v2.json", feature)
     return feature
 
 
@@ -338,7 +376,7 @@ def compute_geometry_features(payload: dict[str, Any]) -> dict[str, Any]:
         "message": f"Processed {len(objects)} objects into geometry/entities/relations.",
         "expected_input_contract": "object_schema.v1.json",
         "output_contract": [
-            "geometry_schema.v1.json",
+            "geometry_schema.v2.json",
             "entity_schema.v1.json",
             "relations_schema.v1.json",
         ],

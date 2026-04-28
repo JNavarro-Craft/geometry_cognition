@@ -121,7 +121,7 @@ def test_geometry_kernel_outputs_validate_against_contracts():
     objects = _load_json("normalized_objects.sample.json")
     result = compute_geometry_features({"objects": objects})
     for item in result["geometry_features"]:
-        validate_payload("geometry_schema.v1.json", item)
+        validate_payload("geometry_schema.v2.json", item)
     for item in result["entities"]:
         validate_payload("entity_schema.v1.json", item)
     for item in result["relations"]:

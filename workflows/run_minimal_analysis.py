@@ -71,7 +71,7 @@ def _validate_outputs(result: dict[str, Any]) -> None:
     for obj in result.get("objects", []):
         validate_payload("object_schema.v1.json", obj)
     for geom in result.get("geometry_features", []):
-        validate_payload("geometry_schema.v1.json", geom)
+        validate_payload("geometry_schema.v2.json", geom)
     for ent in result.get("entities", []):
         validate_payload("entity_schema.v1.json", ent)
     for rel in result.get("relations", []):

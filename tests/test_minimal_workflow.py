@@ -44,7 +44,7 @@ def _validate_output_files(
 ) -> dict[str, list]:
     expected = {
         "objects.json": "object_schema.v1.json",
-        "geometry_features.json": "geometry_schema.v1.json",
+        "geometry_features.json": "geometry_schema.v2.json",
         "entities.json": "entity_schema.v1.json",
         "relations.json": "relations_schema.v1.json",
         "minimal_analysis_bundle.json": None,

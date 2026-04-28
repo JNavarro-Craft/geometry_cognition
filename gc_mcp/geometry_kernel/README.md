@@ -21,3 +21,15 @@
 Compatibilidad:
 - v1 se mantiene intacto y sigue siendo el output operativo actual del kernel.
 - v2 agrega campos opcionales y permite tests de formato/contrato para preparación de `geometry_kernel_v2`, sin cambiar la lógica vigente.
+
+## oriented_bbox (primer paso v2)
+
+Implementación actual (conservadora / aproximada):
+- `center`: se toma del centro geométrico actualmente calculado por el kernel.
+- `extents`: se toma de las dimensiones actuales (`principal_dimensions` proxy vigentes).
+- `axes`: se toman de la base del `transform` del objeto cuando está disponible; si no, identidad.
+
+Notas:
+- En esta fase no se calcula OBB exacta por intersección/casco convexo/PCA de malla completa.
+- Se agrega advertencia `oriented_bbox_approximation` en `geometric_warnings`.
+- `bbox` axis-aligned actual se mantiene sin cambios para no romper compatibilidad funcional previa.
