@@ -118,6 +118,7 @@ Output ejemplo:
 
 Checks minimos implementados:
 - `mesh_distance_check`
+- `brep_contact_check`
 - `brep_intersection_check`
 - `face_adjacency_check` (estado inicial inconclusive)
 - `tolerance_review`

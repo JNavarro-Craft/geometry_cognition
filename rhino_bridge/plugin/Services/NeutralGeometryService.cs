@@ -192,6 +192,28 @@ public class NeutralGeometryService
                     relationId, subjectId, objectId, check,
                     "contradicted", "measured", method, measurements, 0.75, limitations, notes);
             }
+            case "brep_contact_check":
+            {
+                var distance = bboxGap;
+                if (double.IsNaN(distance) || double.IsInfinity(distance))
+                {
+                    limitations.Add("contact_distance_unavailable");
+                    return BuildVerificationResult(
+                        relationId, subjectId, objectId, check,
+                        "inconclusive", "candidate", "brep_contact_check", measurements, 0.3, limitations, notes);
+                }
+
+                if (distance <= linearTol)
+                {
+                    var method = (gA is Brep && gB is Brep) ? "brep_closest_point" : "brep_contact_check";
+                    return BuildVerificationResult(
+                        relationId, subjectId, objectId, check,
+                        "verified", "confirmed", method, measurements, 0.85, limitations, notes);
+                }
+                return BuildVerificationResult(
+                    relationId, subjectId, objectId, check,
+                    "contradicted", "measured", "brep_contact_check", measurements, 0.75, limitations, notes);
+            }
             case "brep_intersection_check":
             {
                 if (gA is Brep brepA && gB is Brep brepB)
