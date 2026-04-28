@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from gc_mcp.rhino_extractor.backend_adapter import extract_objects as extract_objects_via_backend
 from shared.contracts import validate_payload
 
 logger = logging.getLogger(__name__)
@@ -288,49 +289,38 @@ def _extract_objects_error(
     }
 
 
+def _extract_from_local_path(input_path: str | None) -> list[dict[str, Any]]:
+    if input_path is None or not str(input_path).strip():
+        raise ValueError("Missing required payload key: input_path")
+    raw = str(input_path).strip()
+    path = Path(raw).expanduser()
+    if not path.exists():
+        raise FileNotFoundError(f"Input path does not exist: {path}")
+    suffix = path.suffix.lower()
+    if suffix == ".json":
+        return _extract_from_json(path)
+    if suffix == ".3dm":
+        return _extract_from_rhino(path)
+    raise ValueError("Unsupported input file extension. Use .json or .3dm")
+
+
 def extract_objects(payload: dict[str, Any]) -> dict[str, Any]:
     input_path = payload.get("input_path")
     input_path_received = str(input_path) if input_path is not None else None
-    if input_path is None or not str(input_path).strip():
-        logger.info(
-            "rhino_extractor: input_path received=%r path_used=None (missing or blank)",
-            input_path_received,
-        )
-        return _extract_objects_error(
-            "Missing required payload key: input_path",
-            input_path_received=input_path_received,
-            path_used=None,
-        )
-
-    raw = str(input_path).strip()
-    path = Path(raw).expanduser()
+    raw = str(input_path).strip() if input_path is not None else None
+    path_used: str | None = None
+    if raw:
+        path = Path(raw).expanduser()
+        try:
+            path_used = str(path.resolve())
+        except OSError:
+            path_used = str(path)
+    logger.info("rhino_extractor: input_path received=%r path_used=%r", raw, path_used)
     try:
-        path_used = str(path.resolve())
-    except OSError:
-        path_used = str(path)
-
-    logger.info(
-        "rhino_extractor: input_path received=%r path_used=%r exists=%s",
-        raw,
-        path_used,
-        path.exists(),
-    )
-
-    if not path.exists():
+        objects, backend_mode, backend_warnings = extract_objects_via_backend(raw, _extract_from_local_path)
+    except Exception as exc:
         return _extract_objects_error(
-            f"Input path does not exist: {path}",
-            input_path_received=raw,
-            path_used=path_used,
-        )
-
-    suffix = path.suffix.lower()
-    if suffix == ".json":
-        objects = _extract_from_json(path)
-    elif suffix == ".3dm":
-        objects = _extract_from_rhino(path)
-    else:
-        return _extract_objects_error(
-            "Unsupported input file extension. Use .json or .3dm",
+            str(exc),
             input_path_received=raw,
             path_used=path_used,
         )
@@ -339,8 +329,10 @@ def extract_objects(payload: dict[str, Any]) -> dict[str, Any]:
         "mcp_name": "rhino_extractor",
         "role": "extractor",
         "status": "ok",
-        "message": f"Extracted {len(objects)} normalized objects.",
+        "message": f"Extracted {len(objects)} normalized objects via {backend_mode}.",
         "expected_input_contract": "external.rhino_model_or_json_fixture",
         "output_contract": "object_schema.v1.json",
         "objects": objects,
+        "backend_mode": backend_mode,
+        "backend_warnings": backend_warnings,
     }
