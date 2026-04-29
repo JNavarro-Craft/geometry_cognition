@@ -136,6 +136,59 @@ def execute_verification_plan(payload: dict[str, Any]) -> dict[str, Any]:
             "source": "rhino_bridge",
         }
 
+    # Post-verification minimal consistency pass:
+    # 1) intersects confirmed dominates touches confirmed for same pair
+    # 2) only one confirmed relation survives per (subject_id, object_id, predicate)
+    def _pair_key(rel: dict[str, Any]) -> tuple[str, str]:
+        return (str(rel.get("subject_id", "")), str(rel.get("object_id", "")))
+
+    def _triple_key(rel: dict[str, Any]) -> tuple[str, str, str]:
+        return (
+            str(rel.get("subject_id", "")),
+            str(rel.get("object_id", "")),
+            str(rel.get("predicate", "")),
+        )
+
+    confirmed_intersects_pairs: set[tuple[str, str]] = set()
+    for rel in updated_relations:
+        if not isinstance(rel, dict):
+            continue
+        if str(rel.get("assertion_level", "")) == "confirmed" and str(rel.get("predicate", "")) == "intersects":
+            confirmed_intersects_pairs.add(_pair_key(rel))
+
+    # Demote touches confirmed when intersects confirmed exists for same pair.
+    for rel in updated_relations:
+        if not isinstance(rel, dict):
+            continue
+        if str(rel.get("assertion_level", "")) != "confirmed":
+            continue
+        if str(rel.get("predicate", "")) != "touches":
+            continue
+        if _pair_key(rel) in confirmed_intersects_pairs:
+            rel["assertion_level"] = "measured"
+            rel["verification_status"] = "partially_verified"
+            limits = [str(x) for x in rel.get("limitations", [])] if isinstance(rel.get("limitations"), list) else []
+            limits.append("subordinated_to_confirmed_intersection")
+            rel["limitations"] = _dedupe(limits)
+
+    # Consolidate duplicates: only one confirmed survives per (subject_id, object_id, predicate).
+    seen_confirmed: dict[tuple[str, str, str], bool] = {}
+    for rel in updated_relations:
+        if not isinstance(rel, dict):
+            continue
+        if str(rel.get("assertion_level", "")) != "confirmed":
+            continue
+        key = _triple_key(rel)
+        if key not in seen_confirmed:
+            seen_confirmed[key] = True
+            continue
+        # Demote redundant confirmed relation
+        rel["assertion_level"] = "measured"
+        rel["verification_status"] = "partially_verified"
+        limits = [str(x) for x in rel.get("limitations", [])] if isinstance(rel.get("limitations"), list) else []
+        limits.append("redundant_confirmed_relation_consolidated")
+        rel["limitations"] = _dedupe(limits)
+
     # Guardrail: avoid constructive vocabulary in output text fields.
     for rel in updated_relations:
         if not isinstance(rel, dict):
