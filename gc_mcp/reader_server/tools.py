@@ -12,6 +12,57 @@ def _load_required(filename: str) -> tuple[Any | None, dict[str, str] | None]:
     return _LOADER.load_json(filename)
 
 
+def _load_objects() -> tuple[list[dict[str, Any]] | None, dict[str, str] | None]:
+    data, err = _load_required("objects.json")
+    if err:
+        return None, err
+    if not isinstance(data, list):
+        return [], None
+    return [x for x in data if isinstance(x, dict)], None
+
+
+def _collect_group_names(obj: dict[str, Any]) -> list[str]:
+    names: list[str] = []
+    raw_names = obj.get("group_names", [])
+    if isinstance(raw_names, list):
+        for item in raw_names:
+            text = str(item or "")
+            if text:
+                names.append(text)
+    raw_ids = obj.get("group_ids", [])
+    if isinstance(raw_ids, list):
+        for item in raw_ids:
+            text = str(item or "")
+            if text.startswith("group_name:"):
+                name = text.split(":", 1)[1].strip()
+                if name:
+                    names.append(name)
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for name in names:
+        if name in seen:
+            continue
+        seen.add(name)
+        deduped.append(name)
+    return deduped
+
+
+def _collect_group_ids(obj: dict[str, Any]) -> list[str]:
+    group_ids = obj.get("group_ids", [])
+    if not isinstance(group_ids, list):
+        return []
+    return [str(x) for x in group_ids if str(x)]
+
+
+def _object_row(obj: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "object_id": str(obj.get("object_id", "")),
+        "name": str(obj.get("name", "")),
+        "type": str(obj.get("raw_type", "")),
+        "layer": str(obj.get("layer", "")),
+    }
+
+
 def _load_relations() -> tuple[list[dict[str, Any]] | None, dict[str, str] | None]:
     data, err, _ = _LOADER.load_first_available(["relations_verified.json", "relations.json"])
     if err:
@@ -185,4 +236,286 @@ def get_reasoning_output() -> dict[str, Any]:
     if err:
         return {"available": False, "reason": "no reasoning output found"}
     return {"available": True, "reasoning_output": data}
+
+
+def get_inventory_summary() -> dict[str, Any]:
+    objects, err = _load_objects()
+    if err:
+        return err
+    rows = objects or []
+
+    type_counts: dict[str, int] = {}
+    layer_counts: dict[str, int] = {}
+    group_counts: dict[str, int] = {}
+    with_user_text = 0
+
+    for obj in rows:
+        obj_type = str(obj.get("raw_type", ""))
+        type_counts[obj_type] = type_counts.get(obj_type, 0) + 1
+
+        layer = str(obj.get("layer", ""))
+        layer_counts[layer] = layer_counts.get(layer, 0) + 1
+
+        for group_name in _collect_group_names(obj):
+            group_counts[group_name] = group_counts.get(group_name, 0) + 1
+
+        user_text = obj.get("user_text")
+        if isinstance(user_text, dict) and len(user_text) > 0:
+            with_user_text += 1
+
+    total = len(rows)
+    without_user_text = max(0, total - with_user_text)
+    coverage = 0.0
+    if total > 0:
+        coverage = round((with_user_text / total) * 100.0, 2)
+
+    top_layers = sorted(layer_counts.items(), key=lambda x: (-x[1], x[0]))[:10]
+    top_groups = sorted(group_counts.items(), key=lambda x: (-x[1], x[0]))[:10]
+
+    return {
+        "total_objects": total,
+        "total_layers": len(layer_counts),
+        "total_groups": len(group_counts),
+        "object_types_breakdown": type_counts,
+        "user_text_coverage": {
+            "con_user_text": with_user_text,
+            "sin_user_text": without_user_text,
+            "percentage": coverage,
+        },
+        "top_layers": [{"name": name, "object_count": count} for name, count in top_layers],
+        "top_groups": [{"name": name, "object_count": count} for name, count in top_groups],
+    }
+
+
+def get_layers() -> dict[str, Any]:
+    objects, err = _load_objects()
+    if err:
+        return err
+    buckets: dict[str, dict[str, Any]] = {}
+    for obj in objects or []:
+        layer = str(obj.get("layer", ""))
+        row = buckets.setdefault(layer, {"name": layer, "object_count": 0, "object_types": set()})
+        row["object_count"] += 1
+        row["object_types"].add(str(obj.get("raw_type", "")))
+
+    out: list[dict[str, Any]] = []
+    for layer_name in sorted(buckets.keys()):
+        row = buckets[layer_name]
+        out.append(
+            {
+                "name": row["name"],
+                "object_count": row["object_count"],
+                "object_types": sorted([x for x in row["object_types"] if isinstance(x, str)]),
+            }
+        )
+    return {"layers": out, "count": len(out)}
+
+
+def get_groups() -> dict[str, Any]:
+    objects, err = _load_objects()
+    if err:
+        return err
+    buckets: dict[str, dict[str, Any]] = {}
+    for obj in objects or []:
+        group_names = _collect_group_names(obj)
+        group_ids = _collect_group_ids(obj)
+        user_text = obj.get("user_text", {})
+        keys: list[str] = []
+        if isinstance(user_text, dict):
+            keys = [str(k) for k in user_text.keys()]
+
+        for group_name in group_names:
+            bucket = buckets.setdefault(
+                group_name,
+                {
+                    "group_id": group_name,
+                    "group_names": set([group_name]),
+                    "object_ids": set(),
+                    "user_text_keys": set(),
+                },
+            )
+            for gid in group_ids:
+                if gid.startswith("group_index:"):
+                    bucket["group_id"] = gid
+            bucket["group_names"].add(group_name)
+            bucket["object_ids"].add(str(obj.get("object_id", "")))
+            for key in keys:
+                if key:
+                    bucket["user_text_keys"].add(key)
+
+    groups: list[dict[str, Any]] = []
+    for key in sorted(buckets.keys()):
+        bucket = buckets[key]
+        groups.append(
+            {
+                "group_id": bucket["group_id"],
+                "group_names": sorted(list(bucket["group_names"])),
+                "object_count": len(bucket["object_ids"]),
+                "user_text_keys_in_group": sorted(list(bucket["user_text_keys"])),
+            }
+        )
+    return {"groups": groups, "count": len(groups)}
+
+
+def get_objects_by_layer(layer_name: str, limit: int | None = None) -> dict[str, Any]:
+    objects, err = _load_objects()
+    if err:
+        return err
+    layer = str(layer_name)
+    matched: list[dict[str, Any]] = []
+    layer_exists = False
+    for obj in objects or []:
+        obj_layer = str(obj.get("layer", ""))
+        if obj_layer == layer:
+            layer_exists = True
+            row = _object_row(obj)
+            row["group_ids"] = _collect_group_ids(obj)
+            matched.append(row)
+    if limit is not None:
+        matched = matched[: max(0, int(limit))]
+    if not layer_exists:
+        return {"objects": [], "count": 0, "layer": layer, "warning": "layer_not_found"}
+    return {"objects": matched, "count": len(matched), "layer": layer}
+
+
+def get_objects_by_group(group_name: str, limit: int | None = None) -> dict[str, Any]:
+    objects, err = _load_objects()
+    if err:
+        return err
+    group = str(group_name)
+    matched: list[dict[str, Any]] = []
+    group_exists = False
+    for obj in objects or []:
+        names = _collect_group_names(obj)
+        if group in names:
+            group_exists = True
+            matched.append(
+                {
+                    "object_id": str(obj.get("object_id", "")),
+                    "name": str(obj.get("name", "")),
+                    "type": str(obj.get("raw_type", "")),
+                    "layer": str(obj.get("layer", "")),
+                }
+            )
+    if limit is not None:
+        matched = matched[: max(0, int(limit))]
+    if not group_exists:
+        return {"objects": [], "count": 0, "group": group, "warning": "group_not_found"}
+    return {"objects": matched, "count": len(matched), "group": group}
+
+
+def get_objects_by_user_text(key: str, value: str | None = None, limit: int | None = None) -> dict[str, Any]:
+    objects, err = _load_objects()
+    if err:
+        return err
+    key_text = str(key)
+    value_text = str(value) if value is not None else None
+    matched: list[dict[str, Any]] = []
+    key_found = False
+    for obj in objects or []:
+        user_text = obj.get("user_text")
+        if not isinstance(user_text, dict):
+            continue
+        if key_text not in user_text:
+            continue
+        key_found = True
+        current_value = str(user_text.get(key_text, ""))
+        if value_text is not None and current_value != value_text:
+            continue
+        matched.append(
+            {
+                "object_id": str(obj.get("object_id", "")),
+                "name": str(obj.get("name", "")),
+                "type": str(obj.get("raw_type", "")),
+                "layer": str(obj.get("layer", "")),
+                "matched_value": current_value,
+            }
+        )
+    if limit is not None:
+        matched = matched[: max(0, int(limit))]
+    if not key_found:
+        return {
+            "objects": [],
+            "count": 0,
+            "key": key_text,
+            "value": value_text,
+            "warning": "key_not_found_in_model",
+        }
+    return {"objects": matched, "count": len(matched), "key": key_text, "value": value_text}
+
+
+def find_orphans(criterion: str = "no_group", limit: int | None = None) -> dict[str, Any]:
+    objects, err = _load_objects()
+    if err:
+        return err
+    supported = ["no_group", "no_user_text", "no_name"]
+    criterion_text = str(criterion)
+    if criterion_text not in supported:
+        return {
+            "orphans": [],
+            "count": 0,
+            "criterion": criterion_text,
+            "error": "unsupported_criterion",
+            "supported": supported,
+        }
+
+    out: list[dict[str, Any]] = []
+    for obj in objects or []:
+        reason = None
+        if criterion_text == "no_group":
+            if len(_collect_group_ids(obj)) == 0 and len(_collect_group_names(obj)) == 0:
+                reason = "no_group"
+        elif criterion_text == "no_user_text":
+            user_text = obj.get("user_text")
+            if not isinstance(user_text, dict) or len(user_text) == 0:
+                reason = "no_user_text"
+        elif criterion_text == "no_name":
+            if str(obj.get("name", "")).strip() == "":
+                reason = "no_name"
+
+        if reason is not None:
+            out.append(
+                {
+                    "object_id": str(obj.get("object_id", "")),
+                    "type": str(obj.get("raw_type", "")),
+                    "layer": str(obj.get("layer", "")),
+                    "group_ids": _collect_group_ids(obj),
+                    "reason": reason,
+                }
+            )
+    if limit is not None:
+        out = out[: max(0, int(limit))]
+    return {"orphans": out, "count": len(out), "criterion": criterion_text}
+
+
+def get_user_text_keys_summary() -> dict[str, Any]:
+    objects, err = _load_objects()
+    if err:
+        return err
+    buckets: dict[str, dict[str, Any]] = {}
+    for obj in objects or []:
+        user_text = obj.get("user_text")
+        if not isinstance(user_text, dict):
+            continue
+        for raw_key, raw_value in user_text.items():
+            key = str(raw_key)
+            value = str(raw_value)
+            bucket = buckets.setdefault(key, {"occurrence_count": 0, "values": set(), "example_value": value})
+            bucket["occurrence_count"] += 1
+            bucket["values"].add(value)
+            if bucket.get("example_value", "") == "":
+                bucket["example_value"] = value
+
+    keys: list[dict[str, Any]] = []
+    for key in sorted(buckets.keys()):
+        bucket = buckets[key]
+        keys.append(
+            {
+                "key": key,
+                "occurrence_count": int(bucket["occurrence_count"]),
+                "example_value": str(bucket.get("example_value", "")),
+                "distinct_values_count": len(bucket["values"]),
+            }
+        )
+    return {"keys": keys, "total_distinct_keys": len(keys)}
 
