@@ -1,0 +1,222 @@
+[
+  {
+    "validation_id": "val-00001",
+    "target_id": "hyp-0001",
+    "rule_id": "R1",
+    "rule_name": "hypothesis_has_supporting_evidence",
+    "status": "pass",
+    "severity": "warning",
+    "evidence": [
+      "ev-ent-ent-src-102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "ev-geom-102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "ev-rel-rel-aligned-4"
+    ],
+    "recommendation": null,
+    "skipped_reason": null
+  },
+  {
+    "validation_id": "val-00002",
+    "target_id": "hyp-0001",
+    "rule_id": "R2",
+    "rule_name": "hypothesis_references_existing_entity",
+    "status": "pass",
+    "severity": "warning",
+    "evidence": [
+      "ent-src-102211a6-9d1d-477e-a081-e5ef0756cf9a"
+    ],
+    "recommendation": null,
+    "skipped_reason": null
+  },
+  {
+    "validation_id": "val-00003",
+    "target_id": "hyp-0001",
+    "rule_id": "R3",
+    "rule_name": "hypothesis_references_existing_evidence",
+    "status": "pass",
+    "severity": "warning",
+    "evidence": [
+      "ev-ent-ent-src-102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "ev-geom-102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "ev-rel-rel-aligned-4",
+      "ev-rel-rel-coplanar-candidate-3",
+      "ev-rel-rel-near-1"
+    ],
+    "recommendation": null,
+    "skipped_reason": null
+  },
+  {
+    "validation_id": "val-00004",
+    "target_id": "hyp-0001",
+    "rule_id": "R4",
+    "rule_name": "hypothesis_confidence_within_range",
+    "status": "pass",
+    "severity": "warning",
+    "evidence": [
+      "0.6992857142857143"
+    ],
+    "recommendation": null,
+    "skipped_reason": null
+  },
+  {
+    "validation_id": "val-00005",
+    "target_id": "hyp-0001",
+    "rule_id": "R5",
+    "rule_name": "hypothesis_has_no_forbidden_domain_terms",
+    "status": "pass",
+    "severity": "warning",
+    "evidence": [
+      "compact_cluster"
+    ],
+    "recommendation": null,
+    "skipped_reason": null
+  },
+  {
+    "validation_id": "val-00006",
+    "target_id": "hyp-0001",
+    "rule_id": "R6",
+    "rule_name": "hypothesis_declares_no_final_truth",
+    "status": "pass",
+    "severity": "warning",
+    "evidence": [
+      "hyp-0001"
+    ],
+    "recommendation": null,
+    "skipped_reason": null
+  },
+  {
+    "validation_id": "val-00007",
+    "target_id": "hyp-0001",
+    "rule_id": "R7",
+    "rule_name": "hypothesis_missing_information_declared_when_low_confidence",
+    "status": "pass",
+    "severity": "warning",
+    "evidence": [
+      "0.6992857142857143",
+      "verified geometric interaction required",
+      "pending: tolerance_review"
+    ],
+    "recommendation": null,
+    "skipped_reason": null
+  },
+  {
+    "validation_id": "val-00008",
+    "target_id": "hyp-0001",
+    "rule_id": "R8",
+    "rule_name": "hypothesis_contradictions_are_explicit_when_present",
+    "status": "pass",
+    "severity": "warning",
+    "evidence": [],
+    "recommendation": null,
+    "skipped_reason": null
+  },
+  {
+    "validation_id": "val-00009",
+    "target_id": "hyp-0002",
+    "rule_id": "R1",
+    "rule_name": "hypothesis_has_supporting_evidence",
+    "status": "pass",
+    "severity": "warning",
+    "evidence": [
+      "ev-ent-ent-src-8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+      "ev-geom-8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+      "ev-rel-rel-aligned-4"
+    ],
+    "recommendation": null,
+    "skipped_reason": null
+  },
+  {
+    "validation_id": "val-00010",
+    "target_id": "hyp-0002",
+    "rule_id": "R2",
+    "rule_name": "hypothesis_references_existing_entity",
+    "status": "pass",
+    "severity": "warning",
+    "evidence": [
+      "ent-src-8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+    ],
+    "recommendation": null,
+    "skipped_reason": null
+  },
+  {
+    "validation_id": "val-00011",
+    "target_id": "hyp-0002",
+    "rule_id": "R3",
+    "rule_name": "hypothesis_references_existing_evidence",
+    "status": "pass",
+    "severity": "warning",
+    "evidence": [
+      "ev-ent-ent-src-8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+      "ev-geom-8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+      "ev-rel-rel-aligned-4",
+      "ev-rel-rel-coplanar-candidate-3",
+      "ev-rel-rel-near-1"
+    ],
+    "recommendation": null,
+    "skipped_reason": null
+  },
+  {
+    "validation_id": "val-00012",
+    "target_id": "hyp-0002",
+    "rule_id": "R4",
+    "rule_name": "hypothesis_confidence_within_range",
+    "status": "pass",
+    "severity": "warning",
+    "evidence": [
+      "0.6992857142857143"
+    ],
+    "recommendation": null,
+    "skipped_reason": null
+  },
+  {
+    "validation_id": "val-00013",
+    "target_id": "hyp-0002",
+    "rule_id": "R5",
+    "rule_name": "hypothesis_has_no_forbidden_domain_terms",
+    "status": "pass",
+    "severity": "warning",
+    "evidence": [
+      "compact_cluster"
+    ],
+    "recommendation": null,
+    "skipped_reason": null
+  },
+  {
+    "validation_id": "val-00014",
+    "target_id": "hyp-0002",
+    "rule_id": "R6",
+    "rule_name": "hypothesis_declares_no_final_truth",
+    "status": "pass",
+    "severity": "warning",
+    "evidence": [
+      "hyp-0002"
+    ],
+    "recommendation": null,
+    "skipped_reason": null
+  },
+  {
+    "validation_id": "val-00015",
+    "target_id": "hyp-0002",
+    "rule_id": "R7",
+    "rule_name": "hypothesis_missing_information_declared_when_low_confidence",
+    "status": "pass",
+    "severity": "warning",
+    "evidence": [
+      "0.6992857142857143",
+      "verified geometric interaction required",
+      "pending: tolerance_review"
+    ],
+    "recommendation": null,
+    "skipped_reason": null
+  },
+  {
+    "validation_id": "val-00016",
+    "target_id": "hyp-0002",
+    "rule_id": "R8",
+    "rule_name": "hypothesis_contradictions_are_explicit_when_present",
+    "status": "pass",
+    "severity": "warning",
+    "evidence": [],
+    "recommendation": null,
+    "skipped_reason": null
+  }
+]

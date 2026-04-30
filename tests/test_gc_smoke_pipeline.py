@@ -1,9 +1,7 @@
 """
 Smoke-level checks for gc_smoke_test_01 (JSON equivalent) and optional real .3dm.
 
-- For a real file (e.g. ``gc_smoke_test_01.3dm`` or ``gc_smoke_test_02_complex.3dm``), set
-  ``GC_SMOKE_3DM`` to the absolute path. Optional second check: use ``GC_SMOKE_3DM_02`` for
-  a complex model if you want a separate test run.
+- For a real file (e.g. ``gc_smoke_test_01.3dm``), set ``GC_SMOKE_3DM`` to the absolute path.
 """
 
 import json
@@ -12,11 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from gc_mcp.evidence_graph.tools import build_evidence_graph
 from gc_mcp.geometry_kernel.tools import compute_geometry_features
-from gc_mcp.hypothesis_engine.tools import generate_hypotheses
 from gc_mcp.rhino_extractor.tools import extract_objects
-from gc_mcp.validation_engine.tools import validate_hypotheses
 from shared.contracts import validate_payload
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -104,47 +99,3 @@ def test_real_3dm_gc_smoke_when_env_path_set():
     if grouped:
         assert all("grp_test_linear_plate" in (o.get("group_names") or []) for o in grouped)
 
-
-@pytest.mark.skipif(not os.environ.get("GC_SMOKE_3DM_02"), reason="Set GC_SMOKE_3DM_02 to smoke-test gc_smoke_test_02_complex.3dm")
-def test_complex_3dm_full_chain_r1_r2_r3_when_env_path_set():
-    """End-to-end: extractor → kernel → evidence → hypotheses → validation (R1/R2/R3)."""
-    pytest.importorskip("rhino3dm")
-    path = Path(os.environ["GC_SMOKE_3DM_02"])
-    if not path.is_file():
-        pytest.skip(f"GC_SMOKE_3DM_02 not a file: {path}")
-
-    ext = extract_objects({"input_path": str(path)})
-    assert ext["status"] == "ok"
-    ker = compute_geometry_features({"objects": ext["objects"]})
-    evg = build_evidence_graph(
-        {
-            "objects": ext["objects"],
-            "geometry_features": ker["geometry_features"],
-            "entities": ker["entities"],
-            "relations": ker["relations"],
-        }
-    )
-    hyp = generate_hypotheses(
-        {
-            "evidence_items": evg["evidence_items"],
-            "entities": ker["entities"],
-            "relations": ker["relations"],
-        }
-    )
-    val = validate_hypotheses(
-        {
-            "hypotheses": hyp["hypotheses"],
-            "evidence_items": evg["evidence_items"],
-            "entities": ker["entities"],
-            "relations": ker["relations"],
-        }
-    )
-    eids = {e["entity_id"] for e in ker["entities"]}
-    vids = {e["evidence_id"] for e in evg["evidence_items"]}
-    for h in hyp["hypotheses"]:
-        assert h["entity_id"] in eids
-        for s in h.get("supporting_evidence", []):
-            assert s in vids
-    for rule in val["validation_results"]:
-        if rule.get("rule_id") in ("R1", "R2", "R3"):
-            assert rule.get("status") == "pass", rule

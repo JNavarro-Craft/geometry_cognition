@@ -1,0 +1,59 @@
+[
+  {
+    "relation_id": "rel-overlapping-bbox-2",
+    "subject_id": "4b0623c7-c802-4394-93eb-194d33066fbe",
+    "object_id": "4bd01def-c3d3-4305-9a7a-2f7eeda4c76e",
+    "check": "brep_intersection_check",
+    "verification_status": "inconclusive",
+    "assertion_level": "candidate",
+    "method": "tolerance_review",
+    "measurements": {
+      "distance": null,
+      "intersection_count": 0,
+      "contact_area_estimate": null
+    },
+    "confidence": 0.2,
+    "limitations": [
+      "object_not_found_for_verification"
+    ],
+    "notes": []
+  },
+  {
+    "relation_id": "rel-intersecting-candidate-4",
+    "subject_id": "4b0623c7-c802-4394-93eb-194d33066fbe",
+    "object_id": "4bd01def-c3d3-4305-9a7a-2f7eeda4c76e",
+    "check": "brep_intersection_check",
+    "verification_status": "inconclusive",
+    "assertion_level": "candidate",
+    "method": "tolerance_review",
+    "measurements": {
+      "distance": null,
+      "intersection_count": 0,
+      "contact_area_estimate": null
+    },
+    "confidence": 0.2,
+    "limitations": [
+      "object_not_found_for_verification"
+    ],
+    "notes": []
+  },
+  {
+    "relation_id": "rel-touching-candidate-3",
+    "subject_id": "4b0623c7-c802-4394-93eb-194d33066fbe",
+    "object_id": "4bd01def-c3d3-4305-9a7a-2f7eeda4c76e",
+    "check": "brep_contact_check",
+    "verification_status": "inconclusive",
+    "assertion_level": "candidate",
+    "method": "tolerance_review",
+    "measurements": {
+      "distance": null,
+      "intersection_count": 0,
+      "contact_area_estimate": null
+    },
+    "confidence": 0.2,
+    "limitations": [
+      "object_not_found_for_verification"
+    ],
+    "notes": []
+  }
+]

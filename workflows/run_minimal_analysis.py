@@ -12,54 +12,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from gc_mcp.geometry_kernel.tools import compute_geometry_features
-from gc_mcp.evidence_graph.tools import build_evidence_graph
-from gc_mcp.hypothesis_engine.tools import generate_hypotheses
-from gc_mcp.domain_interpreter.tools import generate_domain_interpretations
-from gc_mcp.validation_engine.tools import validate_hypotheses
 from gc_mcp.rhino_extractor.tools import extract_objects
 from shared.contracts import validate_payload
-
-
-def _build_validation_summary(validation_results: list[dict[str, Any]]) -> dict[str, Any]:
-    severity_order = {"info": 0, "warning": 1, "error": 2, "critical": 3}
-    summary = {
-        "total": len(validation_results),
-        "passed": 0,
-        "failed": 0,
-        "skipped": 0,
-        "inconclusive": 0,
-        "by_rule": {},
-        "highest_severity": "info",
-    }
-    highest = 0
-    for item in validation_results:
-        status = str(item.get("status", "inconclusive"))
-        if status == "pass":
-            summary["passed"] += 1
-        elif status == "fail":
-            summary["failed"] += 1
-        elif status == "skipped":
-            summary["skipped"] += 1
-        else:
-            summary["inconclusive"] += 1
-
-        rule_name = str(item.get("rule_name", "unknown_rule"))
-        rule_bucket = summary["by_rule"].setdefault(
-            rule_name,
-            {"total": 0, "pass": 0, "fail": 0, "skipped": 0, "inconclusive": 0},
-        )
-        rule_bucket["total"] += 1
-        if status in rule_bucket:
-            rule_bucket[status] += 1
-        else:
-            rule_bucket["inconclusive"] += 1
-
-        sev = str(item.get("severity", "info"))
-        sev_rank = severity_order.get(sev, 0)
-        if sev_rank > highest:
-            highest = sev_rank
-            summary["highest_severity"] = sev
-    return summary
 
 
 def _load_input(path: Path) -> dict[str, Any]:
@@ -81,14 +35,6 @@ def _validate_outputs(result: dict[str, Any]) -> None:
         validate_payload("entity_schema.v1.json", ent)
     for rel in result.get("relations", []):
         validate_payload("relations_schema.v2.json", rel)
-    for item in result.get("evidence_items", []):
-        validate_payload("evidence_schema.v1.json", item)
-    for item in result.get("hypotheses", []):
-        validate_payload("hypothesis_schema.v1.json", item)
-    for item in result.get("validation_results", []):
-        validate_payload("validation_schema.v1.json", item)
-    for item in result.get("domain_interpretations", []):
-        validate_payload("domain_interpretation_schema.v1.json", item)
 
 
 def _write_json(path: Path, payload: Any) -> None:
@@ -100,17 +46,14 @@ def _write_json(path: Path, payload: Any) -> None:
 def run(
     input_path: Path | None,
     output_dir: Path,
-    include_evidence_graph: bool = False,
-    include_hypotheses: bool = False,
-    include_validation: bool = False,
-    include_domain: bool = False,
 ) -> dict[str, Any]:
     """
-    Deterministic stage order (conceptual, matches dependency chain):
-    rhino_extractor → geometry_kernel → evidence_graph → hypothesis_engine
-    → validation_engine → domain_interpreter (optional flags gate later stages; domain implies validation+hypotheses+evidence in memory).
+    Deterministic stage order:
+    rhino_extractor → geometry_kernel
     """
-    if _is_bridge_mode():
+    bridge_mode = _is_bridge_mode()
+    if bridge_mode:
+        # Bridge mode reads objects from the Rhino bridge endpoint and does not require input_path.
         extractor_payload: dict[str, Any] = {}
     else:
         if input_path is None:
@@ -135,71 +78,12 @@ def run(
         "relations": kernel_output["relations"],
     }
 
-    if include_evidence_graph or include_hypotheses or include_validation or include_domain:
-        evidence_output = build_evidence_graph(
-            {
-                "objects": merged["objects"],
-                "geometry_features": merged["geometry_features"],
-                "entities": merged["entities"],
-                "relations": merged["relations"],
-            }
-        )
-        merged["evidence_graph"] = {
-            "nodes": evidence_output["nodes"],
-            "edges": evidence_output["edges"],
-        }
-        merged["evidence_items"] = evidence_output["evidence_items"]
-
-    if include_hypotheses or include_validation or include_domain:
-        hypotheses_output = generate_hypotheses(
-            {
-                "evidence_items": merged.get("evidence_items", []),
-                "entities": merged["entities"],
-                "relations": merged.get("relations", []),
-            }
-        )
-        merged["hypotheses"] = hypotheses_output["hypotheses"]
-
-    if include_validation or include_domain:
-        validation_output = validate_hypotheses(
-            {
-                "hypotheses": merged.get("hypotheses", []),
-                "evidence_items": merged.get("evidence_items", []),
-                "entities": merged["entities"],
-                "relations": merged["relations"],
-            }
-        )
-        merged["validation_results"] = validation_output["validation_results"]
-        merged["validation_summary"] = _build_validation_summary(merged["validation_results"])
-
-    if include_domain:
-        domain_output = generate_domain_interpretations(
-            {"hypotheses": merged.get("hypotheses", [])},
-            profile="prefab",
-        )
-        merged["domain_interpretations"] = domain_output["domain_interpretations"]
-
     _validate_outputs(merged)
 
     _write_json(output_dir / "objects.json", merged["objects"])
     _write_json(output_dir / "geometry_features.json", merged["geometry_features"])
     _write_json(output_dir / "entities.json", merged["entities"])
     _write_json(output_dir / "relations.json", merged["relations"])
-    if include_evidence_graph or include_hypotheses or include_validation or include_domain:
-        _write_json(
-            output_dir / "evidence_graph.json",
-            {
-                "nodes": merged["evidence_graph"]["nodes"],
-                "edges": merged["evidence_graph"]["edges"],
-                "evidence_items": merged["evidence_items"],
-            },
-        )
-    if include_hypotheses or include_validation or include_domain:
-        _write_json(output_dir / "hypotheses.json", merged["hypotheses"])
-    if include_validation or include_domain:
-        _write_json(output_dir / "validation_results.json", merged["validation_results"])
-    if include_domain:
-        _write_json(output_dir / "domain_interpretations.json", merged["domain_interpretations"])
     _write_json(output_dir / "minimal_analysis_bundle.json", merged)
     return merged
 
@@ -217,41 +101,10 @@ def main() -> None:
         default="outputs",
         help="Directory for generated outputs (default: outputs).",
     )
-    parser.add_argument(
-        "--include-evidence-graph",
-        action="store_true",
-        help="Include evidence_graph stage and save evidence_graph.json.",
-    )
-    parser.add_argument(
-        "--include-hypotheses",
-        action="store_true",
-        help="Include hypothesis_engine stage and save hypotheses.json.",
-    )
-    parser.add_argument(
-        "--include-validation",
-        action="store_true",
-        help="Include validation_engine stage and save validation_results.json.",
-    )
-    parser.add_argument(
-        "--include-domain",
-        action="store_true",
-        help="Include domain_interpreter stage and save domain_interpretations.json.",
-    )
     args = parser.parse_args()
 
     input_path: Path | None = Path(args.input_path) if args.input_path else None
-    bundle = run(
-        input_path,
-        Path(args.output_dir),
-        include_evidence_graph=args.include_evidence_graph,
-        include_hypotheses=args.include_hypotheses,
-        include_validation=args.include_validation,
-        include_domain=args.include_domain,
-    )
-    evidence_count = len(bundle.get("evidence_items", []))
-    hypotheses_count = len(bundle.get("hypotheses", []))
-    validation_count = len(bundle.get("validation_results", []))
-    domain_count = len(bundle.get("domain_interpretations", []))
+    bundle = run(input_path, Path(args.output_dir))
     print(
         json.dumps(
             {
@@ -260,10 +113,6 @@ def main() -> None:
                 "geometry_features": len(bundle["geometry_features"]),
                 "entities": len(bundle["entities"]),
                 "relations": len(bundle["relations"]),
-                "evidence_items": evidence_count,
-                "hypotheses": hypotheses_count,
-                "validation_results": validation_count,
-                "domain_interpretations": domain_count,
             },
             indent=2,
         )

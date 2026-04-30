@@ -1,0 +1,368 @@
+[
+  {
+    "object_id": "102211a6-9d1d-477e-a081-e5ef0756cf9a",
+    "source_system": "rhino_bridge",
+    "source_ref": "102211a6-9d1d-477e-a081-e5ef0756cf9a",
+    "object_kind": "geometric_object",
+    "raw_type": "Brep",
+    "layer": "Verification_Test",
+    "name": "box_B",
+    "group_ids": [],
+    "group_names": [],
+    "block_context": {
+      "is_block_instance": false,
+      "block_name": null,
+      "instance_definition_id": null
+    },
+    "user_text": {
+      "TestCase": "case_A_touching_boxes",
+      "ElementName": "box_B",
+      "Source": "rhino3dm_test_model"
+    },
+    "material": "",
+    "transform": [
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "geometry_ref": "rhino-bridge://102211a6-9d1d-477e-a081-e5ef0756cf9a",
+    "raw_geometry_summary": {
+      "bbox": {
+        "min": [
+          100,
+          0,
+          0
+        ],
+        "max": [
+          200,
+          100,
+          100
+        ]
+      },
+      "bbox_corners": [
+        [
+          100,
+          0,
+          0
+        ],
+        [
+          200,
+          0,
+          0
+        ],
+        [
+          200,
+          100,
+          0
+        ],
+        [
+          100,
+          100,
+          0
+        ],
+        [
+          100,
+          0,
+          100
+        ],
+        [
+          200,
+          0,
+          100
+        ],
+        [
+          200,
+          100,
+          100
+        ],
+        [
+          100,
+          100,
+          100
+        ]
+      ],
+      "sample_points": [
+        [
+          150,
+          50,
+          50
+        ],
+        [
+          100,
+          0,
+          0
+        ],
+        [
+          200,
+          0,
+          0
+        ],
+        [
+          200,
+          100,
+          0
+        ],
+        [
+          100,
+          100,
+          0
+        ],
+        [
+          100,
+          0,
+          100
+        ]
+      ],
+      "face_count": 6,
+      "face_areas": [
+        10000,
+        10000,
+        10000,
+        10000,
+        10000,
+        10000
+      ],
+      "face_normals": [
+        [
+          0,
+          -1,
+          0
+        ],
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          -1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "edge_count": 12,
+      "is_closed": true,
+      "volume": 1000000.0000000003,
+      "area": 60000,
+      "source": "rhino_bridge",
+      "bbox_center": [
+        150,
+        50,
+        50
+      ]
+    },
+    "extraction_warnings": [
+      "bridge_transform_not_available"
+    ]
+  },
+  {
+    "object_id": "8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+    "source_system": "rhino_bridge",
+    "source_ref": "8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+    "object_kind": "geometric_object",
+    "raw_type": "Brep",
+    "layer": "Verification_Test",
+    "name": "box_A",
+    "group_ids": [],
+    "group_names": [],
+    "block_context": {
+      "is_block_instance": false,
+      "block_name": null,
+      "instance_definition_id": null
+    },
+    "user_text": {
+      "TestCase": "case_A_touching_boxes",
+      "ElementName": "box_A",
+      "Source": "rhino3dm_test_model"
+    },
+    "material": "",
+    "transform": [
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "geometry_ref": "rhino-bridge://8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+    "raw_geometry_summary": {
+      "bbox": {
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          100,
+          100,
+          100
+        ]
+      },
+      "bbox_corners": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          100,
+          0,
+          0
+        ],
+        [
+          100,
+          100,
+          0
+        ],
+        [
+          0,
+          100,
+          0
+        ],
+        [
+          0,
+          0,
+          100
+        ],
+        [
+          100,
+          0,
+          100
+        ],
+        [
+          100,
+          100,
+          100
+        ],
+        [
+          0,
+          100,
+          100
+        ]
+      ],
+      "sample_points": [
+        [
+          50,
+          50,
+          50
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          100,
+          0,
+          0
+        ],
+        [
+          100,
+          100,
+          0
+        ],
+        [
+          0,
+          100,
+          0
+        ],
+        [
+          0,
+          0,
+          100
+        ]
+      ],
+      "face_count": 6,
+      "face_areas": [
+        10000,
+        10000,
+        10000,
+        10000,
+        10000,
+        10000
+      ],
+      "face_normals": [
+        [
+          0,
+          -1,
+          0
+        ],
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          -1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "edge_count": 12,
+      "is_closed": true,
+      "volume": 1000000.0000000006,
+      "area": 60000,
+      "source": "rhino_bridge",
+      "bbox_center": [
+        50,
+        50,
+        50
+      ]
+    },
+    "extraction_warnings": [
+      "bridge_transform_not_available"
+    ]
+  }
+]

@@ -1,0 +1,188 @@
+[
+  {
+    "object_id": "102211a6-9d1d-477e-a081-e5ef0756cf9a",
+    "bbox": {
+      "min": [
+        100.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        200.0,
+        100.0,
+        100.0
+      ]
+    },
+    "centroid": [
+      150.0,
+      50.0,
+      50.0
+    ],
+    "volume": 1000000.0,
+    "area": 60000.0,
+    "principal_dimensions": [
+      100.0,
+      100.0,
+      100.0
+    ],
+    "aspect_ratios": {
+      "xy": 1.0,
+      "xz": 1.0,
+      "yz": 1.0
+    },
+    "local_frame": {
+      "origin": [
+        150.0,
+        50.0,
+        50.0
+      ],
+      "x_axis": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "y_axis": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "z_axis": [
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    "morphology": "compact_solid",
+    "morphology_confidence": 0.7,
+    "geometric_warnings": [
+      "geometry_derived_from_extractor_bbox",
+      "oriented_bbox_pca_from_bbox_corners"
+    ],
+    "derived_from": [
+      "102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "object_schema.raw_geometry_summary.bbox"
+    ],
+    "oriented_bbox": {
+      "center": [
+        150.0,
+        50.0,
+        50.0
+      ],
+      "axes": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "extents": [
+        100.0,
+        100.0,
+        100.0
+      ]
+    }
+  },
+  {
+    "object_id": "8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+    "bbox": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        100.0,
+        100.0,
+        100.0
+      ]
+    },
+    "centroid": [
+      50.0,
+      50.0,
+      50.0
+    ],
+    "volume": 1000000.0,
+    "area": 60000.0,
+    "principal_dimensions": [
+      100.0,
+      100.0,
+      100.0
+    ],
+    "aspect_ratios": {
+      "xy": 1.0,
+      "xz": 1.0,
+      "yz": 1.0
+    },
+    "local_frame": {
+      "origin": [
+        50.0,
+        50.0,
+        50.0
+      ],
+      "x_axis": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "y_axis": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "z_axis": [
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    "morphology": "compact_solid",
+    "morphology_confidence": 0.7,
+    "geometric_warnings": [
+      "geometry_derived_from_extractor_bbox",
+      "oriented_bbox_pca_from_bbox_corners"
+    ],
+    "derived_from": [
+      "8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+      "object_schema.raw_geometry_summary.bbox"
+    ],
+    "oriented_bbox": {
+      "center": [
+        50.0,
+        50.0,
+        50.0
+      ],
+      "axes": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "extents": [
+        100.0,
+        100.0,
+        100.0
+      ]
+    }
+  }
+]

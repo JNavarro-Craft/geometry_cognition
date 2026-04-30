@@ -1,0 +1,456 @@
+{
+  "nodes": [
+    {
+      "node_id": "obj:102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "node_type": "object",
+      "refs": [
+        "102211a6-9d1d-477e-a081-e5ef0756cf9a"
+      ]
+    },
+    {
+      "node_id": "obj:8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+      "node_type": "object",
+      "refs": [
+        "8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+      ]
+    },
+    {
+      "node_id": "geom:102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "node_type": "geometry_feature",
+      "refs": [
+        "102211a6-9d1d-477e-a081-e5ef0756cf9a"
+      ]
+    },
+    {
+      "node_id": "geom:8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+      "node_type": "geometry_feature",
+      "refs": [
+        "8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+      ]
+    },
+    {
+      "node_id": "ent:ent-src-102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "node_type": "entity",
+      "refs": [
+        "ent-src-102211a6-9d1d-477e-a081-e5ef0756cf9a",
+        "102211a6-9d1d-477e-a081-e5ef0756cf9a"
+      ]
+    },
+    {
+      "node_id": "ent:ent-src-8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+      "node_type": "entity",
+      "refs": [
+        "ent-src-8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+        "8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+      ]
+    },
+    {
+      "node_id": "rel:rel-near-1",
+      "node_type": "relation",
+      "refs": [
+        "rel-near-1",
+        "102211a6-9d1d-477e-a081-e5ef0756cf9a",
+        "8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+      ]
+    },
+    {
+      "node_id": "rel:rel-touching-candidate-2",
+      "node_type": "relation",
+      "refs": [
+        "rel-touching-candidate-2",
+        "102211a6-9d1d-477e-a081-e5ef0756cf9a",
+        "8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+      ]
+    },
+    {
+      "node_id": "rel:rel-coplanar-candidate-3",
+      "node_type": "relation",
+      "refs": [
+        "rel-coplanar-candidate-3",
+        "102211a6-9d1d-477e-a081-e5ef0756cf9a",
+        "8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+      ]
+    },
+    {
+      "node_id": "rel:rel-aligned-4",
+      "node_type": "relation",
+      "refs": [
+        "rel-aligned-4",
+        "102211a6-9d1d-477e-a081-e5ef0756cf9a",
+        "8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+      ]
+    },
+    {
+      "node_id": "rel:rel-parallel-5",
+      "node_type": "relation",
+      "refs": [
+        "rel-parallel-5",
+        "102211a6-9d1d-477e-a081-e5ef0756cf9a",
+        "8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "edge_type": "has_feature",
+      "source_id": "obj:102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "target_id": "geom:102211a6-9d1d-477e-a081-e5ef0756cf9a"
+    },
+    {
+      "edge_type": "derived_from",
+      "source_id": "geom:102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "target_id": "obj:102211a6-9d1d-477e-a081-e5ef0756cf9a"
+    },
+    {
+      "edge_type": "has_feature",
+      "source_id": "obj:8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+      "target_id": "geom:8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+    },
+    {
+      "edge_type": "derived_from",
+      "source_id": "geom:8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+      "target_id": "obj:8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+    },
+    {
+      "edge_type": "member_of",
+      "source_id": "obj:102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "target_id": "ent:ent-src-102211a6-9d1d-477e-a081-e5ef0756cf9a"
+    },
+    {
+      "edge_type": "supports_observation",
+      "source_id": "ent:ent-src-102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "target_id": "obj:102211a6-9d1d-477e-a081-e5ef0756cf9a"
+    },
+    {
+      "edge_type": "member_of",
+      "source_id": "obj:8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+      "target_id": "ent:ent-src-8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+    },
+    {
+      "edge_type": "supports_observation",
+      "source_id": "ent:ent-src-8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+      "target_id": "obj:8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+    },
+    {
+      "edge_type": "has_relation",
+      "source_id": "obj:102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "target_id": "rel:rel-near-1"
+    },
+    {
+      "edge_type": "has_relation",
+      "source_id": "rel:rel-near-1",
+      "target_id": "obj:8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+    },
+    {
+      "edge_type": "supports_observation",
+      "source_id": "rel:rel-near-1",
+      "target_id": "obj:102211a6-9d1d-477e-a081-e5ef0756cf9a"
+    },
+    {
+      "edge_type": "has_relation",
+      "source_id": "obj:102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "target_id": "rel:rel-touching-candidate-2"
+    },
+    {
+      "edge_type": "has_relation",
+      "source_id": "rel:rel-touching-candidate-2",
+      "target_id": "obj:8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+    },
+    {
+      "edge_type": "supports_observation",
+      "source_id": "rel:rel-touching-candidate-2",
+      "target_id": "obj:102211a6-9d1d-477e-a081-e5ef0756cf9a"
+    },
+    {
+      "edge_type": "has_relation",
+      "source_id": "obj:102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "target_id": "rel:rel-coplanar-candidate-3"
+    },
+    {
+      "edge_type": "has_relation",
+      "source_id": "rel:rel-coplanar-candidate-3",
+      "target_id": "obj:8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+    },
+    {
+      "edge_type": "supports_observation",
+      "source_id": "rel:rel-coplanar-candidate-3",
+      "target_id": "obj:102211a6-9d1d-477e-a081-e5ef0756cf9a"
+    },
+    {
+      "edge_type": "has_relation",
+      "source_id": "obj:102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "target_id": "rel:rel-aligned-4"
+    },
+    {
+      "edge_type": "has_relation",
+      "source_id": "rel:rel-aligned-4",
+      "target_id": "obj:8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+    },
+    {
+      "edge_type": "supports_observation",
+      "source_id": "rel:rel-aligned-4",
+      "target_id": "obj:102211a6-9d1d-477e-a081-e5ef0756cf9a"
+    },
+    {
+      "edge_type": "has_relation",
+      "source_id": "obj:102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "target_id": "rel:rel-parallel-5"
+    },
+    {
+      "edge_type": "has_relation",
+      "source_id": "rel:rel-parallel-5",
+      "target_id": "obj:8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+    },
+    {
+      "edge_type": "supports_observation",
+      "source_id": "rel:rel-parallel-5",
+      "target_id": "obj:102211a6-9d1d-477e-a081-e5ef0756cf9a"
+    }
+  ],
+  "evidence_items": [
+    {
+      "evidence_id": "ev-geom-102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "evidence_type": "geometry",
+      "source_mcp": "evidence_graph",
+      "source_object_ids": [
+        "102211a6-9d1d-477e-a081-e5ef0756cf9a"
+      ],
+      "claim": "geometry feature observed for object",
+      "observed_value": {
+        "morphology": "compact_solid",
+        "principal_dimensions": [
+          100.0,
+          100.0,
+          100.0
+        ]
+      },
+      "confidence": 0.7,
+      "supports": [],
+      "contradicts": [],
+      "limitations": [
+        "geometry_kernel_mvp_approximation"
+      ]
+    },
+    {
+      "evidence_id": "ev-geom-8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+      "evidence_type": "geometry",
+      "source_mcp": "evidence_graph",
+      "source_object_ids": [
+        "8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+      ],
+      "claim": "geometry feature observed for object",
+      "observed_value": {
+        "morphology": "compact_solid",
+        "principal_dimensions": [
+          100.0,
+          100.0,
+          100.0
+        ]
+      },
+      "confidence": 0.7,
+      "supports": [],
+      "contradicts": [],
+      "limitations": [
+        "geometry_kernel_mvp_approximation"
+      ]
+    },
+    {
+      "evidence_id": "ev-ent-ent-src-102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "evidence_type": "derived",
+      "source_mcp": "evidence_graph",
+      "source_object_ids": [
+        "102211a6-9d1d-477e-a081-e5ef0756cf9a"
+      ],
+      "claim": "entity formation observed from extraction",
+      "observed_value": {
+        "entity_type": "source_object",
+        "formation_method": "direct_extraction",
+        "status": "observed"
+      },
+      "confidence": 1.0,
+      "supports": [],
+      "contradicts": [],
+      "limitations": []
+    },
+    {
+      "evidence_id": "ev-ent-ent-src-8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+      "evidence_type": "derived",
+      "source_mcp": "evidence_graph",
+      "source_object_ids": [
+        "8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+      ],
+      "claim": "entity formation observed from extraction",
+      "observed_value": {
+        "entity_type": "source_object",
+        "formation_method": "direct_extraction",
+        "status": "observed"
+      },
+      "confidence": 1.0,
+      "supports": [],
+      "contradicts": [],
+      "limitations": []
+    },
+    {
+      "evidence_id": "ev-rel-rel-near-1",
+      "evidence_type": "relation",
+      "source_mcp": "evidence_graph",
+      "source_object_ids": [
+        "102211a6-9d1d-477e-a081-e5ef0756cf9a",
+        "8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+      ],
+      "claim": "candidate relation observed between objects",
+      "observed_value": {
+        "predicate": "near",
+        "relation_type": "spatial",
+        "directionality": "symmetric",
+        "assertion_level": "candidate",
+        "inference_basis": "bbox_gap_within_tolerance",
+        "measurement_method": "aabb_gap",
+        "verification_status": "unverified",
+        "verification_required": [
+          "tolerance_review"
+        ],
+        "confidence_basis": [
+          "distance threshold and bbox gap proxy"
+        ]
+      },
+      "confidence": 0.8,
+      "supports": [],
+      "contradicts": [],
+      "limitations": [
+        "threshold_dependent",
+        "bbox_proximity_proxy"
+      ]
+    },
+    {
+      "evidence_id": "ev-rel-rel-touching-candidate-2",
+      "evidence_type": "relation",
+      "source_mcp": "evidence_graph",
+      "source_object_ids": [
+        "102211a6-9d1d-477e-a081-e5ef0756cf9a",
+        "8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+      ],
+      "claim": "candidate touching relation observed between objects",
+      "observed_value": {
+        "predicate": "touches",
+        "relation_type": "spatial",
+        "directionality": "symmetric",
+        "assertion_level": "candidate",
+        "inference_basis": "bbox_gap_within_tolerance",
+        "measurement_method": "aabb_gap",
+        "verification_status": "unverified",
+        "verification_required": [
+          "brep_contact_check"
+        ],
+        "confidence_basis": [
+          "aabb gap within contact tolerance"
+        ]
+      },
+      "confidence": 0.76,
+      "supports": [],
+      "contradicts": [],
+      "limitations": [
+        "bbox_based",
+        "candidate_relation",
+        "requires_brep_contact_check"
+      ]
+    },
+    {
+      "evidence_id": "ev-rel-rel-coplanar-candidate-3",
+      "evidence_type": "relation",
+      "source_mcp": "evidence_graph",
+      "source_object_ids": [
+        "102211a6-9d1d-477e-a081-e5ef0756cf9a",
+        "8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+      ],
+      "claim": "candidate relation observed between objects",
+      "observed_value": {
+        "predicate": "coplanar_with",
+        "relation_type": "spatial",
+        "directionality": "symmetric",
+        "assertion_level": "candidate",
+        "inference_basis": "face_normal_similarity",
+        "measurement_method": "face_normal_dot_product",
+        "verification_status": "partially_verified",
+        "verification_required": [
+          "face_adjacency_check"
+        ],
+        "confidence_basis": [
+          "face normal compatibility plus bbox plane alignment"
+        ]
+      },
+      "confidence": 0.73,
+      "supports": [],
+      "contradicts": [],
+      "limitations": [
+        "bbox_based",
+        "candidate_relation",
+        "requires_brep_contact_check"
+      ]
+    },
+    {
+      "evidence_id": "ev-rel-rel-aligned-4",
+      "evidence_type": "relation",
+      "source_mcp": "evidence_graph",
+      "source_object_ids": [
+        "102211a6-9d1d-477e-a081-e5ef0756cf9a",
+        "8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+      ],
+      "claim": "measured relation observed between objects",
+      "observed_value": {
+        "predicate": "aligned_with",
+        "relation_type": "spatial",
+        "directionality": "symmetric",
+        "assertion_level": "measured",
+        "inference_basis": "oriented_bbox_alignment",
+        "measurement_method": "obb_axis_comparison",
+        "verification_status": "partially_verified",
+        "verification_required": [
+          "tolerance_review"
+        ],
+        "confidence_basis": [
+          "dominant axis similarity from oriented bbox"
+        ]
+      },
+      "confidence": 0.72,
+      "supports": [],
+      "contradicts": [],
+      "limitations": [
+        "principal_axis_proxy",
+        "obb_axis_proxy"
+      ]
+    },
+    {
+      "evidence_id": "ev-rel-rel-parallel-5",
+      "evidence_type": "relation",
+      "source_mcp": "evidence_graph",
+      "source_object_ids": [
+        "102211a6-9d1d-477e-a081-e5ef0756cf9a",
+        "8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+      ],
+      "claim": "measured relation observed between objects",
+      "observed_value": {
+        "predicate": "parallel_to",
+        "relation_type": "spatial",
+        "directionality": "symmetric",
+        "assertion_level": "measured",
+        "inference_basis": "oriented_bbox_alignment",
+        "measurement_method": "obb_axis_comparison",
+        "verification_status": "partially_verified",
+        "verification_required": [
+          "tolerance_review"
+        ],
+        "confidence_basis": [
+          "axis dot product from oriented bbox"
+        ]
+      },
+      "confidence": 0.72,
+      "supports": [],
+      "contradicts": [],
+      "limitations": [
+        "axis_orientation_proxy",
+        "obb_axis_proxy"
+      ]
+    }
+  ]
+}

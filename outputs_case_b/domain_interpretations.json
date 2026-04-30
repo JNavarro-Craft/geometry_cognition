@@ -1,0 +1,50 @@
+[
+  {
+    "interpretation_id": "int-0001",
+    "entity_id": "ent-src-102211a6-9d1d-477e-a081-e5ef0756cf9a",
+    "domain": "prefab",
+    "interpretation_label": "suggests_compact_grouping",
+    "confidence": 0.5594285714285715,
+    "supporting_evidence": [
+      "ev-ent-ent-src-102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "ev-geom-102211a6-9d1d-477e-a081-e5ef0756cf9a",
+      "ev-rel-rel-aligned-4",
+      "ev-rel-rel-coplanar-candidate-3",
+      "ev-rel-rel-near-1",
+      "ev-rel-rel-parallel-5",
+      "ev-rel-rel-touching-candidate-2"
+    ],
+    "derived_from_hypotheses": [
+      "hyp-0001"
+    ],
+    "limitations": [
+      "domain interpretation is conservative and non-definitive",
+      "requires human review before downstream decisions"
+    ],
+    "status": "tentative"
+  },
+  {
+    "interpretation_id": "int-0002",
+    "entity_id": "ent-src-8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+    "domain": "prefab",
+    "interpretation_label": "suggests_compact_grouping",
+    "confidence": 0.5594285714285715,
+    "supporting_evidence": [
+      "ev-ent-ent-src-8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+      "ev-geom-8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+      "ev-rel-rel-aligned-4",
+      "ev-rel-rel-coplanar-candidate-3",
+      "ev-rel-rel-near-1",
+      "ev-rel-rel-parallel-5",
+      "ev-rel-rel-touching-candidate-2"
+    ],
+    "derived_from_hypotheses": [
+      "hyp-0002"
+    ],
+    "limitations": [
+      "domain interpretation is conservative and non-definitive",
+      "requires human review before downstream decisions"
+    ],
+    "status": "tentative"
+  }
+]

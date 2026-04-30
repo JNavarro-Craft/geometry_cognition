@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from typing import Any
 from urllib import error, request
 
@@ -41,7 +42,12 @@ def execute_verification_plan(payload: dict[str, Any]) -> dict[str, Any]:
     verification_plan = payload.get("verification_plan", [])
     relations = payload.get("relations", [])
     bridge_base_url = str(payload.get("bridge_base_url", "http://127.0.0.1:8765"))
-    max_items = int(payload.get("max_items", 5))
+    # Cap on number of relations verified per call.
+    # Default 20 chosen as conservative balance between coverage and
+    # bridge round-trip cost. Configurable via GC_MAX_VERIFICATION_ITEMS
+    # environment variable, or per-call via payload["max_items"].
+    default_max = int(os.environ.get("GC_MAX_VERIFICATION_ITEMS", "20"))
+    max_items = int(payload.get("max_items", default_max))
     linear_tolerance = float(payload.get("linear_tolerance", 0.05))
     angular_tolerance = float(payload.get("angular_tolerance", 2.0))
 

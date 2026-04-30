@@ -1,0 +1,44 @@
+[
+  {
+    "entity_id": "ent-src-102211a6-9d1d-477e-a081-e5ef0756cf9a",
+    "entity_type": "source_object",
+    "member_object_ids": [
+      "102211a6-9d1d-477e-a081-e5ef0756cf9a"
+    ],
+    "source_refs": [
+      "102211a6-9d1d-477e-a081-e5ef0756cf9a"
+    ],
+    "formation_method": "direct_extraction",
+    "confidence": 1.0,
+    "observation_refs": [
+      "obs:extract:102211a6-9d1d-477e-a081-e5ef0756cf9a"
+    ],
+    "limitations": [],
+    "warnings": [],
+    "status": "observed",
+    "notes": [
+      "Direct entity mapped from normalized object."
+    ]
+  },
+  {
+    "entity_id": "ent-src-8276da53-2a80-4eb0-859c-a51d37bf9a0a",
+    "entity_type": "source_object",
+    "member_object_ids": [
+      "8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+    ],
+    "source_refs": [
+      "8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+    ],
+    "formation_method": "direct_extraction",
+    "confidence": 1.0,
+    "observation_refs": [
+      "obs:extract:8276da53-2a80-4eb0-859c-a51d37bf9a0a"
+    ],
+    "limitations": [],
+    "warnings": [],
+    "status": "observed",
+    "notes": [
+      "Direct entity mapped from normalized object."
+    ]
+  }
+]
