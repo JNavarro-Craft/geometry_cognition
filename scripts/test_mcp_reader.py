@@ -23,7 +23,9 @@ from gc_mcp.reader_server.tools import (
     get_objects_by_user_text,
     get_reasoning_output,
     get_relations_for_object,
+    get_snapshot_status,
     get_user_text_keys_summary,
+    refresh_snapshot,
 )
 
 
@@ -33,7 +35,17 @@ def _print(name: str, payload: dict) -> None:
 
 
 def main() -> None:
-    _print("get_analysis_summary", get_analysis_summary())
+    _print("snapshot status before", get_snapshot_status())
+    refresh = refresh_snapshot()
+    _print("refresh result", refresh)
+    if isinstance(refresh, dict) and refresh.get("status") == "error":
+        print("refresh warning: snapshot refresh failed; check bridge connectivity and env.")
+    _print("snapshot status after", get_snapshot_status())
+
+    analysis_summary = get_analysis_summary()
+    _print("get_analysis_summary", analysis_summary)
+    if isinstance(analysis_summary, dict) and isinstance(analysis_summary.get("legacy_artifacts"), dict):
+        print("note: legacy artifacts are not generated in the simplified pipeline.")
     _print("get_inventory_summary", get_inventory_summary())
     layers = get_layers()
     _print("get_layers()", layers)
@@ -133,7 +145,11 @@ def main() -> None:
     else:
         print("\nNo confirmed relations available to test get_evidence_for_relation.")
 
-    _print("get_reasoning_output()", get_reasoning_output())
+    reasoning = get_reasoning_output()
+    _print("get_reasoning_output()", reasoning)
+    if isinstance(reasoning, dict) and reasoning.get("available") is False:
+        if reasoning.get("reason") == "artifact_not_generated_in_current_pipeline":
+            print("note: reasoning artifact is unavailable by design in current pipeline.")
     _print(
         "get_objects_by_layer(layer_que_no_existe_xyz_123)",
         get_objects_by_layer("layer_que_no_existe_xyz_123"),

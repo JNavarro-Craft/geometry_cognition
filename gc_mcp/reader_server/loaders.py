@@ -58,3 +58,10 @@ class OutputsLoader:
                 return data, None, name
         return None, structured_file_not_found(filenames[0]), None
 
+    def invalidate(self, filenames: list[str] | None = None) -> None:
+        if filenames is None:
+            self._cache.clear()
+            return
+        for name in filenames:
+            self._cache.pop(name, None)
+
