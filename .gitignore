@@ -31,3 +31,7 @@ rhino_bridge/**/*.pdb
 rhino_bridge/**/*.exe
 rhino_bridge/**/*.user
 rhino_bridge/**/*.suo
+
+# Plugin build artifacts (recreables con build.ps1)
+rhino_bridge/dist/
+*.zip

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -90,9 +91,16 @@ public class LocalHttpBridge
         var res = context.Response;
         var path = req.Url?.AbsolutePath?.TrimEnd('/').ToLowerInvariant() ?? "/";
         var isGeometryPath = path.StartsWith("/geometry", StringComparison.OrdinalIgnoreCase);
+        var isV1Live = path.StartsWith("/v1/live", StringComparison.OrdinalIgnoreCase);
         var method = req.HttpMethod?.Trim().ToUpperInvariant() ?? string.Empty;
         var allowedMethod =
-            (!isGeometryPath && method == "GET")
+            (isV1Live && path == "/v1/live/scene/summary" && method == "GET")
+            || (isV1Live && path == "/v1/live/objects/query" && method == "POST")
+            || (isV1Live
+                && path.StartsWith("/v1/live/objects/", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(path, "/v1/live/objects/query", StringComparison.OrdinalIgnoreCase)
+                && method == "GET")
+            || (!isGeometryPath && !isV1Live && method == "GET")
             || (isGeometryPath && path == "/geometry/health" && method == "GET")
             || (isGeometryPath && (path == "/geometry/extract_scene" || path == "/geometry/extract_objects" || path == "/geometry/verify_relations") && method == "POST");
         if (!allowedMethod)
@@ -104,6 +112,12 @@ public class LocalHttpBridge
 
         try
         {
+            if (TryHandleV1Live(path, method, req, res))
+            {
+                res.Close();
+                return;
+            }
+
             switch (path)
             {
                 case "":
@@ -331,11 +345,8 @@ public class LocalHttpBridge
                     HttpJson.Write(res, 200, geometry);
                     break;
 
-                case "/get-truss-geometry":
-                case "/get-connector-summary":
                 case "/detect-duplicate-groups":
                 case "/inspect-usertext-schema":
-                case "/classify-instance-materials":
                     HttpJson.Write(res, 501, HttpJson.Error("Endpoint planned but not implemented yet.", "not_implemented"));
                     break;
 
@@ -364,6 +375,71 @@ public class LocalHttpBridge
     private static RhinoDoc RequireActiveDoc()
     {
         return RhinoDoc.ActiveDoc ?? throw new InvalidOperationException("No active RhinoDoc.");
+    }
+
+    private bool TryHandleV1Live(string path, string method, HttpListenerRequest req, HttpListenerResponse res)
+    {
+        if (!path.StartsWith("/v1/live", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (path == "/v1/live/scene/summary" && method == "GET")
+        {
+            var sampleLimit = ParseIntQuery(req, "sample_limit", 20, 0, 100);
+            var summary = ExecuteOnUiThread(() =>
+            {
+                var doc = RequireActiveDoc();
+                return _neutralGeometryService.LiveSceneSummary(doc, sampleLimit);
+            });
+            HttpJson.Write(res, 200, summary);
+            return true;
+        }
+
+        if (path == "/v1/live/objects/query" && method == "POST")
+        {
+            var body = ReadRequestBody(req);
+            var queryRequest = NeutralGeometryService.ParseLiveObjectsQuery(body);
+            var queryResult = ExecuteOnUiThread(() =>
+            {
+                var doc = RequireActiveDoc();
+                return _neutralGeometryService.LiveQueryObjects(doc, queryRequest);
+            });
+            HttpJson.Write(res, 200, queryResult);
+            return true;
+        }
+
+        if (path.StartsWith("/v1/live/objects/", StringComparison.OrdinalIgnoreCase) && method == "GET")
+        {
+            var idPart = path.Substring("/v1/live/objects/".Length).Trim();
+            if (string.IsNullOrWhiteSpace(idPart))
+            {
+                HttpJson.Write(res, 400, HttpJson.Error("Missing object id in path", "bad_request"));
+                return true;
+            }
+            var detailLevel = req.QueryString["detail_level"]?.Trim() ?? "basic";
+            var userTextMode = req.QueryString["user_text"]?.Trim() ?? "keys";
+            var detail = ExecuteOnUiThread(() =>
+            {
+                var doc = RequireActiveDoc();
+                return _neutralGeometryService.LiveGetObject(doc, idPart, detailLevel, userTextMode);
+            });
+            HttpJson.Write(res, 200, detail);
+            return true;
+        }
+
+        HttpJson.Write(res, 404, HttpJson.Error("Route not found", "not_found"));
+        return true;
+    }
+
+    private static int ParseIntQuery(HttpListenerRequest req, string key, int defaultValue, int min, int max)
+    {
+        var raw = req.QueryString[key]?.Trim();
+        if (string.IsNullOrWhiteSpace(raw) || !int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v))
+        {
+            return Math.Max(min, Math.Min(max, defaultValue));
+        }
+        return Math.Max(min, Math.Min(max, v));
     }
 
     private static List<string> ReadListQueryParam(HttpListenerRequest req, string key)

@@ -61,9 +61,31 @@ Notas de empaquetado:
 ## Endpoints neutrales `/geometry/*`
 
 - `GET /geometry/health`
-- `POST /geometry/extract_scene`
+- `POST /geometry/extract_scene` (**legacy**: carga completa en un solo POST; mantener como respaldo)
 - `POST /geometry/extract_objects`
 - `POST /geometry/verify_relations`
+
+## API incremental `/v1/live/*` (recomendada para exploración)
+
+Estos endpoints evitan volcar toda la escena en un único payload. El cliente Python (`gc_mcp`) usa por defecto `GC_BRIDGE_FETCH_STRATEGY=live`: lista ids vía query paginada y rehidrata con `POST /geometry/extract_objects` por lotes. Si falla, puede volver a `extract_scene` con `GC_BRIDGE_FALLBACK_EXTRACT_SCENE=1` (por defecto).
+
+- `GET /v1/live/scene/summary?sample_limit=20` — conteos, `global_bbox`, `type_counts`, `sample_objects` ligeros (sin normales/áreas por cara ni geometría pesada).
+- `POST /v1/live/objects/query` — cuerpo JSON: `filters` (layers, types, name_contains, has_user_text, user_text_key/value, bbox_intersects), `fields`, `limit`, `cursor`. Respuesta: `objects`, `matched_count`, `next_cursor` opcional.
+- `GET /v1/live/objects/{object_id}?detail_level=basic|full&user_text=none|keys|full` — detalle bajo demanda; `basic` usa resumen geométrico ligero (sin `face_normals` / `face_areas`).
+
+### Variables de entorno (lado Python `gc_mcp/rhino_extractor`)
+
+- `GC_BACKEND_MODE`: `bridge` para usar bridge HTTP; cualquier otro valor mantiene extractor local.
+- `GC_BRIDGE_BASE_URL`: base URL del bridge (default `http://127.0.0.1:8765`).
+- `GC_BRIDGE_TIMEOUT_SECONDS`: timeout HTTP en segundos.
+- `GC_BRIDGE_FETCH_STRATEGY`: `live` (default, camino principal incremental) o `extract_scene` (legacy explícito).
+- `GC_BRIDGE_LIVE_QUERY_LIMIT`: tamaño de página para `POST /v1/live/objects/query`.
+- `GC_BRIDGE_EXTRACT_BATCH_SIZE`: tamaño de lote para `POST /geometry/extract_objects`.
+- `GC_BRIDGE_FALLBACK_EXTRACT_SCENE`: `1/true` permite fallback de `live` a `/geometry/extract_scene` si falla el flujo incremental.
+- `GC_BRIDGE_FALLBACK_LOCAL`: `1/true` permite fallback final a extractor local de archivo cuando falla backend bridge.
+
+Camino principal actual: `live` (summary/query/detail + extracción por ids).  
+Camino legacy/fallback: `POST /geometry/extract_scene`.
 
 ### `POST /geometry/verify_relations`
 

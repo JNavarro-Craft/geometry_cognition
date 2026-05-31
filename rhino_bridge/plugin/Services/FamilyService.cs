@@ -189,18 +189,9 @@ public class FamilyService
             return ("partial", new List<string> { "empty_group" });
         }
 
-        var names = string.Join(" ", objects.Select(o => o.Attributes.Name ?? string.Empty)).ToLowerInvariant();
-        var layers = string.Join(" ", objects.Select(o => LayerName(doc, o.Attributes))).ToLowerInvariant();
-        var text = $"{names} {layers}";
+        // Agnostic only: no domain classification inferred from names/layers.
+        // Roles and flags are purely observational.
         var role = "partial";
-        if (ContainsAny(text, "truss", "cercha", "beam", "viga", "struct"))
-        {
-            role = "structural";
-        }
-        else if (ContainsAny(text, "osb", "cladding", "panel", "revest"))
-        {
-            role = "cladding";
-        }
 
         if (objects.Count <= 2)
         {
@@ -216,11 +207,6 @@ public class FamilyService
             role = "duplicate_candidate";
         }
         return (role, flags);
-    }
-
-    private static bool ContainsAny(string source, params string[] tokens)
-    {
-        return tokens.Any(source.Contains);
     }
 
     private static List<string> DetectOutlierGroups(Dictionary<string, List<RhinoObject>> groups)
