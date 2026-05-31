@@ -4,9 +4,10 @@ import os
 from pathlib import Path
 from typing import Any
 
+from gc_mcp.geometry_kernel.tools import compute_geometry_features
 from gc_mcp.reader_server.loaders import OutputsLoader, structured_file_not_found
+from gc_mcp.rhino_extractor.backend_adapter import _normalize_bridge_objects
 from gc_mcp.rhino_extractor.bridge_backend import extract_objects_bridge
-from workflows.run_minimal_analysis import run as run_minimal_analysis
 
 
 _LOADER = OutputsLoader()
@@ -19,8 +20,90 @@ _SNAPSHOT_FILES = [
 ]
 
 
+def _live_only_error(message: str) -> dict[str, Any]:
+    return {
+        "error": "live_mode_unavailable",
+        "message": message,
+        "mode": "bridge_live",
+    }
+
+
+def _load_live_bundle() -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """
+    Live-only source of truth for reader tools:
+    always recompute from the currently active bridge model.
+    """
+    bridge_url = str(os.environ.get("GC_BRIDGE_BASE_URL", "http://127.0.0.1:8765"))
+    timeout = float(os.environ.get("GC_BRIDGE_TIMEOUT_SECONDS", "10") or "10")
+    try:
+        bridge_payload = extract_objects_bridge(bridge_url, timeout)
+        objects = _normalize_bridge_objects(bridge_payload)
+        kernel = compute_geometry_features({"objects": objects})
+    except Exception as exc:
+        return None, _live_only_error(str(exc))
+    bundle = {
+        "objects": objects,
+        "geometry_features": kernel.get("geometry_features", []),
+        "entities": kernel.get("entities", []),
+        "relations": kernel.get("relations", []),
+    }
+    return bundle, None
+
+
+def _live_evidence_graph(bundle: dict[str, Any]) -> dict[str, Any]:
+    relations = bundle.get("relations", [])
+    if not isinstance(relations, list):
+        relations = []
+    evidence_items: list[dict[str, Any]] = []
+    for rel in relations:
+        if not isinstance(rel, dict):
+            continue
+        relation_id = str(rel.get("relation_id", ""))
+        subject_id = str(rel.get("subject_id", ""))
+        object_id = str(rel.get("object_id", ""))
+        assertion_level = str(rel.get("assertion_level", "candidate"))
+        evidence_items.append(
+            {
+                "evidence_id": f"ev-rel-{relation_id}",
+                "evidence_type": "relation",
+                "source_mcp": "reader_server_live",
+                "source_object_ids": [subject_id, object_id],
+                "claim": f"{assertion_level} relation observed between objects",
+                "observed_value": {
+                    "predicate": str(rel.get("predicate", "")),
+                    "assertion_level": assertion_level,
+                    "inference_basis": str(rel.get("inference_basis", "")),
+                    "measurement_method": str(rel.get("measurement_method", "")),
+                    "verification_status": str(rel.get("verification_status", "")),
+                    "verification_required": rel.get("verification_required", []),
+                },
+                "confidence": float(rel.get("confidence", 0.0)),
+                "supports": [],
+                "contradicts": [],
+                "limitations": [str(x) for x in rel.get("limitations", [])],
+            }
+        )
+    return {"nodes": [], "edges": [], "evidence_items": evidence_items}
+
+
 def _load_required(filename: str) -> tuple[Any | None, dict[str, str] | None]:
-    return _LOADER.load_json(filename)
+    bundle, err = _load_live_bundle()
+    if err:
+        return None, err
+    assert bundle is not None
+    if filename == "objects.json":
+        return bundle.get("objects", []), None
+    if filename == "geometry_features.json":
+        return bundle.get("geometry_features", []), None
+    if filename == "entities.json":
+        return bundle.get("entities", []), None
+    if filename == "relations.json":
+        return bundle.get("relations", []), None
+    if filename == "minimal_analysis_bundle.json":
+        return bundle, None
+    if filename == "evidence_graph.json":
+        return _live_evidence_graph(bundle), None
+    return None, structured_file_not_found(filename)
 
 
 def _artifact_not_generated(artifact: str, note: str | None = None) -> dict[str, Any]:
@@ -86,7 +169,7 @@ def _object_row(obj: dict[str, Any]) -> dict[str, Any]:
 
 
 def _load_relations() -> tuple[list[dict[str, Any]] | None, dict[str, str] | None]:
-    data, err, _ = _LOADER.load_first_available(["relations_verified.json", "relations.json"])
+    data, err = _load_required("relations.json")
     if err:
         return None, err
     if not isinstance(data, list):
@@ -95,16 +178,14 @@ def _load_relations() -> tuple[list[dict[str, Any]] | None, dict[str, str] | Non
 
 
 def _load_hypotheses() -> tuple[list[dict[str, Any]] | None, dict[str, str] | None]:
-    data, err, _ = _LOADER.load_first_available(["hypotheses_verified.json", "hypotheses.json"])
-    if err:
-        return None, err
-    if not isinstance(data, list):
-        return [], None
-    return [x for x in data if isinstance(x, dict)], None
+    return [], _artifact_not_generated(
+        "hypotheses_verified.json | hypotheses.json",
+        note="reader_server live mode exposes extractor+kernel and relation evidence only",
+    )
 
 
 def _load_evidence_graph() -> tuple[dict[str, Any] | None, dict[str, str] | None]:
-    data, err, _ = _LOADER.load_first_available(["evidence_graph_verified.json", "evidence_graph.json"])
+    data, err = _load_required("evidence_graph.json")
     if err:
         return None, err
     if not isinstance(data, dict):
@@ -276,13 +357,10 @@ def get_evidence_for_relation(relation_id: str) -> dict[str, Any]:
 
 
 def get_reasoning_output() -> dict[str, Any]:
-    data, err = _load_required("reasoned_analysis_verified.json")
-    if err:
-        return _artifact_not_generated(
-            "reasoned_analysis_verified.json",
-            note="reasoning output is not generated by the current simplified pipeline",
-        )
-    return {"available": True, "reasoning_output": data}
+    return _artifact_not_generated(
+        "reasoned_analysis_verified.json",
+        note="reasoning output is not generated in reader_server live mode",
+    )
 
 
 def get_inventory_summary() -> dict[str, Any]:
@@ -575,98 +653,51 @@ def _file_status(path: Path) -> dict[str, Any]:
 
 
 def get_snapshot_status() -> dict[str, Any]:
-    output_dir = _LOADER.outputs_dir
-    files: dict[str, dict[str, Any]] = {}
-    ready = True
-    for name in _SNAPSHOT_FILES:
-        status = _file_status(output_dir / name)
-        files[name] = status
-        if not status["exists"]:
-            ready = False
-    objects_count = 0
-    objects, err = _load_required("objects.json")
-    if err is None and isinstance(objects, list):
-        objects_count = len([x for x in objects if isinstance(x, dict)])
-    return {"output_dir": str(output_dir), "files": files, "ready": ready, "summary": {"objects": objects_count}}
+    bundle, err = _load_live_bundle()
+    if err:
+        return {
+            "mode": "bridge_live",
+            "ready": False,
+            "summary": {"objects": 0},
+            "error": err,
+        }
+    objects = bundle.get("objects", []) if isinstance(bundle, dict) else []
+    relations = bundle.get("relations", []) if isinstance(bundle, dict) else []
+    return {
+        "mode": "bridge_live",
+        "ready": True,
+        "summary": {
+            "objects": len(objects) if isinstance(objects, list) else 0,
+            "relations": len(relations) if isinstance(relations, list) else 0,
+        },
+    }
 
 
 def refresh_snapshot() -> dict:
-    output_dir = _LOADER.outputs_dir
-    mode = "bridge" if str(os.environ.get("GC_BACKEND_MODE", "")).strip().lower() == "bridge" else "local"
     bridge_url = str(os.environ.get("GC_BRIDGE_BASE_URL", "http://127.0.0.1:8765"))
     timeout = float(os.environ.get("GC_BRIDGE_TIMEOUT_SECONDS", "10") or "10")
-    fallback_local = str(os.environ.get("GC_BRIDGE_FALLBACK_LOCAL", "true")).strip().lower() in {"1", "true", "yes", "on"}
-
-    before: dict[str, dict[str, Any]] = {}
-    for name in _SNAPSHOT_FILES:
-        before[name] = _file_status(output_dir / name)
-
     try:
-        bundle = run_minimal_analysis(input_path=None, output_dir=output_dir)
-    except Exception as exc:
-        message = str(exc)
-        if mode == "bridge":
-            if "Missing required payload key: input_path" in message:
-                bridge_probe_error = None
-                try:
-                    extract_objects_bridge(bridge_url, timeout)
-                except Exception as probe_exc:
-                    bridge_probe_error = str(probe_exc)
-                return {
-                    "status": "error",
-                    "error_type": "bridge_fallback_local_triggered",
-                    "message": "bridge call failed and local fallback required input_path; snapshot refresh aborted",
-                    "bridge_url": bridge_url,
-                    "bridge_timeout_seconds": timeout,
-                    "bridge_fallback_local": fallback_local,
-                    "bridge_probe_error": bridge_probe_error,
-                    "mode": mode,
-                    "output_dir": str(output_dir),
-                }
-            if "bridge_backend_failed" in message:
-                return {
-                    "status": "error",
-                    "error_type": "bridge_backend_failed",
-                    "message": message,
-                    "bridge_url": bridge_url,
-                    "bridge_timeout_seconds": timeout,
-                    "bridge_fallback_local": fallback_local,
-                    "mode": mode,
-                    "output_dir": str(output_dir),
-                }
+        extract_objects_bridge(bridge_url, timeout)
+    except Exception as probe_exc:
         return {
             "status": "error",
-            "message": message,
-            "mode": mode,
-            "output_dir": str(output_dir),
+            "mode": "bridge_live",
+            "message": str(probe_exc),
+            "bridge_url": bridge_url,
         }
 
-    _LOADER.invalidate(_SNAPSHOT_FILES)
-
-    refreshed_files: dict[str, dict[str, Any]] = {}
-    for name in _SNAPSHOT_FILES:
-        after = _file_status(output_dir / name)
-        before_mtime = float(before[name].get("mtime", 0.0))
-        after_mtime = float(after.get("mtime", 0.0))
-        refreshed_files[name] = {
-            "exists": bool(after.get("exists", False)),
-            "mtime_before": before_mtime,
-            "mtime_after": after_mtime,
-            "size_after": int(after.get("size", 0)),
-            "changed": bool(after.get("exists", False) and after_mtime != before_mtime),
-        }
-
+    bundle, err = _load_live_bundle()
+    if err:
+        return {"status": "error", "mode": "bridge_live", "error": err}
     return {
         "status": "ok",
-        "mode": mode,
-        "output_dir": str(output_dir),
-        "refreshed_files": refreshed_files,
+        "mode": "bridge_live",
         "summary": {
             "objects": len(bundle.get("objects", [])),
             "geometry_features": len(bundle.get("geometry_features", [])),
             "entities": len(bundle.get("entities", [])),
             "relations": len(bundle.get("relations", [])),
         },
-        "message": "snapshot refreshed",
+        "message": "live analysis refreshed from active bridge model",
     }
 

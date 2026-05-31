@@ -6,7 +6,10 @@ from uuid import uuid4
 
 from shared.contracts import validate_payload
 
-from gc_mcp.rhino_extractor.bridge_backend import extract_objects_bridge
+from gc_mcp.rhino_extractor.bridge_backend import (
+    extract_objects_bridge,
+    fetch_scene_via_live_query_and_extract_objects,
+)
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -14,6 +17,33 @@ def _env_bool(name: str, default: bool) -> bool:
     if raw is None:
         return default
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _bridge_fetch_strategy() -> str:
+    return str(os.getenv("GC_BRIDGE_FETCH_STRATEGY", "live")).strip().lower() or "live"
+
+
+def _bridge_fetch_payload(bridge_url: str, timeout: float) -> tuple[dict[str, Any], list[str]]:
+    strategy = _bridge_fetch_strategy()
+    if strategy in {"extract_scene", "legacy", "monolith"}:
+        return extract_objects_bridge(bridge_url, timeout), ["bridge_strategy:extract_scene"]
+    if strategy in {"live", "incremental"}:
+        try:
+            payload = fetch_scene_via_live_query_and_extract_objects(
+                bridge_url,
+                timeout,
+                query_page_limit=int(os.getenv("GC_BRIDGE_LIVE_QUERY_LIMIT", "200") or "200"),
+                extract_batch_size=int(os.getenv("GC_BRIDGE_EXTRACT_BATCH_SIZE", "80") or "80"),
+            )
+            return payload, ["bridge_strategy:live"]
+        except Exception:
+            if _env_bool("GC_BRIDGE_FALLBACK_EXTRACT_SCENE", True):
+                return extract_objects_bridge(bridge_url, timeout), [
+                    "bridge_strategy:live",
+                    "bridge_live_failed_fallback_extract_scene",
+                ]
+            raise
+    raise RuntimeError(f"unknown GC_BRIDGE_FETCH_STRATEGY:{strategy}")
 
 
 def _identity_transform() -> list[float]:
@@ -128,9 +158,9 @@ def extract_objects(
         return local_extractor(input_path), "local", []
 
     try:
-        bridge_payload = extract_objects_bridge(bridge_url, timeout)
+        bridge_payload, strategy_warnings = _bridge_fetch_payload(bridge_url, timeout)
         objects = _normalize_bridge_objects(bridge_payload)
-        return objects, "bridge", []
+        return objects, "bridge", strategy_warnings
     except Exception as exc:
         if fallback_local:
             return local_extractor(input_path), "local_fallback", [f"bridge_backend_failed:{type(exc).__name__}"]

@@ -50,6 +50,7 @@ def _bridge_sample_payload_with_bbox_center():
 
 def test_bridge_mode_maps_plugin_response_to_object_schema(monkeypatch):
     monkeypatch.setenv("GC_BACKEND_MODE", "bridge")
+    monkeypatch.setenv("GC_BRIDGE_FETCH_STRATEGY", "extract_scene")
     monkeypatch.setenv("GC_BRIDGE_FALLBACK_LOCAL", "false")
     monkeypatch.setattr(
         backend_adapter,
@@ -70,6 +71,7 @@ def test_bridge_mode_maps_plugin_response_to_object_schema(monkeypatch):
 
 def test_bridge_bbox_center_is_normalized_out_of_bbox(monkeypatch):
     monkeypatch.setenv("GC_BACKEND_MODE", "bridge")
+    monkeypatch.setenv("GC_BRIDGE_FETCH_STRATEGY", "extract_scene")
     monkeypatch.setenv("GC_BRIDGE_FALLBACK_LOCAL", "false")
     monkeypatch.setattr(
         backend_adapter,
@@ -90,6 +92,7 @@ def test_bridge_bbox_center_is_normalized_out_of_bbox(monkeypatch):
 
 def test_bridge_failure_fallback_true_uses_local(monkeypatch, tmp_path):
     monkeypatch.setenv("GC_BACKEND_MODE", "bridge")
+    monkeypatch.setenv("GC_BRIDGE_FETCH_STRATEGY", "extract_scene")
     monkeypatch.setenv("GC_BRIDGE_FALLBACK_LOCAL", "true")
     monkeypatch.setattr(
         backend_adapter,
@@ -110,6 +113,7 @@ def test_bridge_failure_fallback_true_uses_local(monkeypatch, tmp_path):
 
 def test_bridge_failure_fallback_false_returns_error(monkeypatch):
     monkeypatch.setenv("GC_BACKEND_MODE", "bridge")
+    monkeypatch.setenv("GC_BRIDGE_FETCH_STRATEGY", "extract_scene")
     monkeypatch.setenv("GC_BRIDGE_FALLBACK_LOCAL", "false")
     monkeypatch.setattr(
         backend_adapter,

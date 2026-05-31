@@ -2,8 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
+using System.Runtime.Serialization.Json;
+using System.Text;
 using Rhino;
 using Rhino.DocObjects;
 using Rhino.Geometry;
@@ -40,6 +43,202 @@ public class NeutralGeometryService
 
         [DataMember(Name = "unit_system")]
         public string UnitSystem { get; set; } = "model_unit";
+    }
+
+    [DataContract]
+    public sealed class LiveObjectsQueryEnvelope
+    {
+        [DataMember(Name = "filters")]
+        public LiveQueryFilters? Filters { get; set; }
+
+        [DataMember(Name = "fields")]
+        public List<string>? Fields { get; set; }
+
+        [DataMember(Name = "limit")]
+        public int? Limit { get; set; }
+
+        [DataMember(Name = "cursor")]
+        public int? Cursor { get; set; }
+    }
+
+    [DataContract]
+    public sealed class LiveQueryFilters
+    {
+        [DataMember(Name = "layers")]
+        public List<string>? Layers { get; set; }
+
+        [DataMember(Name = "types")]
+        public List<string>? Types { get; set; }
+
+        [DataMember(Name = "name_contains")]
+        public string? NameContains { get; set; }
+
+        [DataMember(Name = "has_user_text")]
+        public bool? HasUserText { get; set; }
+
+        [DataMember(Name = "user_text_key")]
+        public string? UserTextKey { get; set; }
+
+        [DataMember(Name = "user_text_value")]
+        public string? UserTextValue { get; set; }
+
+        [DataMember(Name = "bbox_intersects")]
+        public LiveBboxFilter? BboxIntersects { get; set; }
+    }
+
+    [DataContract]
+    public sealed class LiveBboxFilter
+    {
+        [DataMember(Name = "min")]
+        public List<double>? Min { get; set; }
+
+        [DataMember(Name = "max")]
+        public List<double>? Max { get; set; }
+    }
+
+    public static LiveObjectsQueryEnvelope ParseLiveObjectsQuery(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return new LiveObjectsQueryEnvelope();
+        }
+        try
+        {
+            using var ms = new MemoryStream(Encoding.UTF8.GetBytes(body));
+            var serializer = new DataContractJsonSerializer(typeof(LiveObjectsQueryEnvelope));
+            var parsed = serializer.ReadObject(ms) as LiveObjectsQueryEnvelope;
+            return parsed ?? new LiveObjectsQueryEnvelope();
+        }
+        catch (SerializationException ex)
+        {
+            throw new InvalidOperationException($"Invalid JSON payload: {ex.Message}");
+        }
+    }
+
+    public Dictionary<string, object> LiveSceneSummary(RhinoDoc doc, int sampleLimit)
+    {
+        sampleLimit = Math.Max(0, Math.Min(100, sampleLimit));
+        var typeCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var global = BoundingBox.Unset;
+        var total = 0;
+        foreach (var obj in doc.Objects)
+        {
+            total++;
+            var geom = obj.Geometry;
+            var typeName = geom?.ObjectType.ToString() ?? "Unknown";
+            if (!typeCounts.TryGetValue(typeName, out var c))
+            {
+                c = 0;
+            }
+            typeCounts[typeName] = c + 1;
+            var bbox = GetValidBbox(geom);
+            if (bbox.IsValid)
+            {
+                global = global.IsValid ? BoundingBox.Union(global, bbox) : bbox;
+            }
+        }
+
+        var sample = new List<object>();
+        var taken = 0;
+        foreach (var obj in doc.Objects)
+        {
+            if (taken >= sampleLimit)
+            {
+                break;
+            }
+            sample.Add(ExtractObjectLiveLight(doc, obj, "none"));
+            taken++;
+        }
+
+        return new Dictionary<string, object>
+        {
+            ["source"] = "rhino_bridge",
+            ["api"] = "v1_live",
+            ["object_count"] = total,
+            ["global_bbox"] = BboxToSummaryDict(global),
+            ["type_counts"] = typeCounts
+                .OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(kv => kv.Key, kv => (object)kv.Value),
+            ["sample_objects"] = sample,
+            ["sample_limit"] = sampleLimit
+        };
+    }
+
+    public Dictionary<string, object> LiveQueryObjects(RhinoDoc doc, LiveObjectsQueryEnvelope request)
+    {
+        var limit = Math.Max(1, Math.Min(500, request.Limit ?? 100));
+        var cursor = Math.Max(0, request.Cursor ?? 0);
+        var filters = request.Filters;
+        var filterBbox = TryParseFilterBbox(filters?.BboxIntersects);
+        var layerSet = NormalizeFilterList(filters?.Layers);
+        var typeSet = NormalizeFilterList(filters?.Types);
+        var nameNeedle = (filters?.NameContains ?? string.Empty).Trim();
+        var hasUserText = filters?.HasUserText;
+        var utKey = (filters?.UserTextKey ?? string.Empty).Trim();
+        var utVal = filters?.UserTextValue;
+
+        var matched = new List<RhinoObject>();
+        foreach (var obj in doc.Objects)
+        {
+            if (!PassesLiveFilters(doc, obj, layerSet, typeSet, nameNeedle, hasUserText, utKey, utVal, filterBbox))
+            {
+                continue;
+            }
+            matched.Add(obj);
+        }
+
+        var totalMatched = matched.Count;
+        var page = matched.Skip(cursor).Take(limit).ToList();
+        int? nextCursor = cursor + page.Count < totalMatched ? cursor + page.Count : null;
+
+        var fieldSet = NormalizeFieldSet(request.Fields);
+        var rows = new List<object>();
+        foreach (var obj in page)
+        {
+            rows.Add(BuildQueryObjectRow(doc, obj, fieldSet));
+        }
+
+        var result = new Dictionary<string, object>
+        {
+            ["source"] = "rhino_bridge",
+            ["api"] = "v1_live",
+            ["matched_count"] = totalMatched,
+            ["returned_count"] = rows.Count,
+            ["limit"] = limit,
+            ["cursor"] = cursor,
+            ["objects"] = rows
+        };
+        if (nextCursor.HasValue)
+        {
+            result["next_cursor"] = nextCursor.Value;
+        }
+        return result;
+    }
+
+    public Dictionary<string, object> LiveGetObject(
+        RhinoDoc doc,
+        string objectIdToken,
+        string detailLevel,
+        string userTextMode)
+    {
+        var obj = TryFindObject(doc, objectIdToken);
+        if (obj is null)
+        {
+            throw new KeyNotFoundException($"Object not found: {objectIdToken}");
+        }
+
+        detailLevel = (detailLevel ?? "basic").Trim().ToLowerInvariant();
+        userTextMode = (userTextMode ?? "keys").Trim().ToLowerInvariant();
+
+        if (detailLevel == "full")
+        {
+            var full = ExtractObject(doc, obj);
+            ApplyUserTextModeToMap(full, obj.Attributes, userTextMode);
+            full["api"] = "v1_live";
+            return full;
+        }
+
+        return BuildLiveObjectBasic(doc, obj, userTextMode);
     }
 
     public Dictionary<string, object> ExtractScene(RhinoDoc doc)
@@ -588,6 +787,338 @@ public class NeutralGeometryService
             bbox = geometry.GetBoundingBox(false);
         }
         return bbox;
+    }
+
+    private static Dictionary<string, object> BboxToSummaryDict(BoundingBox bbox)
+    {
+        if (!bbox.IsValid)
+        {
+            return new Dictionary<string, object>();
+        }
+        return new Dictionary<string, object>
+        {
+            ["min"] = new List<double> { bbox.Min.X, bbox.Min.Y, bbox.Min.Z },
+            ["max"] = new List<double> { bbox.Max.X, bbox.Max.Y, bbox.Max.Z },
+            ["center"] = new List<double> { bbox.Center.X, bbox.Center.Y, bbox.Center.Z }
+        };
+    }
+
+    private static Dictionary<string, object> ExtractObjectLiveLight(RhinoDoc doc, RhinoObject obj, string userTextMode)
+    {
+        var attrs = obj.Attributes;
+        var geometry = obj.Geometry;
+        var bbox = GetValidBbox(geometry);
+        var groupIds = attrs.GetGroupList() ?? Array.Empty<int>();
+        var map = new Dictionary<string, object>
+        {
+            ["object_id"] = obj.Id.ToString(),
+            ["type"] = geometry?.ObjectType.ToString() ?? "Unknown",
+            ["name"] = (attrs.Name ?? string.Empty).Trim(),
+            ["layer"] = LayerName(doc, attrs),
+            ["group_ids"] = groupIds.Select(id => id.ToString(CultureInfo.InvariantCulture)).Cast<object>().ToList(),
+            ["bbox"] = BboxMinMaxOnly(bbox)
+        };
+        ApplyUserTextModeToMap(map, attrs, userTextMode);
+        return map;
+    }
+
+    private static Dictionary<string, object> BboxMinMaxOnly(BoundingBox bbox)
+    {
+        if (!bbox.IsValid)
+        {
+            return new Dictionary<string, object>();
+        }
+        return new Dictionary<string, object>
+        {
+            ["min"] = new List<double> { bbox.Min.X, bbox.Min.Y, bbox.Min.Z },
+            ["max"] = new List<double> { bbox.Max.X, bbox.Max.Y, bbox.Max.Z }
+        };
+    }
+
+    private static void ApplyUserTextModeToMap(Dictionary<string, object> map, ObjectAttributes attrs, string mode)
+    {
+        mode = (mode ?? "full").Trim().ToLowerInvariant();
+        var raw = ReadUserText(attrs);
+        switch (mode)
+        {
+            case "none":
+                map["user_text"] = new Dictionary<string, object>();
+                break;
+            case "keys":
+                map["user_text"] = raw.Keys
+                    .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(k => k, _ => (object)string.Empty);
+                break;
+            default:
+                map["user_text"] = raw.ToDictionary(k => k.Key, v => (object)v.Value);
+                break;
+        }
+    }
+
+    private static BoundingBox? TryParseFilterBbox(LiveBboxFilter? f)
+    {
+        if (f?.Min is null || f.Max is null || f.Min.Count < 3 || f.Max.Count < 3)
+        {
+            return null;
+        }
+        try
+        {
+            var min = new Point3d(f.Min[0], f.Min[1], f.Min[2]);
+            var max = new Point3d(f.Max[0], f.Max[1], f.Max[2]);
+            var box = new BoundingBox(min, max);
+            return box.IsValid ? box : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static HashSet<string>? NormalizeFilterList(List<string>? list)
+    {
+        if (list is null || list.Count == 0)
+        {
+            return null;
+        }
+        return new HashSet<string>(
+            list.Select(v => (v ?? string.Empty).Trim()).Where(v => v.Length > 0),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool PassesLiveFilters(
+        RhinoDoc doc,
+        RhinoObject obj,
+        HashSet<string>? layerSet,
+        HashSet<string>? typeSet,
+        string nameNeedle,
+        bool? hasUserText,
+        string utKey,
+        string? utVal,
+        BoundingBox? filterBbox)
+    {
+        var attrs = obj.Attributes;
+        var geometry = obj.Geometry;
+        var typeName = geometry?.ObjectType.ToString() ?? "Unknown";
+        if (typeSet is not null && !typeSet.Contains(typeName))
+        {
+            return false;
+        }
+        var layerPath = LayerName(doc, attrs);
+        if (layerSet is not null && !layerSet.Contains(layerPath))
+        {
+            return false;
+        }
+        var name = (attrs.Name ?? string.Empty).Trim();
+        if (nameNeedle.Length > 0 && name.IndexOf(nameNeedle, StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            return false;
+        }
+        var ut = ReadUserText(attrs);
+        if (hasUserText.HasValue)
+        {
+            var any = ut.Count > 0;
+            if (hasUserText.Value != any)
+            {
+                return false;
+            }
+        }
+        if (utKey.Length > 0)
+        {
+            if (!ut.TryGetValue(utKey, out var found))
+            {
+                return false;
+            }
+            if (utVal is not null && !string.Equals(found, utVal, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+        else if (utVal is not null && utVal.Length > 0)
+        {
+            if (!ut.Values.Any(v => string.Equals(v, utVal, StringComparison.Ordinal)))
+            {
+                return false;
+            }
+        }
+        if (filterBbox.HasValue)
+        {
+            var ob = GetValidBbox(geometry);
+            if (!ob.IsValid)
+            {
+                return false;
+            }
+            if (!BboxesIntersect(ob, filterBbox.Value))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static bool BboxesIntersect(BoundingBox a, BoundingBox b)
+    {
+        if (!a.IsValid || !b.IsValid)
+        {
+            return false;
+        }
+        if (a.Max.X < b.Min.X || b.Max.X < a.Min.X)
+        {
+            return false;
+        }
+        if (a.Max.Y < b.Min.Y || b.Max.Y < a.Min.Y)
+        {
+            return false;
+        }
+        if (a.Max.Z < b.Min.Z || b.Max.Z < a.Min.Z)
+        {
+            return false;
+        }
+        return true;
+    }
+
+    private static HashSet<string>? NormalizeFieldSet(List<string>? fields)
+    {
+        if (fields is null || fields.Count == 0)
+        {
+            return null;
+        }
+        return new HashSet<string>(
+            fields.Select(f => (f ?? string.Empty).Trim().ToLowerInvariant()).Where(f => f.Length > 0),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static Dictionary<string, object> BuildQueryObjectRow(RhinoDoc doc, RhinoObject obj, HashSet<string>? fields)
+    {
+        var attrs = obj.Attributes;
+        var geometry = obj.Geometry;
+        var bbox = GetValidBbox(geometry);
+        var groupIds = attrs.GetGroupList() ?? Array.Empty<int>();
+        var groupNames = groupIds
+            .Select(id => GroupName(doc, id))
+            .Cast<object>()
+            .ToList();
+        var isBlockInstance = obj is InstanceObject || geometry?.ObjectType == ObjectType.InstanceReference;
+        var definitionName = string.Empty;
+        if (obj is InstanceObject instanceObject)
+        {
+            definitionName = instanceObject.InstanceDefinition?.Name ?? string.Empty;
+        }
+
+        var full = new Dictionary<string, object>
+        {
+            ["object_id"] = obj.Id.ToString(),
+            ["type"] = geometry?.ObjectType.ToString() ?? "Unknown",
+            ["name"] = (attrs.Name ?? string.Empty).Trim(),
+            ["layer"] = LayerName(doc, attrs),
+            ["group_ids"] = groupIds.Select(id => id.ToString(CultureInfo.InvariantCulture)).Cast<object>().ToList(),
+            ["group_names"] = groupNames,
+            ["user_text"] = ReadUserText(attrs).ToDictionary(k => k.Key, v => (object)v.Value),
+            ["material"] = ReadMaterial(doc, attrs),
+            ["bbox"] = BboxMinMaxOnly(bbox),
+            ["block_info"] = new Dictionary<string, object>
+            {
+                ["is_block_instance"] = isBlockInstance,
+                ["definition_name"] = definitionName,
+                ["instance_id"] = isBlockInstance ? obj.Id.ToString() : string.Empty
+            },
+            ["raw_geometry_summary"] = BuildRawGeometrySummaryLight(geometry, bbox)
+        };
+
+        if (fields is null)
+        {
+            return ProjectRow(full, new HashSet<string>(new[]
+            {
+                "object_id", "type", "name", "layer", "bbox"
+            }, StringComparer.OrdinalIgnoreCase));
+        }
+        return ProjectRow(full, fields);
+    }
+
+    private static Dictionary<string, object> ProjectRow(Dictionary<string, object> full, HashSet<string> fields)
+    {
+        var outMap = new Dictionary<string, object>();
+        foreach (var kv in full)
+        {
+            if (fields.Contains(kv.Key))
+            {
+                outMap[kv.Key] = kv.Value;
+            }
+        }
+        return outMap;
+    }
+
+    private static Dictionary<string, object> BuildRawGeometrySummaryLight(GeometryBase? geometry, BoundingBox bbox)
+    {
+        var faceCount = 0;
+        var edgeCount = 0;
+        bool? isClosed = null;
+        if (geometry is Brep brep)
+        {
+            faceCount = brep.Faces.Count;
+            edgeCount = brep.Edges.Count;
+            isClosed = brep.IsSolid;
+        }
+        else if (geometry is Mesh mesh)
+        {
+            faceCount = mesh.Faces.Count;
+            edgeCount = mesh.TopologyEdges.Count;
+            isClosed = mesh.IsClosed;
+        }
+        else if (geometry is Curve curve)
+        {
+            edgeCount = 1;
+            isClosed = curve.IsClosed;
+        }
+
+        return new Dictionary<string, object>
+        {
+            ["bbox"] = BboxToSummaryDict(bbox),
+            ["face_count"] = faceCount,
+            ["edge_count"] = edgeCount,
+            ["is_closed"] = isClosed.HasValue ? (object)isClosed.Value : null!,
+            ["source"] = "rhino_bridge"
+        };
+    }
+
+    private static Dictionary<string, object> BuildLiveObjectBasic(RhinoDoc doc, RhinoObject obj, string userTextMode)
+    {
+        var attrs = obj.Attributes;
+        var geometry = obj.Geometry;
+        var bbox = GetValidBbox(geometry);
+        var groupIds = attrs.GetGroupList() ?? Array.Empty<int>();
+        var groupNames = groupIds
+            .Select(id => GroupName(doc, id))
+            .Cast<object>()
+            .ToList();
+        var isBlockInstance = obj is InstanceObject || geometry?.ObjectType == ObjectType.InstanceReference;
+        var definitionName = string.Empty;
+        if (obj is InstanceObject instanceObject)
+        {
+            definitionName = instanceObject.InstanceDefinition?.Name ?? string.Empty;
+        }
+
+        var map = new Dictionary<string, object>
+        {
+            ["source"] = "rhino_bridge",
+            ["api"] = "v1_live",
+            ["object_id"] = obj.Id.ToString(),
+            ["type"] = geometry?.ObjectType.ToString() ?? "Unknown",
+            ["name"] = (attrs.Name ?? string.Empty).Trim(),
+            ["layer"] = LayerName(doc, attrs),
+            ["group_ids"] = groupIds.Select(id => id.ToString(CultureInfo.InvariantCulture)).Cast<object>().ToList(),
+            ["group_names"] = groupNames,
+            ["material"] = ReadMaterial(doc, attrs),
+            ["transform"] = ReadTransform(obj),
+            ["block_info"] = new Dictionary<string, object>
+            {
+                ["is_block_instance"] = isBlockInstance,
+                ["definition_name"] = definitionName,
+                ["instance_id"] = isBlockInstance ? obj.Id.ToString() : string.Empty
+            },
+            ["raw_geometry_summary"] = BuildRawGeometrySummaryLight(geometry, bbox)
+        };
+        ApplyUserTextModeToMap(map, attrs, userTextMode);
+        return map;
     }
 
     private static Dictionary<string, string> ReadUserText(ObjectAttributes attrs)
