@@ -97,16 +97,24 @@ bloque/material, los 3 estados de `filter_report`). Verificados con runner direc
 contra la normalización real del bridge (pytest no corre aquí: el único Python del
 sistema es el 3.9 de Rhino sin pytest; el proyecto requiere 3.11+).
 
-### Fase 1 — Descubrimiento ("describe antes de filtrar")
+### Fase 1 — Descubrimiento ("describe antes de filtrar") (HECHA)
 *MCP Python, apoyándose en lo que el bridge ya da.*
 
-- **1.1** `describe_model()`: layers reales (con FullPath y visibilidad), tipos Rhino
-  presentes y conteos, grupos, **catálogo de claves de user_text** con conteo de
-  ocurrencias y valores de ejemplo, lista de definiciones de bloque con nº de instancias.
-  → Es el tool que elimina la adivinación de filtros. Claude lo llama primero, siempre.
-- **1.2** `query_objects(filters, limit, cursor)` sobre vivo Y sobre snapshot — paridad
-  con reader_server pero con la honestidad de filtros de la Fase 0. Esto es el paso
-  para que developer_server pueda reemplazar reader_server.
+- **1.1 (hecho)** `describe_model()`: layers reales con conteos, tipos Rhino con
+  conteos, grupos, catálogo de claves de user_text (`occurrence_count`,
+  `distinct_values_count`, `example_value`), y definiciones de bloque con nº de
+  instancias. Es el tool que elimina la adivinación de filtros. Pendiente Fase 5:
+  visibilidad de layer/objeto y FullPath explícito (requiere campo del bridge).
+- **1.2 (hecho)** `query_objects(filters, source="live"|<label>, limit, fields)` sobre
+  vivo Y sobre snapshot. Filtros agnósticos AND-combinados: `layers`, `types`,
+  `name_contains`, `user_text_key`, `user_text` (key=value), `is_block_instance`.
+  El filtrado se hace en Python (no se empuja al bridge) → resultado honesto
+  independiente de la estrategia de fetch. Paso clave hacia el reemplazo de
+  reader_server. (Pendiente: paginación por cursor; hoy solo `limit`.)
+
+Tests: 7 nuevos en `tests/test_developer_server.py` (catálogo, live-unavailable,
+filtros live por layer/type/user_text/name, valor de filtro inexistente → vacío,
+query sobre snapshot pasado, snapshot_not_found, filtro is_block_instance).
 
 ### Fase 2 — Expansión de bloques (el desbloqueo grande)
 *Bridge C# primero, luego MCP. Sin esto no hay cómputo real con bloques.*

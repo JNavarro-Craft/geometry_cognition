@@ -16,11 +16,13 @@ if str(PROJECT_ROOT) not in sys.path:
 from gc_mcp.developer_server.tools import (
     assert_change,
     delete_snapshot,
+    describe_model,
     diff_object,
     diff_snapshots,
     inspect_object,
     list_snapshots,
     prune_snapshots_tool_logic,
+    query_objects,
     take_snapshot,
 )
 
@@ -65,6 +67,27 @@ def take_snapshot_tool(
 def list_snapshots_tool() -> dict[str, Any]:
     """List persisted snapshots in ``${GC_OUTPUTS_DIR}/dev_snapshots/``."""
     return list_snapshots()
+
+
+@mcp.tool(name="describe_model")
+def describe_model_tool() -> dict[str, Any]:
+    """Discovery catalogue of the live model: real layers, Rhino types, groups,
+    user_text keys (with counts + example values) and block definitions.
+    Call this BEFORE building filters so you never guess a key that does not exist."""
+    return describe_model()
+
+
+@mcp.tool(name="query_objects")
+def query_objects_tool(
+    filters: dict[str, Any] | None = None,
+    source: str = "live",
+    limit: int | None = None,
+    fields: list[str] | None = None,
+) -> dict[str, Any]:
+    """Query objects by AND-combined filters over the live model (source="live")
+    or a persisted snapshot (source=<label>). Filters: layers, types,
+    name_contains, user_text_key, user_text (key=value), is_block_instance."""
+    return query_objects(filters=filters, source=source, limit=limit, fields=fields)
 
 
 @mcp.tool(name="delete_snapshot")

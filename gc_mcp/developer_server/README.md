@@ -21,6 +21,8 @@
 
 | Tool | Comportamiento |
 |---|---|
+| `describe_model()` | Catálogo de descubrimiento del modelo live: layers reales, tipos Rhino con conteos, grupos, claves de user_text (con `occurrence_count`, `distinct_values_count`, `example_value`) y definiciones de bloque con nº de instancias. **Llamar ANTES de filtrar** para no adivinar claves inexistentes. |
+| `query_objects(filters, source="live", limit, fields)` | Consulta por filtros AND-combinados sobre el modelo live (`source="live"`) o un snapshot persistido (`source=<label>`, consulta un estado pasado). Filtros: `layers`, `types`, `name_contains`, `user_text_key`, `user_text` (key=value), `is_block_instance`. Reporta `matched_count`. |
 | `take_snapshot(label, sample_limit=20, layers, types, name, user_text_key, bbox)` | Captura escena live (vía `fetch_scene_via_live_query_and_extract_objects` con fallback a `extract_scene`) + `summarize-model`. Persiste por label (sobrescribe si existe). Filtros opcionales AND-combinados aplicados en el bridge. Devuelve `status` + `filter_report` honesto (ver abajo). |
 | `list_snapshots()` | Lista snapshots en `dev_snapshots/`. |
 | `delete_snapshot(label)` | Borra todos los snapshots de un label. `status: not_found` si no había. |

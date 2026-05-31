@@ -499,6 +499,202 @@ def prune_snapshots_tool_logic(keep_latest_n: int = 1) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# describe_model (discovery: "what is really here, so you can filter without guessing")
+# ---------------------------------------------------------------------------
+
+
+def _describe_from_objects(objects: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build the discovery catalogue from a list of normalized objects.
+
+    Pure function over normalized objects so it can run on either the live model
+    or a persisted snapshot's stored objects. Domain-agnostic: it reports the
+    real layers / Rhino types / groups / user_text keys / block definitions that
+    exist, with counts and example values, so a caller never has to guess a
+    filter key that may not exist in this model.
+    """
+    layers: dict[str, int] = {}
+    types: dict[str, int] = {}
+    groups: dict[str, int] = {}
+    ut_keys: dict[str, dict[str, Any]] = {}
+    block_defs: dict[str, dict[str, Any]] = {}
+    block_instance_count = 0
+
+    for obj in objects:
+        layers[obj.get("layer", "")] = layers.get(obj.get("layer", ""), 0) + 1
+        rt = obj.get("raw_type", "")
+        types[rt] = types.get(rt, 0) + 1
+        for g in obj.get("group_names") or []:
+            groups[str(g)] = groups.get(str(g), 0) + 1
+
+        user_text = obj.get("user_text") if isinstance(obj.get("user_text"), dict) else {}
+        for k, v in user_text.items():
+            key = str(k)
+            bucket = ut_keys.setdefault(
+                key, {"key": key, "occurrence_count": 0, "distinct_values": set(), "example_value": str(v)}
+            )
+            bucket["occurrence_count"] += 1
+            bucket["distinct_values"].add(str(v))
+
+        block_context = obj.get("block_context") if isinstance(obj.get("block_context"), dict) else {}
+        if block_context.get("is_block_instance"):
+            block_instance_count += 1
+            name = block_context.get("block_name") or "(unnamed)"
+            bdef = block_defs.setdefault(
+                str(name),
+                {"block_name": str(name), "instance_count": 0, "instance_definition_id": block_context.get("instance_definition_id")},
+            )
+            bdef["instance_count"] += 1
+
+    user_text_keys = sorted(
+        (
+            {
+                "key": b["key"],
+                "occurrence_count": b["occurrence_count"],
+                "distinct_values_count": len(b["distinct_values"]),
+                "example_value": b["example_value"],
+            }
+            for b in ut_keys.values()
+        ),
+        key=lambda r: (-r["occurrence_count"], r["key"]),
+    )
+
+    return {
+        "object_count": len(objects),
+        "layers": [{"name": n, "object_count": c} for n, c in sorted(layers.items(), key=lambda x: (-x[1], x[0]))],
+        "types": [{"raw_type": n, "object_count": c} for n, c in sorted(types.items(), key=lambda x: (-x[1], x[0]))],
+        "groups": [{"name": n, "object_count": c} for n, c in sorted(groups.items(), key=lambda x: (-x[1], x[0]))],
+        "user_text_keys": user_text_keys,
+        "block_definitions": sorted(block_defs.values(), key=lambda r: (-r["instance_count"], r["block_name"])),
+        "block_instance_count": block_instance_count,
+    }
+
+
+def describe_model() -> dict[str, Any]:
+    """Discovery catalogue of the live model: real layers, Rhino types, groups,
+    user_text keys (with counts and example values) and block definitions.
+
+    Call this BEFORE building filters so you never guess a filter key (layer
+    name, user_text key, type) that does not exist in this model. Filters are
+    case-sensitive and layer names are full paths (``Parent::Child``).
+    """
+    bridge_url, timeout = _bridge_settings()
+    try:
+        normalized, warnings = _fetch_objects(bridge_url, timeout, filters=None)
+    except Exception as exc:
+        return _live_only_error(f"{type(exc).__name__}: {exc}")
+    catalogue = _describe_from_objects(normalized)
+    catalogue["source"] = "bridge_live"
+    catalogue["fetch_warnings"] = warnings
+    return catalogue
+
+
+# ---------------------------------------------------------------------------
+# query_objects (filtered query over the live model OR a persisted snapshot)
+# ---------------------------------------------------------------------------
+
+
+QUERY_FIELDS_DEFAULT = ("object_id", "name", "raw_type", "layer")
+
+
+def _object_matches_query(obj: dict[str, Any], flt: dict[str, Any]) -> bool:
+    """Domain-agnostic AND-combined match over normalized object fields.
+
+    Supported keys: layers (list, exact), types (list, exact on raw_type),
+    name_contains (substring, case-insensitive), user_text_key (presence),
+    user_text (dict of key=value, exact), is_block_instance (bool).
+    """
+    layers = flt.get("layers")
+    if isinstance(layers, list) and layers and str(obj.get("layer", "")) not in {str(x) for x in layers}:
+        return False
+    types = flt.get("types")
+    if isinstance(types, list) and types and str(obj.get("raw_type", "")) not in {str(x) for x in types}:
+        return False
+    needle = flt.get("name_contains")
+    if isinstance(needle, str) and needle.strip():
+        if needle.strip().lower() not in str(obj.get("name", "")).lower():
+            return False
+    user_text = obj.get("user_text") if isinstance(obj.get("user_text"), dict) else {}
+    ut_key = flt.get("user_text_key")
+    if isinstance(ut_key, str) and ut_key.strip() and ut_key.strip() not in user_text:
+        return False
+    ut_pairs = flt.get("user_text")
+    if isinstance(ut_pairs, dict):
+        for k, v in ut_pairs.items():
+            if user_text.get(str(k)) != str(v):
+                return False
+    want_block = flt.get("is_block_instance")
+    if isinstance(want_block, bool):
+        bc = obj.get("block_context") if isinstance(obj.get("block_context"), dict) else {}
+        if bool(bc.get("is_block_instance", False)) != want_block:
+            return False
+    return True
+
+
+def _project_query_fields(obj: dict[str, Any], fields: list[str]) -> dict[str, Any]:
+    return {f: obj.get(f) for f in fields}
+
+
+def query_objects(
+    filters: dict[str, Any] | None = None,
+    source: str = "live",
+    limit: int | None = None,
+    fields: list[str] | None = None,
+) -> dict[str, Any]:
+    """Query objects by AND-combined filters, over the live model or a snapshot.
+
+    ``source``: ``"live"`` (default) queries the active bridge model;
+    any other value is treated as a snapshot label to query the persisted objects.
+    Snapshot mode lets you query a past state. Both report ``matched_count``;
+    use ``describe_model`` first to discover valid filter values.
+    """
+    flt = filters if isinstance(filters, dict) else {}
+    field_list = [str(f) for f in fields] if isinstance(fields, list) and fields else list(QUERY_FIELDS_DEFAULT)
+
+    if source == "live":
+        bridge_url, timeout = _bridge_settings()
+        try:
+            normalized, warnings = _fetch_objects(bridge_url, timeout, filters=None)
+        except Exception as exc:
+            return _live_only_error(f"{type(exc).__name__}: {exc}")
+        # Filtering is done here in Python (not pushed to the bridge) so the
+        # result is honest regardless of the fetch strategy used.
+        src_objects = normalized
+        src_label = "bridge_live"
+        extra: dict[str, Any] = {"fetch_warnings": warnings}
+    else:
+        label_slug = slugify_label(source)
+        if not label_slug:
+            return _invalid_label_error(source)
+        path = find_latest_by_label(label_slug)
+        if path is None:
+            return _snapshot_not_found(label_slug)
+        try:
+            snap = read_snapshot(path)
+        except Exception as exc:
+            return {"error": "snapshot_unreadable", "message": str(exc)}
+        objs_by_guid = snap.get("objects_by_guid") or {}
+        src_objects = list(objs_by_guid.values()) if isinstance(objs_by_guid, dict) else []
+        src_label = label_slug
+        extra = {"snapshot_label": label_slug}
+
+    matched = [o for o in src_objects if _object_matches_query(o, flt)]
+    total_matched = len(matched)
+    if limit is not None:
+        matched = matched[: max(0, int(limit))]
+    rows = [_project_query_fields(o, field_list) for o in matched]
+
+    out: dict[str, Any] = {
+        "source": src_label,
+        "filters": flt,
+        "matched_count": total_matched,
+        "returned_count": len(rows),
+        "objects": rows,
+    }
+    out.update(extra)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # diff_snapshots
 # ---------------------------------------------------------------------------
 

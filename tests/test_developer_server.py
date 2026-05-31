@@ -703,3 +703,116 @@ def test_filter_report_not_applied_on_fallback(monkeypatch, isolated_outputs):
     assert res["status"] == "filter_not_applied"
     assert res["filter_report"]["filter_applied"] is False
     assert "note" in res["filter_report"]
+
+
+# ---------------------------------------------------------------------------
+# Fase 1.1: describe_model (discovery)
+# ---------------------------------------------------------------------------
+
+
+def test_describe_model_catalogues_real_values(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import describe_model
+
+    state = [
+        _bridge_object("g1", layer="A::B", raw_type="Brep", user_text={"CF.PartId": "P1"}),
+        _bridge_object("g2", layer="A::B", raw_type="Mesh", user_text={"CF.PartId": "P2", "Material": "Steel"}),
+        _bridge_object("g3", layer="Other", raw_type="Brep"),
+    ]
+    state[2]["block_info"] = {"is_block_instance": True, "block_name": "ModuleA", "instance_definition_index": "idef-1"}
+    _install_fake_bridge(monkeypatch, state)
+
+    cat = describe_model()
+    assert cat["object_count"] == 3
+    # layers sorted by count desc: A::B (2) before Other (1)
+    assert cat["layers"][0] == {"name": "A::B", "object_count": 2}
+    types = {t["raw_type"]: t["object_count"] for t in cat["types"]}
+    assert types == {"Brep": 2, "Mesh": 1}
+    ut = {k["key"]: k for k in cat["user_text_keys"]}
+    assert ut["CF.PartId"]["occurrence_count"] == 2
+    assert ut["CF.PartId"]["distinct_values_count"] == 2
+    assert ut["Material"]["example_value"] == "Steel"
+    assert cat["block_instance_count"] == 1
+    assert cat["block_definitions"][0]["block_name"] == "ModuleA"
+    assert cat["block_definitions"][0]["instance_count"] == 1
+
+
+def test_describe_model_live_unavailable(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import describe_model
+
+    def boom(*a, **k):
+        raise RuntimeError("bridge down")
+
+    monkeypatch.setattr(tools, "fetch_scene_via_live_query_and_extract_objects", boom)
+    monkeypatch.setattr(tools, "extract_objects_bridge", boom)
+    out = describe_model()
+    assert out["error"] == "live_mode_unavailable"
+
+
+# ---------------------------------------------------------------------------
+# Fase 1.2: query_objects (live + snapshot)
+# ---------------------------------------------------------------------------
+
+
+def test_query_objects_live_filters(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import query_objects
+
+    state = [
+        _bridge_object("g1", layer="L1", raw_type="Brep", name="alpha", user_text={"k": "v1"}),
+        _bridge_object("g2", layer="L2", raw_type="Brep", name="beta", user_text={"k": "v2"}),
+        _bridge_object("g3", layer="L1", raw_type="Mesh", name="gamma"),
+    ]
+    _install_fake_bridge(monkeypatch, state)
+
+    r = query_objects(filters={"layers": ["L1"]})
+    assert r["matched_count"] == 2
+    assert {o["object_id"] for o in r["objects"]} == {"g1", "g3"}
+
+    r2 = query_objects(filters={"layers": ["L1"], "types": ["Brep"]})
+    assert r2["matched_count"] == 1 and r2["objects"][0]["object_id"] == "g1"
+
+    r3 = query_objects(filters={"user_text": {"k": "v2"}})
+    assert r3["matched_count"] == 1 and r3["objects"][0]["object_id"] == "g2"
+
+    r4 = query_objects(filters={"name_contains": "AMM"})  # case-insensitive 'gamma'
+    assert r4["matched_count"] == 1 and r4["objects"][0]["object_id"] == "g3"
+
+
+def test_query_objects_unknown_filter_value_is_empty(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import query_objects
+
+    _install_fake_bridge(monkeypatch, _state_before())
+    r = query_objects(filters={"layers": ["NoSuchLayer"]})
+    assert r["matched_count"] == 0
+
+
+def test_query_objects_over_snapshot(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import query_objects
+
+    _install_fake_bridge(monkeypatch, _state_before())
+    take_snapshot("past")
+    # Now the live model changes, but we query the PAST snapshot.
+    _install_fake_bridge(monkeypatch, _state_after())
+
+    r = query_objects(filters={"layers": ["L1"]}, source="past")
+    assert r["source"] == "past"
+    # _state_before has guid-B and guid-C in L1
+    assert r["matched_count"] == 2
+    assert {o["object_id"] for o in r["objects"]} == {"guid-B", "guid-C"}
+
+
+def test_query_objects_snapshot_not_found(isolated_outputs):
+    from gc_mcp.developer_server.tools import query_objects
+
+    r = query_objects(filters={}, source="ghost")
+    assert r["error"] == "snapshot_not_found"
+
+
+def test_query_objects_is_block_instance_filter(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import query_objects
+
+    state = [_bridge_object("g1"), _bridge_object("g2")]
+    state[1]["block_info"] = {"is_block_instance": True, "block_name": "M", "instance_definition_index": "i1"}
+    _install_fake_bridge(monkeypatch, state)
+
+    r = query_objects(filters={"is_block_instance": True})
+    assert r["matched_count"] == 1 and r["objects"][0]["object_id"] == "g2"
