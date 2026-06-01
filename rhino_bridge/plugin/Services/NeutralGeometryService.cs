@@ -59,6 +59,66 @@ public class NeutralGeometryService
 
         [DataMember(Name = "cursor")]
         public int? Cursor { get; set; }
+
+        // Not part of the wire contract: filled by ParseLiveObjectsQuery with any
+        // keys found inside "filters" that are not recognized, so the response can
+        // warn instead of silently ignoring a mistyped filter (the DataContract
+        // serializer drops unknown keys, which otherwise looks like "no filter").
+        public List<string> UnknownFilterKeys { get; set; } = new List<string>();
+    }
+
+    private static readonly HashSet<string> KnownFilterKeys = new HashSet<string>(
+        new[] { "layers", "types", "name_contains", "has_user_text", "user_text_key", "user_text_value", "bbox_intersects" },
+        StringComparer.Ordinal);
+
+    private static List<string> DetectUnknownFilterKeys(string body)
+    {
+        // Lax scan: find the "filters" object in the raw body and list its top-level
+        // keys, then subtract the known ones. Regex-based to avoid adding a JSON dep;
+        // best-effort (only flags clearly-unknown keys, never blocks the request).
+        var unknown = new List<string>();
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return unknown;
+        }
+        var m = System.Text.RegularExpressions.Regex.Match(
+            body, "\"filters\"\\s*:\\s*\\{", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!m.Success)
+        {
+            return unknown;
+        }
+        // Walk braces from the opening { to find the matching close, so nested
+        // objects (e.g. bbox_intersects) do not end the scan prematurely.
+        int start = m.Index + m.Length - 1;
+        int depth = 0;
+        int end = -1;
+        for (int i = start; i < body.Length; i++)
+        {
+            if (body[i] == '{') depth++;
+            else if (body[i] == '}') { depth--; if (depth == 0) { end = i; break; } }
+        }
+        if (end < 0)
+        {
+            return unknown;
+        }
+        var filtersBlock = body.Substring(start, end - start + 1);
+        // Top-level keys only: a key is "..." followed by ':' at brace depth 1.
+        int d = 0;
+        foreach (System.Text.RegularExpressions.Match km in System.Text.RegularExpressions.Regex.Matches(
+            filtersBlock, "[{}]|\"([^\"]+)\"\\s*:"))
+        {
+            if (km.Value == "{") { d++; continue; }
+            if (km.Value == "}") { d--; continue; }
+            if (d == 1)
+            {
+                var key = km.Groups[1].Value;
+                if (!KnownFilterKeys.Contains(key) && !unknown.Contains(key))
+                {
+                    unknown.Add(key);
+                }
+            }
+        }
+        return unknown;
     }
 
     [DataContract]
@@ -106,8 +166,9 @@ public class NeutralGeometryService
         {
             using var ms = new MemoryStream(Encoding.UTF8.GetBytes(body));
             var serializer = new DataContractJsonSerializer(typeof(LiveObjectsQueryEnvelope));
-            var parsed = serializer.ReadObject(ms) as LiveObjectsQueryEnvelope;
-            return parsed ?? new LiveObjectsQueryEnvelope();
+            var parsed = serializer.ReadObject(ms) as LiveObjectsQueryEnvelope ?? new LiveObjectsQueryEnvelope();
+            parsed.UnknownFilterKeys = DetectUnknownFilterKeys(body);
+            return parsed;
         }
         catch (SerializationException ex)
         {
@@ -211,6 +272,18 @@ public class NeutralGeometryService
         if (nextCursor.HasValue)
         {
             result["next_cursor"] = nextCursor.Value;
+        }
+        if (request.UnknownFilterKeys is { Count: > 0 })
+        {
+            // Surface mistyped/unsupported filter keys instead of silently ignoring
+            // them. A caller seeing matched_count == total can check this to learn
+            // the filter never applied (e.g. "where"/"layer" instead of "layers").
+            result["filter_warnings"] = new Dictionary<string, object>
+            {
+                ["unknown_filter_keys"] = request.UnknownFilterKeys.Cast<object>().ToList(),
+                ["known_filter_keys"] = KnownFilterKeys.OrderBy(k => k, StringComparer.Ordinal).Cast<object>().ToList(),
+                ["note"] = "These filter keys are not recognized and were ignored; matched_count reflects the remaining (possibly empty) filter."
+            };
         }
         return result;
     }

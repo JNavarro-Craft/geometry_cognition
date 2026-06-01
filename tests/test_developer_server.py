@@ -816,3 +816,51 @@ def test_query_objects_is_block_instance_filter(monkeypatch, isolated_outputs):
 
     r = query_objects(filters={"is_block_instance": True})
     assert r["matched_count"] == 1 and r["objects"][0]["object_id"] == "g2"
+
+
+# ---------------------------------------------------------------------------
+# Filter shape: keys must match the bridge LiveQueryFilters contract
+# ---------------------------------------------------------------------------
+
+
+def test_build_capture_filter_uses_bridge_contract_keys():
+    from gc_mcp.developer_server.tools import _build_capture_filter
+
+    flt = _build_capture_filter(
+        layers=["L1"],
+        types=["Brep"],
+        name="abc",
+        user_text_key="K",
+        bbox={"min": [0, 0, 0], "max": [1, 1, 1]},
+    )
+    # Bridge contract: name_contains / bbox_intersects (NOT name / bbox).
+    assert flt["name_contains"] == "abc"
+    assert "name" not in flt
+    assert "bbox_intersects" in flt
+    assert "bbox" not in flt
+    assert flt["layers"] == ["L1"]
+    assert flt["types"] == ["Brep"]
+    assert flt["user_text_key"] == "K"
+
+
+def test_build_capture_filter_none_when_empty():
+    from gc_mcp.developer_server.tools import _build_capture_filter
+
+    assert _build_capture_filter(None, None, None, None, None) is None
+
+
+def test_take_snapshot_name_filter_persists_name_contains(monkeypatch, isolated_outputs):
+    captured: dict[str, Any] = {}
+
+    def fake_fetch(bridge_url, timeout, *, query_page_limit=200, extract_batch_size=80, filters=None):
+        captured["filters"] = filters
+        return {"source": "rhino_bridge", "object_count": 0, "objects": []}
+
+    monkeypatch.setattr(tools, "fetch_scene_via_live_query_and_extract_objects", fake_fetch)
+    monkeypatch.setattr(tools, "extract_objects_bridge", lambda u, t: {"objects": []})
+    monkeypatch.setattr(tools, "_bridge_json_request", lambda *a, **k: {})
+    monkeypatch.setattr(tools, "live_scene_summary_bridge", lambda u, t, sample_limit=20: {"object_count": 0})
+
+    take_snapshot("byname", name="Foo")
+    # The filter handed to the bridge must use the contract key, not "name".
+    assert captured["filters"] == {"name_contains": "Foo"}

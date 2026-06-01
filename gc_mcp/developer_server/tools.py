@@ -280,6 +280,13 @@ def _build_capture_filter(
     Returns ``None`` when no filter is requested, so the snapshot can record
     "captured the whole model" unambiguously. Only keys explicitly provided by
     the caller end up in the returned dict.
+
+    The emitted keys MUST match the bridge's LiveQueryFilters contract exactly
+    (layers, types, name_contains, user_text_key, user_text_value, has_user_text,
+    bbox_intersects). The bridge silently ignores unknown keys (a null filter
+    lets everything through), so a mismatch here filters nothing while looking
+    successful. ``name`` -> ``name_contains`` and ``bbox`` -> ``bbox_intersects``
+    are the friendly-param-to-contract translations.
     """
     out: dict[str, Any] = {}
     if isinstance(layers, list) and layers:
@@ -287,11 +294,11 @@ def _build_capture_filter(
     if isinstance(types, list) and types:
         out["types"] = [str(x) for x in types]
     if isinstance(name, str) and name.strip():
-        out["name"] = name.strip()
+        out["name_contains"] = name.strip()
     if isinstance(user_text_key, str) and user_text_key.strip():
         out["user_text_key"] = user_text_key.strip()
     if isinstance(bbox, dict) and bbox:
-        out["bbox"] = bbox
+        out["bbox_intersects"] = bbox
     return out or None
 
 

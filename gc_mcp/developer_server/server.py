@@ -73,7 +73,11 @@ def list_snapshots_tool() -> dict[str, Any]:
 def describe_model_tool() -> dict[str, Any]:
     """Discovery catalogue of the live model: real layers, Rhino types, groups,
     user_text keys (with counts + example values) and block definitions.
-    Call this BEFORE building filters so you never guess a key that does not exist."""
+
+    START HERE before any filtered query or snapshot. It returns the exact
+    layer names, type names and user_text keys that exist in THIS model, so you
+    pass real values to query_objects/take_snapshot instead of guessing names
+    that the bridge would silently ignore (matching everything)."""
     return describe_model()
 
 
@@ -85,8 +89,25 @@ def query_objects_tool(
     fields: list[str] | None = None,
 ) -> dict[str, Any]:
     """Query objects by AND-combined filters over the live model (source="live")
-    or a persisted snapshot (source=<label>). Filters: layers, types,
-    name_contains, user_text_key, user_text (key=value), is_block_instance."""
+    or a persisted snapshot (source=<label>, queries a past state).
+
+    VALID filter keys (exact names — anything else is ignored, NOT an error):
+      - layers: list[str]        exact full-path layer names ("Parent::Child")
+      - types: list[str]         exact Rhino type names ("Brep", "Mesh", ...)
+      - name_contains: str       case-insensitive substring of the object name
+      - user_text_key: str       object has this user_text key
+      - user_text: {key: value}  object's user_text matches these pairs exactly
+      - is_block_instance: bool  filter block instances
+
+    Common mistakes that silently match EVERYTHING: "layer"/"type" (singular),
+    "where", "name". If matched_count looks like the whole scene, your filter
+    key is probably wrong.
+
+    ALWAYS call describe_model() first to see the real layers, types and
+    user_text keys in THIS model — never guess a filter value.
+
+    Example: {"layers": ["Walls::Exterior"], "user_text": {"Material": "Steel"}}
+    """
     return query_objects(filters=filters, source=source, limit=limit, fields=fields)
 
 
