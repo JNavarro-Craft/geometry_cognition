@@ -180,6 +180,21 @@ def _project_object_for_snapshot(
     is_closed, bad = _as_bool_or_none(raw_geo.get("is_closed") if raw_geo else None)
     if bad:
         incidents.append(("is_closed", bad))
+    length, bad = _as_float_or_none(raw_geo.get("length") if raw_geo else None)
+    if bad:
+        incidents.append(("length", bad))
+    obb_longest, bad = _as_float_or_none(raw_geo.get("obb_longest") if raw_geo else None)
+    if bad:
+        incidents.append(("obb_longest", bad))
+    obb_mid, bad = _as_float_or_none(raw_geo.get("obb_mid") if raw_geo else None)
+    if bad:
+        incidents.append(("obb_mid", bad))
+    obb_shortest, bad = _as_float_or_none(raw_geo.get("obb_shortest") if raw_geo else None)
+    if bad:
+        incidents.append(("obb_shortest", bad))
+    longest_edge, bad = _as_float_or_none(raw_geo.get("longest_edge") if raw_geo else None)
+    if bad:
+        incidents.append(("longest_edge", bad))
 
     block_context = obj.get("block_context") if isinstance(obj.get("block_context"), dict) else {}
     material = obj.get("material")
@@ -213,9 +228,15 @@ def _project_object_for_snapshot(
         "bbox_center": list(bbox_center) if isinstance(bbox_center, list) else None,
         "volume": volume,
         "area": area,
+        "length": length,
         "face_count": face_count,
         "edge_count": edge_count,
         "is_closed": is_closed,
+        "obb_dimensions": list(raw_geo.get("obb_dimensions")) if isinstance(raw_geo.get("obb_dimensions"), list) else None,
+        "obb_longest": obb_longest,
+        "obb_mid": obb_mid,
+        "obb_shortest": obb_shortest,
+        "longest_edge": longest_edge,
     }
     return projected, incidents
 
@@ -645,7 +666,11 @@ def _object_matches_query(obj: dict[str, Any], flt: dict[str, Any]) -> bool:
 
 
 def _project_query_fields(obj: dict[str, Any], fields: list[str]) -> dict[str, Any]:
-    return {f: obj.get(f) for f in fields}
+    # Use _resolve_field (not a flat obj.get) so geometric scalars nested under
+    # raw_geometry_summary (volume, obb_longest, longest_edge, ...) and user_text.<key>
+    # resolve correctly. A flat get returned None for them — the reason fields-based
+    # geometry queries came back null even when the bridge delivered the values.
+    return {f: _resolve_field(obj, f) for f in fields}
 
 
 def query_objects(
@@ -713,7 +738,13 @@ def query_objects(
 # ---------------------------------------------------------------------------
 
 
-_GEO_SCALARS = ("volume", "area", "length", "face_count", "edge_count")
+_GEO_SCALARS = (
+    "volume", "area", "length", "face_count", "edge_count",
+    # Oriented-bbox extents and longest edge — orientation-independent geometric
+    # facts from the bridge. obb_longest/mid/shortest let a caller group or sum the
+    # real part dimensions even when the part is rotated (the world bbox cannot).
+    "obb_longest", "obb_mid", "obb_shortest", "longest_edge",
+)
 
 
 def _resolve_field(obj: dict[str, Any], field: str) -> Any:

@@ -42,7 +42,22 @@
 `group_ids`, `group_names`, `block_context` (`is_block_instance`, `block_name`,
 `instance_definition_id`), `transform` (matriz 16, no se diffea — el cambio de pose se
 ve en `bbox`), `bbox`, `bbox_center`, y escalares geométricos (`volume`, `area`,
-`face_count`, `edge_count`, `is_closed`).
+`length`, `face_count`, `edge_count`, `is_closed`).
+
+### Extents orientados (independientes de la pose)
+
+Además del `bbox` (alineado a los ejes del mundo, que se infla cuando la pieza está
+rotada), el bridge expone dimensiones **orientadas** que son hechos geométricos
+intrínsecos del sólido, agnósticos de dominio:
+
+- `obb_dimensions`: las 3 aristas del oriented bounding box, **ordenadas descendente**
+  `[mayor, media, menor]`.
+- `obb_longest` / `obb_mid` / `obb_shortest`: las mismas tres como escalares (para
+  `group_by`/`sum`/`min`/`max` en `aggregate`).
+- `longest_edge`: longitud de la arista más larga del sólido — para una pieza
+  prismática colocada en diagonal, este es su largo real, que el `bbox` no recupera.
+
+El MCP no les asigna significado: el cliente decide que "la mayor es el largo de corte".
 
 ## `filter_report` (honestidad de filtros)
 

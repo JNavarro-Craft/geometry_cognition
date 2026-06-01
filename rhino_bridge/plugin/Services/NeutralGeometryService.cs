@@ -881,6 +881,124 @@ public class NeutralGeometryService
         return result;
     }
 
+    // Oriented bounding box, expressed as its three side lengths sorted descending.
+    // Domain-agnostic: these are the intrinsic extents of the solid regardless of how
+    // it is rotated in world space, unlike the world-axis-aligned bbox. The caller
+    // decides what each dimension means (e.g. "the longest is the cut length").
+    //
+    // Strategy (no external dependency, best-effort):
+    //   - Brep/Extrusion/Mesh/Surface: try planes aligned to each face normal and to
+    //     the world axes; keep the box of smallest volume. This recovers the true
+    //     extents of prismatic / axis-tilted parts that the AABB inflates.
+    //   - Curve: the OBB of a planar/linear curve via its own plane when available.
+    //   - Anything else / failure: fall back to the world AABB extents.
+    private static List<double>? ComputeObbDimensions(GeometryBase? geometry, BoundingBox aabb)
+    {
+        try
+        {
+            var planes = new List<Plane> { Plane.WorldXY };
+            if (geometry is Brep brep)
+            {
+                foreach (var face in brep.Faces)
+                {
+                    var u = face.Domain(0).Mid;
+                    var v = face.Domain(1).Mid;
+                    if (face.FrameAt(u, v, out var fr))
+                    {
+                        planes.Add(fr);
+                    }
+                }
+            }
+            else if (geometry is Curve curve && curve.TryGetPlane(out var cpl))
+            {
+                planes.Add(cpl);
+            }
+
+            BoundingBox best = BoundingBox.Unset;
+            double bestVol = double.PositiveInfinity;
+            foreach (var pl in planes)
+            {
+                if (!pl.IsValid) continue;
+                var box = geometry?.GetBoundingBox(pl) ?? BoundingBox.Unset;
+                if (!box.IsValid) continue;
+                var d = box.Diagonal;
+                var vol = Math.Abs(d.X) * Math.Abs(d.Y) * Math.Abs(d.Z);
+                // For flat parts (zero-thickness) compare by face area instead of volume.
+                if (vol <= 1e-12) vol = Math.Abs(d.X) * Math.Abs(d.Y) + Math.Abs(d.Y) * Math.Abs(d.Z) + Math.Abs(d.X) * Math.Abs(d.Z);
+                if (vol < bestVol) { bestVol = vol; best = box; }
+            }
+
+            var source = best.IsValid ? best : aabb;
+            if (!source.IsValid) return null;
+            var dia = source.Diagonal;
+            var dims = new List<double> { Math.Abs(dia.X), Math.Abs(dia.Y), Math.Abs(dia.Z) };
+            dims.Sort();
+            dims.Reverse(); // descending: [longest, mid, shortest]
+            return dims;
+        }
+        catch
+        {
+            if (!aabb.IsValid) return null;
+            var dia = aabb.Diagonal;
+            var dims = new List<double> { Math.Abs(dia.X), Math.Abs(dia.Y), Math.Abs(dia.Z) };
+            dims.Sort();
+            dims.Reverse();
+            return dims;
+        }
+    }
+
+    // Length of the single longest edge of a solid/surface. For a prismatic part
+    // (beam, stud, board) this is the real cut length even when the part runs in a
+    // diagonal — the world-axis bbox cannot recover this. Agnostic: just the max
+    // edge length; the caller assigns meaning. Null for geometry without edges.
+    private static double? ComputeLongestEdge(GeometryBase? geometry)
+    {
+        try
+        {
+            if (geometry is Brep brep)
+            {
+                double max = 0.0;
+                bool any = false;
+                foreach (var edge in brep.Edges)
+                {
+                    var len = edge.GetLength();
+                    if (len > 0 && !double.IsNaN(len) && !double.IsInfinity(len))
+                    {
+                        any = true;
+                        if (len > max) max = len;
+                    }
+                }
+                return any ? max : (double?)null;
+            }
+            if (geometry is Extrusion ext)
+            {
+                return ComputeLongestEdge(ext.ToBrep(false));
+            }
+            if (geometry is Mesh mesh)
+            {
+                double max = 0.0;
+                bool any = false;
+                var te = mesh.TopologyEdges;
+                for (int i = 0; i < te.Count; i++)
+                {
+                    var line = te.EdgeLine(i);
+                    var len = line.Length;
+                    if (len > 0 && !double.IsNaN(len) && !double.IsInfinity(len))
+                    {
+                        any = true;
+                        if (len > max) max = len;
+                    }
+                }
+                return any ? max : (double?)null;
+            }
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static Dictionary<string, object> BuildRawGeometrySummary(GeometryBase? geometry, BoundingBox bbox)
     {
         var faceAreas = new List<object>();
@@ -943,7 +1061,10 @@ public class NeutralGeometryService
             : new List<object>();
         var samplePoints = BuildSamplePoints(bbox, 6);
 
-        return new Dictionary<string, object>
+        var obb = ComputeObbDimensions(geometry, bbox);
+        var longestEdge = ComputeLongestEdge(geometry);
+
+        var summary = new Dictionary<string, object>
         {
             ["bbox"] = bbox.IsValid
                 ? new Dictionary<string, object>
@@ -965,6 +1086,20 @@ public class NeutralGeometryService
             ["length"] = length.HasValue ? (object)length.Value : null!,
             ["source"] = "rhino_bridge"
         };
+        if (obb is not null)
+        {
+            // Oriented extents sorted descending: [longest, mid, shortest]. Named
+            // generically (not "length/width/height") to avoid implying a domain role.
+            summary["obb_dimensions"] = obb.Cast<object>().ToList();
+            summary["obb_longest"] = obb[0];
+            summary["obb_mid"] = obb[1];
+            summary["obb_shortest"] = obb[2];
+        }
+        if (longestEdge.HasValue)
+        {
+            summary["longest_edge"] = longestEdge.Value;
+        }
+        return summary;
     }
 
     private static List<object> BuildSamplePoints(BoundingBox bbox, int targetCount)
@@ -1346,6 +1481,26 @@ public class NeutralGeometryService
             ["raw_geometry_summary"] = BuildRawGeometrySummaryLight(geometry, bbox)
         };
 
+        // Promote the geometric scalars from raw_geometry_summary to top-level row
+        // keys so a caller asking fields:["volume","obb_longest","longest_edge"] gets
+        // them. Without this, ProjectRow looks for a flat "volume" key that does not
+        // exist (the value is nested), and silently drops it — the reason fields-based
+        // geometry queries returned null. Agnostic: just re-exposing computed facts.
+        if (full["raw_geometry_summary"] is Dictionary<string, object> rgs)
+        {
+            foreach (var scalarKey in new[]
+            {
+                "volume", "area", "length", "face_count", "edge_count", "is_closed",
+                "obb_dimensions", "obb_longest", "obb_mid", "obb_shortest", "longest_edge"
+            })
+            {
+                if (rgs.TryGetValue(scalarKey, out var val) && !full.ContainsKey(scalarKey))
+                {
+                    full[scalarKey] = val;
+                }
+            }
+        }
+
         if (fields is null)
         {
             return ProjectRow(full, new HashSet<string>(new[]
@@ -1392,14 +1547,48 @@ public class NeutralGeometryService
             isClosed = curve.IsClosed;
         }
 
-        return new Dictionary<string, object>
+        // The light summary previously omitted the geometric scalars, so a query
+        // asking fields:["volume"] got null even though the value exists. Compute
+        // them here too so the query path matches inspect_object. These are cheap
+        // mass properties; the heavy face_areas/normals/sample_points stay out.
+        double? lightLength = null;
+        if (geometry is Curve c2)
+        {
+            try
+            {
+                var len = c2.GetLength();
+                if (len > 0 && !double.IsNaN(len) && !double.IsInfinity(len)) lightLength = len;
+            }
+            catch { lightLength = null; }
+        }
+        var volume = ComputeVolume(geometry);
+        var area = ComputeArea(geometry);
+        var obb = ComputeObbDimensions(geometry, bbox);
+        var longestEdge = ComputeLongestEdge(geometry);
+
+        var map = new Dictionary<string, object>
         {
             ["bbox"] = BboxToSummaryDict(bbox),
             ["face_count"] = faceCount,
             ["edge_count"] = edgeCount,
             ["is_closed"] = isClosed.HasValue ? (object)isClosed.Value : null!,
+            ["volume"] = volume.HasValue ? (object)volume.Value : null!,
+            ["area"] = area.HasValue ? (object)area.Value : null!,
+            ["length"] = lightLength.HasValue ? (object)lightLength.Value : null!,
             ["source"] = "rhino_bridge"
         };
+        if (obb is not null)
+        {
+            map["obb_dimensions"] = obb.Cast<object>().ToList();
+            map["obb_longest"] = obb[0];
+            map["obb_mid"] = obb[1];
+            map["obb_shortest"] = obb[2];
+        }
+        if (longestEdge.HasValue)
+        {
+            map["longest_edge"] = longestEdge.Value;
+        }
+        return map;
     }
 
     private static Dictionary<string, object> BuildLiveObjectBasic(RhinoDoc doc, RhinoObject obj, string userTextMode)

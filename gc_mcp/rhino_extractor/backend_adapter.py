@@ -62,7 +62,11 @@ def _normalize_transform(value: Any, warnings: list[str]) -> list[float]:
 
 def _normalize_raw_geometry_summary(src: dict[str, Any]) -> dict[str, Any]:
     raw_geometry_summary = src.get("raw_geometry_summary") if isinstance(src.get("raw_geometry_summary"), dict) else {}
-    for key in ("bbox", "bbox_corners", "sample_points", "face_count", "face_normals", "face_areas", "edge_count", "is_closed", "volume", "area"):
+    for key in (
+        "bbox", "bbox_corners", "sample_points", "face_count", "face_normals",
+        "face_areas", "edge_count", "is_closed", "volume", "area", "length",
+        "obb_dimensions", "obb_longest", "obb_mid", "obb_shortest", "longest_edge",
+    ):
         if key in src and key not in raw_geometry_summary:
             raw_geometry_summary[key] = src.get(key)
 
