@@ -1,4 +1,11 @@
-# Fixtures de Fase 2
+# Fixtures de Fase 2 (pipeline heredado — archivado)
+
+> **Nota:** estos fixtures y el pipeline que describen abajo
+> (`rhino_extractor → geometry_kernel → evidence_graph → …`) pertenecen al sistema
+> original, hoy en `gc_mcp/_archive/` (incluidos sus tests y `run_minimal_analysis`).
+> Se conservan como referencia histórica. El flujo activo es **bridge ↔
+> rhino_bridge_client ↔ developer_server** (ver el README raíz). Los tests activos no
+> dependen de estos `*.sample.json`.
 
 Estos fixtures son conceptuales (no dependen de Rhino real) y prueban fronteras del flujo minimo.
 

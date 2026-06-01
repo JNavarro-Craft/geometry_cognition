@@ -1,87 +1,85 @@
 # geometry_cognition
 
-`geometry_cognition` es un monorepo modular para construir MCPs que observan, estructuran, validan y razonan sobre modelos geométricos 3D de forma agnóstica al dominio.
+Sistema para **observar y analizar modelos geométricos 3D de Rhino de forma
+estrictamente agnóstica al dominio**. La infraestructura entrega *hechos geométricos*
+(dimensiones, topología, contactos, distancias, proyecciones); toda interpretación de
+dominio —qué es una pieza, un muro, una junta, un error— la compone el cliente (un LLM)
+por encima.
 
-## Por qué existe
+## Estado actual (consolidado)
 
-Los modelos 3D suelen mezclar señales geométricas, metadata declarativa y supuestos de dominio. Este proyecto separa esas capas para mantener trazabilidad, portabilidad y evolución independiente de cada MCP.
+El sistema se consolidó alrededor de **un único MCP activo** y su capa de transporte.
+El pipeline multi-etapa original (interpretación / evidencia / hipótesis / validación /
+dominio) fue archivado: en la práctica, un cliente capaz razona sobre los primitivos
+geométricos sin necesidad de esas capas intermedias. Ver
+[`docs/agnostic_principle.md`](docs/agnostic_principle.md) para el porqué.
 
-## Separación conceptual obligatoria
+### Componentes activos
 
-El sistema separa estrictamente:
+| Componente | Rol |
+|---|---|
+| `rhino_bridge/plugin/` | Plugin Rhino (.rhp, C#) — el **bridge**: expone el modelo vivo por HTTP (`/v1/live/*`), estrictamente geométrico. |
+| `gc_mcp/developer_server/` | El **MCP** (21 tools): lee y analiza el modelo vía el bridge. Observacional, no muta. |
+| `gc_mcp/rhino_bridge_client/` | Capa de **transporte** (no es un MCP): cliente HTTP del bridge + normalización de respuestas. La importa `developer_server`; un futuro MCP `automation` la reusaría. |
+| `contracts/` | Esquemas JSON versionados (p. ej. `object_schema.v1.json`). |
+| `gc_mcp/_archive/` | Módulos del pipeline anterior, preservados con su historial. No activos. |
 
-1. Observación
-2. Interpretación
-3. Evidencia
-4. Hipótesis
-5. Validación
-6. Conocimiento persistente
-7. Acción / automatización
+### Familias de tools del MCP
 
-Ninguna etapa debe colapsar las demás.
+Todas agnósticas — operaciones geométricas, no interpretaciones:
 
-## Orden de pipeline (mínimo)
+- **Descubrimiento / consulta**: `describe_model`, `query_objects` (filtros + paginación),
+  `inspect_object`, `aggregate`.
+- **Medición**: `obb_*` y `longest_edge` (vía bridge), `get_vertices` / `get_edges` /
+  `get_faces` (geometría + topología por elemento).
+- **Relación espacial**: `compute_contacts` (contacto real con ubicación),
+  `compute_distance`, `find_nearby`, `project_to_plane`.
+- **Bloques**: `list_block_definitions`, `expand_block`, `bill_of_materials`.
+- **Snapshots y cambios**: `take_snapshot` / `list` / `delete` / `prune_snapshots`,
+  `diff_snapshots`, `diff_object`, `assert_change`.
 
-Fase por dependencia, tal como se encadena en `workflows/run_minimal_analysis.py`:
-
-1. `rhino_extractor` (o JSON de prueba)  
-2. `geometry_kernel`  
-3. `evidence_graph` (cuando se pide una etapa que lo requiere)  
-4. `hypothesis_engine`  
-5. `validation_engine`  
-6. `domain_interpreter` (sigue a validación en el mismo `run` cuando se incluye dominio)
-
-`knowledge_base` y `automation` no forman parte del análisis mínimo de estabilización salvo invocación explícita de sus MCPs.
-
-## Arquitectura MCP
-
-Los MCPs se comunican exclusivamente con contratos JSON versionados en `contracts/`.
-
-## Integración Rhino bridge
-
-- `rhino_bridge/plugin/` contiene el plugin Rhino (.rhp) en C#.
-- `gc_mcp/` contiene los MCP Python de observación/razonamiento.
-- El bridge neutral expone rutas `/geometry/*` para extracción agnóstica.
-- Endpoints legacy del plugin siguen disponibles por compatibilidad durante la transición.
-
-- MCPs fijos de plataforma:
-  - `geometry_kernel`
-  - `metadata_context`
-  - `evidence_graph`
-  - `hypothesis_engine`
-  - `validation_engine`
-  - `knowledge_base`
-- MCPs variables:
-  - extractores (ej. `rhino_extractor`)
-  - automatización (`automation`)
-  - perfiles de dominio (`domain_profiles/`)
-
-## Qué es fijo vs variable
-
-- **Fijo**: estructura del pipeline, contratos base, reglas de separación conceptual, trazabilidad evidencia->hipótesis.
-- **Variable**: fuentes de extracción, vocabulario de perfiles de dominio, reglas específicas de validación por contexto.
-
-## Cómo agregar un nuevo extractor
-
-1. Crear carpeta en `gc_mcp/<extractor_name>/`.
-2. Definir `README.md`, `server.py`, `tools.py`.
-3. Emitir objetos normalizados conformes a `contracts/object_schema.v1.json`.
-4. No introducir lógica de interpretación de dominio en el extractor.
-
-## Cómo agregar un nuevo domain profile
-
-1. Crear `domain_profiles/<profile_name>/profile.json`.
-2. Declarar vocabulario permitido para hipótesis y términos prohibidos en core.
-3. Definir patrones típicos de evidencia y nombres de reglas de validación.
-4. Mantener aislamiento: los perfiles no deben contaminar el `geometry_kernel`.
+El inventario de estado vivo está en
+[`docs/system_capabilities.md`](docs/system_capabilities.md); el histórico de cambios en
+[`docs/CHANGELOG.md`](docs/CHANGELOG.md).
 
 ## Reglas de diseño no negociables
 
-- El core es agnóstico al dominio.
-- El geometry kernel no contiene vocabulario de dominio.
-- Los MCPs no se importan lógica entre sí de forma directa.
-- Comunicación entre MCPs solo vía contratos JSON versionados.
-- Todo MCP declara su rol explícito.
-- El sistema expresa incertidumbre, conflicto y evidencia insuficiente.
-- Toda hipótesis es trazable a evidencia.
-- Los domain profiles no contaminan el core.
+- **El núcleo es agnóstico al dominio.** El bridge y el MCP reportan tipos Rhino,
+  user_text y geometría; nunca nombran "viga", "muro" ni "error".
+- **Falla ruidosa, no silenciosa.** Ningún fallback devuelve datos distintos a los
+  pedidos haciéndolos pasar por correctos; los filtros reportan honestamente si
+  aplicaron.
+- **Primitivos, no usos.** Se exponen operaciones geométricas; los casos de uso
+  (despiece, detección de aberturas, cubicación, clasificación de roles) los compone el
+  cliente. El test ácido para decidir qué entra está en
+  [`docs/agnostic_principle.md`](docs/agnostic_principle.md).
+- **El MCP es observacional.** No muta el modelo. La mutación sería un MCP `automation`
+  aparte (no existe aún), que reutilizaría `rhino_bridge_client`.
+- **Comunicación por contratos.** Los objetos normalizados cumplen `contracts/*.json`.
+
+## Cómo correr
+
+```bash
+# Suite de tests (solo módulos activos)
+pytest -q                    # 86 passed
+
+# El MCP requiere Rhino abierto con el plugin (bridge en :8765).
+# Ver docs/usage_bridge_mcp.md para el flujo MCP <-> bridge,
+# y docs/development.md para build/instalación del plugin C#.
+```
+
+## Documentación
+
+- [`docs/agnostic_principle.md`](docs/agnostic_principle.md) — el principio rector + test ácido (por qué se diseña así).
+- [`docs/system_capabilities.md`](docs/system_capabilities.md) — qué hay hoy (checklist de estado) + qué falta.
+- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — qué cambió y cuándo (commit a commit).
+- [`docs/usage_bridge_mcp.md`](docs/usage_bridge_mcp.md) — uso del bridge desde el MCP.
+- [`docs/development.md`](docs/development.md) — build del plugin, suite, entorno.
+- [`docs/plan_bridge_developer_v2.md`](docs/plan_bridge_developer_v2.md) — plan por fases del developer_server.
+
+## Nota sobre directorios heredados
+
+`domain_profiles/`, `knowledge_base/`, `workflows/` y varios esquemas de `contracts/`
+(`hypothesis_`, `validation_`, `evidence_`, `domain_interpretation_`) pertenecen al
+pipeline original archivado. Se conservan como referencia; no participan del flujo
+activo, que es exclusivamente **bridge ↔ rhino_bridge_client ↔ developer_server**.
