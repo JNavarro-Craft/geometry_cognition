@@ -96,6 +96,7 @@ public class LocalHttpBridge
         var allowedMethod =
             (isV1Live && path == "/v1/live/scene/summary" && method == "GET")
             || (isV1Live && path == "/v1/live/objects/query" && method == "POST")
+            || (isV1Live && path == "/v1/live/contacts" && method == "POST")
             || (isV1Live && path == "/v1/live/definitions" && method == "GET")
             || (isV1Live && path == "/v1/live/definition_objects" && method == "GET")
             || (isV1Live
@@ -411,6 +412,25 @@ public class LocalHttpBridge
             return true;
         }
 
+        if (path == "/v1/live/contacts" && method == "POST")
+        {
+            var body = ReadRequestBody(req);
+            var contactIds = ParseRequestedObjectIds(req, body);
+            var tolerance = ParseDoubleFromBodyOrQuery(req, body, "tolerance", 1e-3);
+            if (contactIds.Count == 0)
+            {
+                HttpJson.Write(res, 400, HttpJson.Error("compute_contacts requires object_ids (in body or query).", "bad_request"));
+                return true;
+            }
+            var contacts = ExecuteOnUiThread(() =>
+            {
+                var doc = RequireActiveDoc();
+                return _neutralGeometryService.ComputeContacts(doc, contactIds, tolerance);
+            });
+            HttpJson.Write(res, 200, contacts);
+            return true;
+        }
+
         if (path == "/v1/live/definitions" && method == "GET")
         {
             var defs = ExecuteOnUiThread(() =>
@@ -471,6 +491,28 @@ public class LocalHttpBridge
             return Math.Max(min, Math.Min(max, defaultValue));
         }
         return Math.Max(min, Math.Min(max, v));
+    }
+
+    private static double ParseDoubleFromBodyOrQuery(HttpListenerRequest req, string body, string key, double defaultValue)
+    {
+        var raw = req.QueryString[key]?.Trim();
+        if (!string.IsNullOrWhiteSpace(raw)
+            && double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var qv))
+        {
+            return qv;
+        }
+        if (!string.IsNullOrWhiteSpace(body))
+        {
+            // Match "key": <number> (int, float, or scientific) in the JSON body.
+            var m = System.Text.RegularExpressions.Regex.Match(
+                body, "\"" + System.Text.RegularExpressions.Regex.Escape(key) + "\"\\s*:\\s*(-?\\d+(?:\\.\\d+)?(?:[eE][-+]?\\d+)?)");
+            if (m.Success
+                && double.TryParse(m.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var bv))
+            {
+                return bv;
+            }
+        }
+        return defaultValue;
     }
 
     private static List<string> ReadListQueryParam(HttpListenerRequest req, string key)

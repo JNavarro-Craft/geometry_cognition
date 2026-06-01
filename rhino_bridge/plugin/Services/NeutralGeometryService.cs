@@ -492,6 +492,259 @@ public class NeutralGeometryService
         return result;
     }
 
+    // Detect REAL contacts between solids (not bbox overlap) and report WHERE the
+    // contact is, not just which pair touches. The location is the whole point: it is
+    // the difference between "these two pieces touch" and "the connector sits here".
+    //
+    // Agnostic acid test (see docs/agnostic_principle.md):
+    //   1. Exists in any domain?  ✓ — "two solids touch here" is meaningful for a
+    //      mechanical assembly, a 3D character, an anatomy scan; nothing about wood.
+    //   2. Needs to know what the object represents?  ✓ NO — it operates on raw breps;
+    //      it never asks "is this a stud / a plate / a connector".
+    //   3. Client can derive it from raw primitives?  ✗ — requires a geometry engine
+    //      (brep-brep intersection); the client cannot compute it from bbox/edges alone.
+    //   4. An LLM can conclude it from raw geometric data?  ✗ — an LLM cannot run
+    //      exact brep intersection from coordinates, so this is a primitive to expose,
+    //      not a use to bake in. (Deducing "extremity" / "joint" / "graph" FROM these
+    //      contacts is the LLM's job — those would be leaks.)
+    //
+    // contact_type:
+    //   "point"   -> contact_point          (touching at a vertex/edge tip)
+    //   "curve"   -> contact_curve (polyline samples) (touching along an edge/seam)
+    //   "surface" -> contact_region_bbox + approx_area (face-on-face overlap)
+    //
+    // Performance: broad phase filters pairs by padded-AABB overlap (cheap) before the
+    // expensive brep-brep intersection, so it scales to large object sets — the caller
+    // already bounds the work by passing the object_ids of interest.
+    public Dictionary<string, object> ComputeContacts(
+        RhinoDoc doc,
+        IReadOnlyList<string> objectIds,
+        double tolerance)
+    {
+        var tol = tolerance > 0 && !double.IsNaN(tolerance) && !double.IsInfinity(tolerance)
+            ? tolerance
+            : 1e-3;
+
+        // Resolve requested objects to (id, brep, padded bbox). Non-brep / missing are
+        // reported in `skipped` so the result is honest about what was evaluated.
+        var items = new List<(string Id, Brep Brep, BoundingBox Box)>();
+        var skipped = new List<object>();
+        foreach (var token in objectIds ?? Array.Empty<string>())
+        {
+            var obj = TryFindObject(doc, token);
+            if (obj is null)
+            {
+                skipped.Add(new Dictionary<string, object> { ["object_id"] = token ?? string.Empty, ["reason"] = "not_found" });
+                continue;
+            }
+            var brep = AsBrep(obj.Geometry);
+            if (brep is null)
+            {
+                skipped.Add(new Dictionary<string, object>
+                {
+                    ["object_id"] = obj.Id.ToString(),
+                    ["reason"] = "not_a_solid_brep",
+                    ["type"] = obj.Geometry?.ObjectType.ToString() ?? "Unknown",
+                });
+                continue;
+            }
+            var box = GetValidBbox(brep);
+            if (!box.IsValid)
+            {
+                skipped.Add(new Dictionary<string, object> { ["object_id"] = obj.Id.ToString(), ["reason"] = "no_valid_bbox" });
+                continue;
+            }
+            box.Inflate(tol);
+            items.Add((obj.Id.ToString(), brep, box));
+        }
+
+        var contacts = new List<object>();
+        var pairsTested = 0;
+        for (int i = 0; i < items.Count; i++)
+        {
+            for (int j = i + 1; j < items.Count; j++)
+            {
+                // Broad phase: skip pairs whose (padded) bboxes do not overlap.
+                if (!BboxesIntersect(items[i].Box, items[j].Box))
+                {
+                    continue;
+                }
+                pairsTested++;
+                var contact = EvaluateBrepContact(items[i].Id, items[i].Brep, items[j].Id, items[j].Brep, tol);
+                if (contact is not null)
+                {
+                    contacts.Add(contact);
+                }
+            }
+        }
+
+        return new Dictionary<string, object>
+        {
+            ["source"] = "rhino_bridge",
+            ["api"] = "v1_live",
+            ["tolerance"] = tol,
+            ["evaluated_count"] = items.Count,
+            ["pairs_tested"] = pairsTested,
+            ["contact_count"] = contacts.Count,
+            ["contacts"] = contacts,
+            ["skipped"] = skipped,
+        };
+    }
+
+    private static Brep? AsBrep(GeometryBase? geometry)
+    {
+        if (geometry is Brep brep)
+        {
+            return brep;
+        }
+        if (geometry is Extrusion ext)
+        {
+            try { return ext.ToBrep(true); } catch { return null; }
+        }
+        if (geometry is Surface srf)
+        {
+            try { return srf.ToBrep(); } catch { return null; }
+        }
+        return null;
+    }
+
+    private static Dictionary<string, object>? EvaluateBrepContact(
+        string idA, Brep a, string idB, Brep b, double tol)
+    {
+        Curve[]? curves = null;
+        Point3d[]? points = null;
+        bool ok;
+        try
+        {
+            ok = Intersection.BrepBrep(a, b, tol, out curves, out points);
+        }
+        catch
+        {
+            return null;
+        }
+        if (!ok)
+        {
+            return null;
+        }
+
+        var curveList = curves ?? Array.Empty<Curve>();
+        var pointList = points ?? Array.Empty<Point3d>();
+        if (curveList.Length == 0 && pointList.Length == 0)
+        {
+            return null;
+        }
+
+        // Gather all intersection geometry to a single bounding region, used to decide
+        // point vs curve vs surface and to report the contact location.
+        var region = BoundingBox.Unset;
+        double totalCurveLength = 0.0;
+        var polylineSamples = new List<object>();
+        foreach (var c in curveList)
+        {
+            if (c is null) continue;
+            var cb = c.GetBoundingBox(true);
+            if (cb.IsValid) region = region.IsValid ? BoundingBox.Union(region, cb) : cb;
+            try { totalCurveLength += c.GetLength(); } catch { }
+            foreach (var p in SampleCurve(c, 12))
+            {
+                polylineSamples.Add(new List<double> { p.X, p.Y, p.Z });
+            }
+        }
+        foreach (var p in pointList)
+        {
+            region = region.IsValid ? BoundingBox.Union(region, new BoundingBox(p, p)) : new BoundingBox(p, p);
+        }
+
+        // Classify. A surface contact (face-on-face) shows up as closed/area-bounding
+        // intersection curves: if the intersection curves enclose a measurable planar
+        // area, report it as surface with region bbox + approx_area. Otherwise, curves
+        // -> curve contact; only points -> point contact.
+        var diag = region.IsValid ? region.Diagonal : new Vector3d(0, 0, 0);
+        double regionArea = EstimatePlanarContactArea(curveList);
+
+        var result = new Dictionary<string, object>
+        {
+            ["pair"] = new List<object> { idA, idB },
+            ["contact_point"] = null!,
+            ["contact_curve"] = null!,
+            ["contact_region_bbox"] = null!,
+        };
+
+        if (regionArea > tol * tol && curveList.Length > 0)
+        {
+            result["contact_type"] = "surface";
+            result["contact_region_bbox"] = BboxMinMaxOnly(region);
+            result["approx_area"] = regionArea;
+        }
+        else if (curveList.Length > 0)
+        {
+            result["contact_type"] = "curve";
+            result["contact_curve"] = polylineSamples;
+            result["approx_area"] = 0.0;
+        }
+        else
+        {
+            result["contact_type"] = "point";
+            var p0 = pointList[0];
+            result["contact_point"] = new List<double> { p0.X, p0.Y, p0.Z };
+            result["approx_area"] = 0.0;
+        }
+        return result;
+    }
+
+    private static List<Point3d> SampleCurve(Curve curve, int count)
+    {
+        var pts = new List<Point3d>();
+        if (curve is null) return pts;
+        count = Math.Max(2, count);
+        try
+        {
+            var dom = curve.Domain;
+            for (int k = 0; k < count; k++)
+            {
+                var t = dom.ParameterAt(k / (double)(count - 1));
+                pts.Add(curve.PointAt(t));
+            }
+        }
+        catch
+        {
+            // Fall back to endpoints if parameterization fails.
+            try { pts.Add(curve.PointAtStart); pts.Add(curve.PointAtEnd); } catch { }
+        }
+        return pts;
+    }
+
+    // Approximate the area enclosed by intersection curves. Face-on-face contact yields
+    // closed boundary curves; their planar area is the contact patch. Open curves
+    // (edge seams) enclose ~0, which keeps them classified as "curve". Best-effort:
+    // joins curve fragments, then sums planar areas of the resulting closed loops.
+    private static double EstimatePlanarContactArea(Curve[] curves)
+    {
+        if (curves is null || curves.Length == 0)
+        {
+            return 0.0;
+        }
+        try
+        {
+            var joined = Curve.JoinCurves(curves.Where(c => c is not null), 1e-3) ?? Array.Empty<Curve>();
+            double area = 0.0;
+            foreach (var c in joined)
+            {
+                if (c is null || !c.IsClosed) continue;
+                var amp = AreaMassProperties.Compute(c);
+                if (amp is not null && !double.IsNaN(amp.Area))
+                {
+                    area += Math.Abs(amp.Area);
+                }
+            }
+            return area;
+        }
+        catch
+        {
+            return 0.0;
+        }
+    }
+
     public Dictionary<string, object> ExtractScene(RhinoDoc doc)
     {
         var objects = doc.Objects

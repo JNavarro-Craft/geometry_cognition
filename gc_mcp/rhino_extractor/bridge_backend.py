@@ -80,6 +80,22 @@ def live_objects_query_bridge(
     )
 
 
+def live_compute_contacts_bridge(
+    base_url: str,
+    timeout_seconds: float,
+    object_ids: list[str],
+    tolerance: float = 1e-3,
+) -> dict[str, Any]:
+    body = json.dumps({"object_ids": list(object_ids), "tolerance": tolerance}).encode("utf-8")
+    return _bridge_json_request(
+        base_url,
+        "/v1/live/contacts",
+        timeout_seconds,
+        method="POST",
+        body=body,
+    )
+
+
 def live_object_detail_bridge(
     base_url: str,
     timeout_seconds: float,

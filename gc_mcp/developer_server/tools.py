@@ -22,6 +22,7 @@ from gc_mcp.rhino_extractor.bridge_backend import (
     _bridge_json_request,
     extract_objects_bridge,
     fetch_scene_via_live_query_and_extract_objects,
+    live_compute_contacts_bridge,
     live_definition_objects_bridge,
     live_list_definitions_bridge,
     live_object_detail_bridge,
@@ -791,6 +792,72 @@ def _parse_metric(spec: str) -> tuple[str, str | None] | None:
         if op in ("sum", "avg", "min", "max") and field:
             return (op, field)
     return None
+
+
+def compute_contacts(
+    object_ids: list[str] | None = None,
+    filters: dict[str, Any] | None = None,
+    tolerance: float = 1e-3,
+) -> dict[str, Any]:
+    """Detect REAL contacts between solids and report WHERE each contact is.
+
+    This is the topological-reasoning primitive: it returns not just *which* pairs
+    touch but the *location* of the touch (point / curve / surface patch). That
+    location is what lets a caller (or an LLM) deduce extremities, joints, where a
+    connector sits, etc. — none of which this tool computes or names.
+
+    Inputs (one of):
+      - ``object_ids``: explicit list of object GUIDs to test against each other.
+      - ``filters``: same AND-combined filters as ``query_objects``; the matching
+        objects' ids are resolved from the live model and used as the set. Lets you
+        say "contacts among all breps on layer X" without listing GUIDs.
+    ``tolerance``: max gap (model units) treated as touching. Default 1e-3.
+
+    Each contact: ``{pair, contact_type, contact_point|contact_curve|
+    contact_region_bbox, approx_area}``. ``contact_type`` is ``point`` | ``curve`` |
+    ``surface``. Objects that are not solid breps are reported in ``skipped``.
+
+    Agnostic acid test (see docs/agnostic_principle.md):
+      1. Exists in any domain?  ✓ "two solids touch here" is meaningful for a
+         mechanical assembly, a character mesh, an anatomy scan — nothing about wood.
+      2. Needs to know what the object represents?  ✓ NO — it runs on raw breps and
+         never asks whether a piece is a stud, plate or connector.
+      3. Client can derive it from raw primitives?  ✓ NO — it needs an exact
+         brep-brep intersection engine, unavailable to the client from bbox/edges.
+      4. An LLM can conclude it from raw geometric data?  ✓ NO — an LLM cannot run
+         exact intersection from coordinates; so this is a primitive to expose, not a
+         use to bake in. (Building the contact graph, finding joints or extremities
+         FROM these contacts is the LLM's job — those would be leaks.)
+    """
+    bridge_url, timeout = _bridge_settings()
+
+    ids = [str(x) for x in (object_ids or [])]
+    resolve_warnings: list[str] = []
+    if not ids and filters:
+        # Resolve ids from a filter set via the live query, so the caller can scope by
+        # layer/type/user_text instead of enumerating GUIDs.
+        try:
+            objs, resolve_warnings = _fetch_objects(bridge_url, timeout, filters=None)
+        except Exception as exc:
+            return _live_only_error(f"{type(exc).__name__}: {exc}")
+        flt = filters if isinstance(filters, dict) else {}
+        ids = [str(o.get("object_id")) for o in objs if _object_matches_query(o, flt) and o.get("object_id")]
+
+    if not ids:
+        return {
+            "error": "no_object_ids",
+            "message": "compute_contacts needs object_ids, or filters that resolve to objects.",
+        }
+
+    try:
+        result = live_compute_contacts_bridge(bridge_url, timeout, ids, tolerance=tolerance)
+    except Exception as exc:
+        return _live_only_error(f"{type(exc).__name__}: {exc}")
+
+    if resolve_warnings:
+        existing = result.get("fetch_warnings")
+        result["fetch_warnings"] = ([*existing] if isinstance(existing, list) else []) + resolve_warnings
+    return result
 
 
 def aggregate(
