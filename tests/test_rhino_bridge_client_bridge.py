@@ -1,7 +1,7 @@
 import os
 
-from gc_mcp.rhino_extractor import backend_adapter
-from gc_mcp.rhino_extractor.tools import extract_objects
+from gc_mcp.rhino_bridge_client import backend_adapter
+from gc_mcp.rhino_bridge_client.tools import extract_objects
 from shared.contracts import validate_payload
 
 
@@ -129,7 +129,7 @@ def test_normalize_drops_empty_bbox():
     """Bridge may return bbox:{} for geometry with no valid bounding box
     (empty/degenerate annotations, points). The normalizer must drop it rather
     than emit an invalid {} that fails object_schema.v1 (min/max required)."""
-    from gc_mcp.rhino_extractor.backend_adapter import _normalize_bridge_objects
+    from gc_mcp.rhino_bridge_client.backend_adapter import _normalize_bridge_objects
 
     payload = {
         "objects": [
@@ -152,7 +152,7 @@ def test_normalize_block_name_from_definition_name():
     """The bridge emits the block name under block_info.definition_name (not
     block_name). The normalizer must map it so block_context.block_name is set,
     otherwise describe_model groups every instance as '(unnamed)'."""
-    from gc_mcp.rhino_extractor.backend_adapter import _normalize_bridge_objects
+    from gc_mcp.rhino_bridge_client.backend_adapter import _normalize_bridge_objects
 
     payload = {
         "objects": [

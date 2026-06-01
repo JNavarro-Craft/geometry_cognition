@@ -3,8 +3,8 @@
 import json
 from pathlib import Path
 
-from gc_mcp.rhino_extractor.server import extract_objects_tool
-from gc_mcp.rhino_extractor.tools import extract_objects
+from gc_mcp.rhino_bridge_client.server import extract_objects_tool
+from gc_mcp.rhino_bridge_client.tools import extract_objects
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SMOKE_EQ = FIXTURES / "gc_smoke_test_01.equivalent.json"

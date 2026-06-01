@@ -77,7 +77,7 @@ Estos endpoints evitan volcar toda la escena en un único payload. El cliente Py
 - `raw_geometry_summary` incluye `length` para curvas (longitud real vía `Curve.GetLength()`), además de bbox / volume / area / face_count / edge_count / is_closed.
 - La respuesta de `POST /v1/live/objects/query` incluye `filter_warnings.unknown_filter_keys` si se envían claves de filtro no reconocidas (en vez de ignorarlas en silencio).
 
-### Variables de entorno (lado Python `gc_mcp/rhino_extractor`)
+### Variables de entorno (lado Python `gc_mcp/rhino_bridge_client`)
 
 - `GC_BACKEND_MODE`: `bridge` para usar bridge HTTP; cualquier otro valor mantiene extractor local.
 - `GC_BRIDGE_BASE_URL`: base URL del bridge (default `http://127.0.0.1:8765`).

@@ -5,7 +5,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from gc_mcp.rhino_extractor.tools import extract_objects
+from gc_mcp.rhino_bridge_client.tools import extract_objects
 
 
 def main() -> None:

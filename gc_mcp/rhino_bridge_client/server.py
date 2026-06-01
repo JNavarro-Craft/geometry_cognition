@@ -11,11 +11,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from gc_mcp.rhino_extractor.tools import extract_objects
+from gc_mcp.rhino_bridge_client.tools import extract_objects
 
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP("rhino_extractor")
+mcp = FastMCP("rhino_bridge_client")
 
 
 def _normalize_mcp_tool_arguments(
@@ -32,7 +32,7 @@ def _normalize_mcp_tool_arguments(
     Accept both shapes.
     """
     logger.info(
-        "rhino_extractor MCP: received input_path=%r payload_keys=%s",
+        "rhino_bridge_client MCP: received input_path=%r payload_keys=%s",
         input_path,
         sorted(payload.keys()) if isinstance(payload, dict) else None,
     )
@@ -44,7 +44,7 @@ def _normalize_mcp_tool_arguments(
         if nested is not None and str(nested).strip():
             chosen = str(nested).strip()
     out: dict[str, Any] = {"input_path": chosen} if chosen else {}
-    logger.info("rhino_extractor MCP: normalized input_path for extract_objects=%r", chosen)
+    logger.info("rhino_bridge_client MCP: normalized input_path for extract_objects=%r", chosen)
     return out
 
 

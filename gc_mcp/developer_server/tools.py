@@ -18,8 +18,8 @@ from gc_mcp.developer_server.storage import (
     snapshots_dir,
     write_snapshot,
 )
-from gc_mcp.rhino_extractor.backend_adapter import _normalize_bridge_objects
-from gc_mcp.rhino_extractor.bridge_backend import (
+from gc_mcp.rhino_bridge_client.backend_adapter import _normalize_bridge_objects
+from gc_mcp.rhino_bridge_client.bridge_backend import (
     _bridge_json_request,
     extract_objects_bridge,
     fetch_scene_via_live_query_and_extract_objects,

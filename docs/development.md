@@ -66,18 +66,18 @@ pytest -q
 
 ## Estado conocido de la suite
 
-A fecha de la consolidación del pipeline, `pytest -q` da aproximadamente
-**92 passed, 7 failed, 1 skipped**. Los 7 fallos son **preexistentes y esperados**:
-pertenecen a módulos archivados en `gc_mcp/_archive/` y a un workflow simplificado.
+Tras la segunda consolidación (solo `developer_server` activo), `pytest -q` sobre
+`tests/` da **86 passed, 0 failed**. La suite activa cubre únicamente los módulos
+activos:
 
-- `tests/test_hypothesis_engine.py`: prueba `hypothesis_engine`, hoy en `_archive/`.
-- `tests/test_minimal_workflow.py`: llama `run(..., include_domain=True)`; el `run()`
-  actual de `workflows/run_minimal_analysis.py` solo encadena
-  `rhino_extractor → geometry_kernel` (evidence_graph / hypotheses / domain fueron
-  archivados). El test quedó desincronizado con el pipeline simplificado.
+- `developer_server` (el MCP en uso).
+- `rhino_bridge_client` (capa de transporte: `bridge_backend`, `backend_adapter`,
+  `tools`).
 
-Las áreas activas pasan limpio: `developer_server`, `rhino_extractor`,
-`geometry_kernel`, smoke pipeline.
+Los módulos del pipeline anterior (`reader_server`, `geometry_kernel`,
+`verification_planner`/`executor`, `hypothesis_engine`, etc.) y sus tests viven en
+`gc_mcp/_archive/` (y `_archive/_tests`, `_scripts`, `_workflows`). No se ejecutan en
+la suite activa, así que no hay fallos preexistentes que tolerar.
 
 ## Plugin Rhino (bridge C#)
 

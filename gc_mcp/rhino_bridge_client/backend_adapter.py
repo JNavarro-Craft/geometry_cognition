@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from shared.contracts import validate_payload
 
-from gc_mcp.rhino_extractor.bridge_backend import (
+from gc_mcp.rhino_bridge_client.bridge_backend import (
     extract_objects_bridge,
     fetch_scene_via_live_query_and_extract_objects,
 )

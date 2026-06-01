@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from gc_mcp.rhino_extractor import backend_adapter, bridge_backend
-from gc_mcp.rhino_extractor.tools import extract_objects
+from gc_mcp.rhino_bridge_client import backend_adapter, bridge_backend
+from gc_mcp.rhino_bridge_client.tools import extract_objects
 
 
 def test_bridge_health_calls_health_endpoint(monkeypatch):

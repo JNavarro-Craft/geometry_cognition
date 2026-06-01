@@ -6,7 +6,7 @@
 - Input esperado: estado actual del modelo Rhino expuesto por el bridge en `GC_BRIDGE_BASE_URL`.
 - Output esperado: snapshots persistidos en `${GC_OUTPUTS_DIR}/dev_snapshots/` y diffs estructurados.
 - Prohibiciones: no introducir semántica de dominio. Detecta cambios, no interpreta su causa. No comparte estado con `reader_server` (es hermano, no hijo).
-- Relación con otros MCPs: importa primitivos compartidos (`gc_mcp.rhino_extractor.bridge_backend`, `gc_mcp.rhino_extractor.backend_adapter._normalize_bridge_objects`). No depende de `reader_server`.
+- Relación con otros módulos: importa la capa de transporte `gc_mcp.rhino_bridge_client.bridge_backend` y `gc_mcp.rhino_bridge_client.backend_adapter._normalize_bridge_objects` (cliente del bridge Rhino, no un MCP conectado). Es el único MCP activo; el resto fueron archivados.
 
 ## Flujo soportado
 

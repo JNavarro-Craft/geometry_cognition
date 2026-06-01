@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from gc_mcp.rhino_extractor import tools as rhino_tools
+from gc_mcp.rhino_bridge_client import tools as rhino_tools
 
 
 class _FakePoint:

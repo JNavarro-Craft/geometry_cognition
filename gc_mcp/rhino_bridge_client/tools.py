@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from gc_mcp.rhino_extractor.backend_adapter import extract_objects as extract_objects_via_backend
+from gc_mcp.rhino_bridge_client.backend_adapter import extract_objects as extract_objects_via_backend
 from shared.contracts import validate_payload
 
 logger = logging.getLogger(__name__)
@@ -277,7 +277,7 @@ def _extract_objects_error(
     path_used: str | None,
 ) -> dict[str, Any]:
     return {
-        "mcp_name": "rhino_extractor",
+        "mcp_name": "rhino_bridge_client",
         "role": "extractor",
         "status": "error",
         "message": message,
@@ -315,7 +315,7 @@ def extract_objects(payload: dict[str, Any]) -> dict[str, Any]:
             path_used = str(path.resolve())
         except OSError:
             path_used = str(path)
-    logger.info("rhino_extractor: input_path received=%r path_used=%r", raw, path_used)
+    logger.info("rhino_bridge_client: input_path received=%r path_used=%r", raw, path_used)
     try:
         objects, backend_mode, backend_warnings = extract_objects_via_backend(raw, _extract_from_local_path)
     except Exception as exc:
@@ -326,7 +326,7 @@ def extract_objects(payload: dict[str, Any]) -> dict[str, Any]:
         )
 
     return {
-        "mcp_name": "rhino_extractor",
+        "mcp_name": "rhino_bridge_client",
         "role": "extractor",
         "status": "ok",
         "message": f"Extracted {len(objects)} normalized objects via {backend_mode}.",
