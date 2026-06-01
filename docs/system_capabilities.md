@@ -111,13 +111,61 @@ Todo esto se queda como conocimiento de la sesión/prompt, no como código del M
   anomalías observacionales ya está acotada arriba como agnóstica).
 - **Fase 5** — visibilidad (`IsHidden`), color, display mode.
 
-### Pendiente operativo
-
-- **Push sin hacer**: commits locales en `main` esperando que se resuelva el remoto.
-
 ---
 
 **En una frase**: el sistema pasó de "razonar sobre una cercha" a **reconstruir un
 edificio completo y auditar su cadena de producción**, manteniéndose estrictamente
 agnóstico; y las mejoras restantes son **solo más primitivos de medición + higiene de
 transporte** — todo análisis de dominio se queda, por diseño, en el cliente.
+
+---
+
+## Estado actual del sistema (checklist)
+
+> **El principio agnóstico aplica también a este checklist, no solo a las tools.** Una
+> frase descriptiva puede "colar" lenguaje de dominio sin que ningún test la atrape:
+> el set es canónicamente completo para **razonamiento geométrico**; que el cliente lo
+> aplique a un dominio estructural, mecánico, médico o geológico es decisión suya. Si
+> un item nombra un uso ("nesting", "aprovechamiento") en vez de la operación, está mal
+> redactado. Para "qué cambió y cuándo", ver [`CHANGELOG.md`](CHANGELOG.md).
+
+### ✅ Incorporado y validado en vivo
+
+| Categoría | Tool / capacidad | Estado |
+|---|---|---|
+| Medición | `obb_dimensions` / `obb_longest/mid/shortest`, `longest_edge` | ✅ validado |
+| Medición | `get_vertices`, `get_edges`, `get_faces` (con topología `edge_indices`) | ✅ validado |
+| Relación espacial | `compute_contacts` (point/curve/surface + ubicación) | ✅ validado |
+| Relación espacial | `compute_distance` (mín. superficie-superficie + bbox_gap) | ✅ validado |
+| Relación espacial | `find_nearby` (objetos dentro de radio, ordenados) | ✅ validado |
+| Proyección | `project_to_plane` (3D→2D, polígonos UV) | ✅ validado |
+| Descubrimiento | `describe_model`, `inspect_object` | ✅ |
+| Consulta | `query_objects` (filtros AND, live/snapshot, paginación) | ✅ validado |
+| Cómputo | `aggregate` (group-by + count/sum/avg/min/max) | ✅ |
+| Bloques | `list_block_definitions`, `expand_block`, `bill_of_materials` (con summary) | ✅ validado |
+| Snapshots | `take_snapshot`/`list`/`delete`/`prune_snapshots` | ✅ |
+| Cambios | `diff_snapshots`, `diff_object`, `assert_change` | ✅ |
+| Transporte | paginación (`offset`/`next_offset`) + `summary` en tools pesadas | ✅ validado |
+| Docs | `agnostic_principle.md`, `system_capabilities.md` | ✅ |
+| Repo | GitHub `JNavarro-Craft/geometry_cognition`, sincronizado | ✅ |
+
+### ❌ Falta por abordar (todo agnóstico o de cliente, nada bloqueante)
+
+| Categoría | Item | Tipo |
+|---|---|---|
+| Primitivo | `compute_2d_boolean` — unión/intersección/diferencia de polígonos | agnóstico |
+| Primitivo | Posiciones 2D de objetos en una disposición existente (derivable de `inspect_object` + `project_to_plane`) | agnóstico |
+| Primitivo | `compute_contacts` / `compute_distance` entre dos conjuntos (A×B) | agnóstico |
+| Primitivo | `sample_curve` — muestreo de curvas | agnóstico (Tier 2) |
+| Plan v2 — Fase 4 | `assert_change` por valores; diff por bloques; anomalías observacionales | agnóstico |
+| Plan v2 — Fase 5 | visibilidad (`IsHidden`), color, display mode | agnóstico |
+| Menor | `bbox_center`/geometría null en ruta de `fields` | técnico |
+| Menor | distinguir `filter_unknown_key` de `filter_valid_empty` en el MCP | técnico |
+| Mantenimiento | sin suite automatizada para tools nuevas (validación manual en vivo) | proceso |
+| Mantenimiento | poda de snapshots viejos acumulados | proceso |
+
+### 🚫 Fuera por diseño (leaks — nunca tools)
+
+Nesting / plan de corte óptimo · detección de empalmes · QA modelo↔documentación ·
+clasificación de roles · cualquier `detect_*`/`analyze_*`/`audit_*`. Son razonamiento
+de cliente sobre los primitivos, no infraestructura.
