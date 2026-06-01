@@ -314,6 +314,287 @@ public class NeutralGeometryService
         return BuildLiveObjectBasic(doc, obj, userTextMode);
     }
 
+    // ---- Detailed per-element geometry access (vertices / edges / faces) ----
+    //
+    // These expose the raw topology+geometry of a solid that the aggregate fields
+    // (face_count, face_areas[i], face_normals[i], edge_count) cannot: the actual
+    // vertex coordinates, each edge's endpoints/length, and each face's boundary
+    // (which edges bound it). Universal across Brep / Extrusion / Mesh; an
+    // unsupported type raises an honest error rather than returning empty.
+
+    private const double PlanarToleranceMm = 1e-3;
+
+    // Resolve an object's geometry to a Brep for per-element access. Mesh is handled
+    // separately (different topology API), so this returns null for Mesh on purpose.
+    private static Brep? GeometryAsBrepForElements(GeometryBase? geometry)
+    {
+        if (geometry is Brep b) return b;
+        if (geometry is Extrusion ext) { try { return ext.ToBrep(true); } catch { return null; } }
+        if (geometry is Surface s) { try { return s.ToBrep(); } catch { return null; } }
+        return null;
+    }
+
+    public Dictionary<string, object> LiveGetVertices(RhinoDoc doc, string objectIdToken)
+    {
+        var (obj, geometry) = ResolveGeometryOrThrow(doc, objectIdToken);
+        var vertices = new List<object>();
+
+        var brep = GeometryAsBrepForElements(geometry);
+        if (brep is not null)
+        {
+            int i = 0;
+            foreach (var v in brep.Vertices)
+            {
+                var p = v.Location;
+                vertices.Add(new Dictionary<string, object> { ["index"] = i++, ["coord"] = new List<double> { p.X, p.Y, p.Z } });
+            }
+        }
+        else if (geometry is Mesh mesh)
+        {
+            var tv = mesh.TopologyVertices;
+            for (int i = 0; i < tv.Count; i++)
+            {
+                var p = tv[i];
+                vertices.Add(new Dictionary<string, object> { ["index"] = i, ["coord"] = new List<double> { p.X, p.Y, p.Z } });
+            }
+        }
+        else
+        {
+            throw new InvalidOperationException($"get_vertices: unsupported geometry type '{geometry?.ObjectType.ToString() ?? "Unknown"}' (Brep/Extrusion/Mesh only).");
+        }
+
+        return ElementResult(obj, geometry, "vertices", vertices);
+    }
+
+    public Dictionary<string, object> LiveGetEdges(RhinoDoc doc, string objectIdToken)
+    {
+        var (obj, geometry) = ResolveGeometryOrThrow(doc, objectIdToken);
+        var edges = new List<object>();
+
+        var brep = GeometryAsBrepForElements(geometry);
+        if (brep is not null)
+        {
+            for (int i = 0; i < brep.Edges.Count; i++)
+            {
+                edges.Add(BrepEdgeToDict(i, brep.Edges[i]));
+            }
+        }
+        else if (geometry is Mesh mesh)
+        {
+            var te = mesh.TopologyEdges;
+            for (int i = 0; i < te.Count; i++)
+            {
+                var line = te.EdgeLine(i);
+                edges.Add(new Dictionary<string, object>
+                {
+                    ["index"] = i,
+                    ["start"] = new List<double> { line.From.X, line.From.Y, line.From.Z },
+                    ["end"] = new List<double> { line.To.X, line.To.Y, line.To.Z },
+                    ["length"] = line.Length,
+                    ["is_curved"] = false,   // mesh edges are straight segments
+                    ["samples"] = null!,
+                });
+            }
+        }
+        else
+        {
+            throw new InvalidOperationException($"get_edges: unsupported geometry type '{geometry?.ObjectType.ToString() ?? "Unknown"}' (Brep/Extrusion/Mesh only).");
+        }
+
+        return ElementResult(obj, geometry, "edges", edges);
+    }
+
+    public Dictionary<string, object> LiveGetFaces(RhinoDoc doc, string objectIdToken)
+    {
+        var (obj, geometry) = ResolveGeometryOrThrow(doc, objectIdToken);
+        var faces = new List<object>();
+
+        var brep = GeometryAsBrepForElements(geometry);
+        if (brep is not null)
+        {
+            for (int i = 0; i < brep.Faces.Count; i++)
+            {
+                faces.Add(BrepFaceToDict(i, brep.Faces[i]));
+            }
+        }
+        else if (geometry is Mesh mesh)
+        {
+            mesh.Normals.ComputeNormals();
+            var te = mesh.TopologyEdges;
+            for (int i = 0; i < mesh.Faces.Count; i++)
+            {
+                faces.Add(MeshFaceToDict(i, mesh, te));
+            }
+        }
+        else
+        {
+            throw new InvalidOperationException($"get_faces: unsupported geometry type '{geometry?.ObjectType.ToString() ?? "Unknown"}' (Brep/Extrusion/Mesh only).");
+        }
+
+        return ElementResult(obj, geometry, "faces", faces);
+    }
+
+    private (RhinoObject Obj, GeometryBase Geometry) ResolveGeometryOrThrow(RhinoDoc doc, string objectIdToken)
+    {
+        var obj = TryFindObject(doc, objectIdToken);
+        if (obj is null)
+        {
+            throw new KeyNotFoundException($"Object not found: {objectIdToken}");
+        }
+        var geometry = obj.Geometry;
+        if (geometry is null)
+        {
+            throw new InvalidOperationException($"Object has no geometry: {objectIdToken}");
+        }
+        return (obj, geometry);
+    }
+
+    private static Dictionary<string, object> ElementResult(
+        RhinoObject obj, GeometryBase geometry, string key, List<object> items)
+    {
+        return new Dictionary<string, object>
+        {
+            ["source"] = "rhino_bridge",
+            ["api"] = "v1_live",
+            ["object_id"] = obj.Id.ToString(),
+            ["type"] = geometry.ObjectType.ToString(),
+            ["count"] = items.Count,
+            [key] = items,
+        };
+    }
+
+    private static Dictionary<string, object> BrepEdgeToDict(int index, BrepEdge edge)
+    {
+        var start = edge.PointAtStart;
+        var end = edge.PointAtEnd;
+        double length;
+        try { length = edge.GetLength(); } catch { length = start.DistanceTo(end); }
+        // is_curved: not a straight line within tolerance. IsLinear is the direct test.
+        bool isCurved;
+        try { isCurved = !edge.IsLinear(PlanarToleranceMm); } catch { isCurved = false; }
+
+        var dict = new Dictionary<string, object>
+        {
+            ["index"] = index,
+            ["start"] = new List<double> { start.X, start.Y, start.Z },
+            ["end"] = new List<double> { end.X, end.Y, end.Z },
+            ["length"] = length,
+            ["is_curved"] = isCurved,
+            ["samples"] = null!,
+        };
+        if (isCurved)
+        {
+            dict["samples"] = SampleCurve(edge, 12).Select(p => (object)new List<double> { p.X, p.Y, p.Z }).ToList();
+        }
+        return dict;
+    }
+
+    private static Dictionary<string, object> BrepFaceToDict(int index, BrepFace face)
+    {
+        // Normal at the middle of the face's parameter domain.
+        var u = face.Domain(0).Mid;
+        var v = face.Domain(1).Mid;
+        var n = face.NormalAt(u, v);
+        if (!n.IsTiny(1e-9)) n.Unitize();
+
+        double area = 0.0;
+        var centroid = Point3d.Origin;
+        var amp = AreaMassProperties.Compute(face);
+        if (amp is not null)
+        {
+            area = amp.Area;
+            centroid = amp.Centroid;
+        }
+
+        bool isPlanar;
+        try { isPlanar = face.IsPlanar(PlanarToleranceMm); } catch { isPlanar = false; }
+
+        // Topology: which edges bound this face. Walk the loops -> trims -> edge index.
+        // -1 trims (singular/seam without an edge) are skipped. Distinct + sorted.
+        var edgeIdx = new SortedSet<int>();
+        double perimeter = 0.0;
+        var seen = new HashSet<int>();
+        foreach (var loop in face.Loops)
+        {
+            foreach (var trim in loop.Trims)
+            {
+                var ei = trim.Edge?.EdgeIndex ?? -1;
+                if (ei >= 0)
+                {
+                    edgeIdx.Add(ei);
+                    if (seen.Add(ei))
+                    {
+                        try { perimeter += trim.Edge!.GetLength(); } catch { }
+                    }
+                }
+            }
+        }
+
+        return new Dictionary<string, object>
+        {
+            ["index"] = index,
+            ["normal"] = new List<double> { n.X, n.Y, n.Z },
+            ["area"] = area,
+            ["centroid"] = new List<double> { centroid.X, centroid.Y, centroid.Z },
+            ["perimeter"] = perimeter,
+            ["is_planar"] = isPlanar,
+            ["edge_indices"] = edgeIdx.Cast<object>().ToList(),
+        };
+    }
+
+    private static Dictionary<string, object> MeshFaceToDict(int index, Mesh mesh, Rhino.Geometry.Collections.MeshTopologyEdgeList te)
+    {
+        var mf = mesh.Faces[index];
+        var corners = mf.IsQuad
+            ? new[] { mesh.Vertices[mf.A], mesh.Vertices[mf.B], mesh.Vertices[mf.C], mesh.Vertices[mf.D] }
+            : new[] { mesh.Vertices[mf.A], mesh.Vertices[mf.B], mesh.Vertices[mf.C] };
+
+        // Face normal (computed) and centroid.
+        var fn = mesh.FaceNormals.Count > index ? mesh.FaceNormals[index] : new Vector3f(0, 0, 1);
+        var normal = new Vector3d(fn.X, fn.Y, fn.Z);
+        if (!normal.IsTiny(1e-9)) normal.Unitize();
+
+        double cx = 0, cy = 0, cz = 0;
+        foreach (var c in corners) { cx += c.X; cy += c.Y; cz += c.Z; }
+        int nc = corners.Length;
+        var centroid = new Point3d(cx / nc, cy / nc, cz / nc);
+
+        // Area: triangle, or quad as two triangles.
+        double TriArea(Point3f a, Point3f b, Point3f c)
+            => 0.5 * Vector3d.CrossProduct(
+                   new Vector3d(b.X - a.X, b.Y - a.Y, b.Z - a.Z),
+                   new Vector3d(c.X - a.X, c.Y - a.Y, c.Z - a.Z)).Length;
+        double area = mf.IsQuad
+            ? TriArea(corners[0], corners[1], corners[2]) + TriArea(corners[0], corners[2], corners[3])
+            : TriArea(corners[0], corners[1], corners[2]);
+
+        double perimeter = 0.0;
+        for (int i = 0; i < nc; i++)
+        {
+            var a = corners[i];
+            var b = corners[(i + 1) % nc];
+            perimeter += a.DistanceTo(b);
+        }
+
+        var edgeIdx = new SortedSet<int>();
+        var fe = te.GetEdgesForFace(index);
+        if (fe is not null)
+        {
+            foreach (var e in fe) edgeIdx.Add(e);
+        }
+
+        return new Dictionary<string, object>
+        {
+            ["index"] = index,
+            ["normal"] = new List<double> { normal.X, normal.Y, normal.Z },
+            ["area"] = area,
+            ["centroid"] = new List<double> { centroid.X, centroid.Y, centroid.Z },
+            ["perimeter"] = perimeter,
+            ["is_planar"] = true,   // mesh faces (tri/quad) are treated as planar facets
+            ["edge_indices"] = edgeIdx.Cast<object>().ToList(),
+        };
+    }
+
     public Dictionary<string, object> LiveListDefinitions(RhinoDoc doc)
     {
         // List block (instance) definitions with instance counts and a bbox derived

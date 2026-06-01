@@ -23,6 +23,9 @@ from gc_mcp.developer_server.tools import (
     diff_object,
     diff_snapshots,
     expand_block,
+    get_edges,
+    get_faces,
+    get_vertices,
     inspect_object,
     list_block_definitions,
     list_snapshots,
@@ -241,6 +244,32 @@ def inspect_object_tool(
     With detail_level="full", annotation objects (text, dimensions, leaders) include
     an ``annotation_text`` field with their resolved plain_text."""
     return inspect_object(guid=guid, detail_level=detail_level, user_text=user_text)
+
+
+@mcp.tool(name="get_vertices")
+def get_vertices_tool(guid: str) -> dict[str, Any]:
+    """Vertex coordinates of one solid: list of {index, coord:[x,y,z]}. Works for
+    Brep/Extrusion/Mesh; unsupported type -> honest error. Raw geometry the aggregate
+    fields cannot give. Agnostic (docs/agnostic_principle.md): universal, no domain
+    knowledge, not client/LLM-derivable from aggregates -> expose the primitive."""
+    return get_vertices(guid=guid)
+
+
+@mcp.tool(name="get_edges")
+def get_edges_tool(guid: str) -> dict[str, Any]:
+    """Edges of one solid: {index, start, end, length, is_curved, samples}. ``samples``
+    only when curved. ``index`` is referenced by get_faces.edge_indices. Brep/Extrusion/
+    Mesh; unsupported -> honest error. Agnostic per docs/agnostic_principle.md."""
+    return get_edges(guid=guid)
+
+
+@mcp.tool(name="get_faces")
+def get_faces_tool(guid: str) -> dict[str, Any]:
+    """Faces of one solid: {index, normal, area, centroid, perimeter, is_planar,
+    edge_indices}. ``edge_indices`` ties each face to its bounding edges (topology),
+    so a face is part of a solid, not a floating normal. Brep/Extrusion/Mesh;
+    unsupported -> honest error. Agnostic per docs/agnostic_principle.md."""
+    return get_faces(guid=guid)
 
 
 @mcp.tool(name="list_block_definitions")

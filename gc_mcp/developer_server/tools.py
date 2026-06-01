@@ -26,6 +26,7 @@ from gc_mcp.rhino_extractor.bridge_backend import (
     live_definition_objects_bridge,
     live_list_definitions_bridge,
     live_object_detail_bridge,
+    live_object_elements_bridge,
     live_scene_summary_bridge,
 )
 
@@ -1660,6 +1661,74 @@ def inspect_object(
     except Exception as exc:
         return _live_only_error(f"{type(exc).__name__}: {exc}")
     return {"status": "ok", "object_id": guid_text, "detail": payload}
+
+
+# ---------------------------------------------------------------------------
+# detailed per-element geometry: vertices / edges / faces
+# ---------------------------------------------------------------------------
+
+
+def _get_elements(guid: str, element: str) -> dict[str, Any]:
+    guid_text = str(guid or "").strip()
+    if not guid_text:
+        return {"error": "invalid_guid", "message": "guid is empty"}
+    bridge_url, timeout = _bridge_settings()
+    try:
+        return live_object_elements_bridge(bridge_url, timeout, guid_text, element)
+    except Exception as exc:
+        return _live_only_error(f"{type(exc).__name__}: {exc}")
+
+
+def get_vertices(guid: str) -> dict[str, Any]:
+    """Vertex coordinates of one solid: list of {index, coord:[x,y,z]}.
+
+    Works for Brep, Extrusion and Mesh; an unsupported type returns an honest error
+    (not an empty list). This is the raw geometry the aggregate fields cannot give.
+
+    Agnostic acid test (docs/agnostic_principle.md):
+      1. Exists in any domain?  ✓ vertices are universal to any B-rep/mesh.
+      2. Needs to know what the object represents?  ✓ NO — pure geometry.
+      3. Client derivable from raw primitives?  ✓ NO — needs the geometry kernel's
+         topology; not reconstructable from bbox/normals.
+      4. An LLM can conclude it from raw geometric data?  ✓ NO — it cannot infer the
+         real vertex coordinates from face_count/edge_count; expose the primitive.
+    """
+    return _get_elements(guid, "vertices")
+
+
+def get_edges(guid: str) -> dict[str, Any]:
+    """Edges of one solid: list of {index, start, end, length, is_curved, samples}.
+
+    ``samples`` is a polyline approximation, present only when ``is_curved`` is true.
+    Works for Brep, Extrusion and Mesh (mesh edges are straight); unsupported type ->
+    honest error. ``index`` is referenced by get_faces' ``edge_indices`` (topology).
+
+    Agnostic acid test (docs/agnostic_principle.md):
+      1. Exists in any domain?  ✓ edges are universal.
+      2. Needs to know what the object represents?  ✓ NO — pure geometry.
+      3. Client derivable from raw primitives?  ✓ NO — needs the kernel's edge topology.
+      4. An LLM can conclude it from raw geometric data?  ✓ NO — cannot derive each
+         edge's endpoints/length from aggregate counts; expose the primitive.
+    """
+    return _get_elements(guid, "edges")
+
+
+def get_faces(guid: str) -> dict[str, Any]:
+    """Faces of one solid: list of {index, normal, area, centroid, perimeter,
+    is_planar, edge_indices}.
+
+    ``edge_indices`` references get_edges' indices, tying each face to the edges that
+    bound it — the topology that makes a face part of a solid, not a floating normal.
+    Works for Brep, Extrusion and Mesh; unsupported type -> honest error.
+
+    Agnostic acid test (docs/agnostic_principle.md):
+      1. Exists in any domain?  ✓ faces are universal.
+      2. Needs to know what the object represents?  ✓ NO — pure geometry/topology.
+      3. Client derivable from raw primitives?  ✓ NO — needs the kernel's face loops.
+      4. An LLM can conclude it from raw geometric data?  ✓ NO — cannot reconstruct
+         the boundary/edge membership of each face from aggregates; expose it.
+    """
+    return _get_elements(guid, "faces")
 
 
 # ---------------------------------------------------------------------------

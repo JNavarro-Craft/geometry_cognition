@@ -119,6 +119,28 @@ def live_object_detail_bridge(
     )
 
 
+def live_object_elements_bridge(
+    base_url: str,
+    timeout_seconds: float,
+    object_id: str,
+    element: str,
+) -> dict[str, Any]:
+    """Detailed per-element geometry for one object: element in {vertices,edges,faces}.
+    GET /v1/live/objects/{id}/{element}."""
+    from urllib.parse import quote
+
+    oid = quote(str(object_id).strip(), safe=":")
+    el = str(element).strip().lower()
+    return _bridge_json_request(
+        base_url,
+        f"/v1/live/objects/{oid}/{el}",
+        timeout_seconds,
+        method="GET",
+        body=None,
+        content_type=None,
+    )
+
+
 def live_list_definitions_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
     """List block definitions with instance counts (GET /v1/live/definitions)."""
     return _bridge_json_request(

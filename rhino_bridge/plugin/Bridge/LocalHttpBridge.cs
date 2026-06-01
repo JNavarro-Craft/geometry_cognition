@@ -468,6 +468,32 @@ public class LocalHttpBridge
                 HttpJson.Write(res, 400, HttpJson.Error("Missing object id in path", "bad_request"));
                 return true;
             }
+
+            // Detailed per-element sub-resources: /v1/live/objects/{id}/vertices|edges|faces.
+            var subResource = string.Empty;
+            var slash = idPart.IndexOf('/');
+            if (slash >= 0)
+            {
+                subResource = idPart.Substring(slash + 1).Trim().ToLowerInvariant();
+                idPart = idPart.Substring(0, slash).Trim();
+            }
+            if (subResource is "vertices" or "edges" or "faces")
+            {
+                var idForElements = idPart;
+                var elements = ExecuteOnUiThread(() =>
+                {
+                    var doc = RequireActiveDoc();
+                    return subResource switch
+                    {
+                        "vertices" => _neutralGeometryService.LiveGetVertices(doc, idForElements),
+                        "edges" => _neutralGeometryService.LiveGetEdges(doc, idForElements),
+                        _ => _neutralGeometryService.LiveGetFaces(doc, idForElements),
+                    };
+                });
+                HttpJson.Write(res, 200, elements);
+                return true;
+            }
+
             var detailLevel = req.QueryString["detail_level"]?.Trim() ?? "basic";
             var userTextMode = req.QueryString["user_text"]?.Trim() ?? "keys";
             var detail = ExecuteOnUiThread(() =>
