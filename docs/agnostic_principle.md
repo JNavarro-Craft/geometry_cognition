@@ -28,11 +28,15 @@ Ambas primitivas pasan el test ácida individualmente: existen en cualquier sól
 ninguna interpreta qué representa la pieza, ambas requieren un engine geométrico para
 computarse.
 
-Al cruzarlas contra las listas de despiece (LDP) reales del modelo:
+Al cruzarlas contra las listas de despiece (LDP) reales del modelo, comparando los
+largos-**tipo** de pieza (la LDP lista cada tipo una vez con su cantidad; el modelo
+tiene N copias físicas por tipo, p. ej. las diagonales izquierda/derecha):
 
-- **`obb_longest`** cuadró con la LDP en el **95%** de los casos. Es el *largo de
-  tronza*: el OBB encierra la pieza completa, incluida la punta del bisel.
-- **`longest_edge`** cuadró en el **72%**. Es la *arista más larga del sólido*; en una
+- **`obb_longest`** reprodujo el largo de la LDP en **21/21 tipos (100%)** de los
+  4 paneles, con **error medio 0.22 mm y máximo 0.45 mm** (sobre largos de hasta
+  3960 mm). Es el *largo de tronza*: el OBB encierra la pieza completa, incluida la
+  punta del bisel.
+- **`longest_edge`** cuadró en el **~72%**. Es la *arista más larga del sólido*; en una
   pieza con corte a inglete, esa arista es la **cara corta** del bisel, no el largo de
   tronza.
 
@@ -43,6 +47,23 @@ eligiera cuál aplica a su proceso.
 
 **Lección:** cuando dos primitivas geométricas similares miden cosas distintas, expón
 las dos. No las interpretes ni elijas por el cliente.
+
+### Disciplina de medición (cómo se llegó al 100%)
+
+El número honesto exigió dos correcciones, y vale conservarlas como advertencia:
+
+1. Un primer cruce reportó **95%**; ese residual no era geométrico sino **un error de
+   parseo de la viñeta** — el `length` de las curvas de la tabla (perímetro de una
+   celda) se leyó como si fuera un largo de pieza. La geometría 3D era correcta; el
+   ruido estaba en el texto dibujado.
+2. Un cruce **1-a-1** (pieza física vs fila de LDP) da solo **~72%**, porque el modelo
+   tiene más piezas físicas que filas (copias izq/der que la LDP consolida con su
+   cantidad). El cruce correcto es a **nivel de tipo**: deduplicar los `obb_longest`
+   del modelo y emparejar tipos. Ahí es 100% bidireccional.
+
+Corolario: la primitiva geométrica resultó **más precisa que la documentación de
+fabricación** que pretendía validar. Razón de más para exponer el hecho crudo y no una
+interpretación.
 
 ## Ejemplos de uso correcto
 
