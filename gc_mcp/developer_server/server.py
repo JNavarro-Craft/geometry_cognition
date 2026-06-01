@@ -145,6 +145,7 @@ def compute_contacts_tool(
     object_ids: list[str] | None = None,
     filters: dict[str, Any] | None = None,
     tolerance: float = 1e-3,
+    summary: bool = False,
 ) -> dict[str, Any]:
     """Detect REAL contacts between solids and report WHERE each contact is — the
     topological-reasoning primitive. Returns not just which pairs touch but the
@@ -155,11 +156,14 @@ def compute_contacts_tool(
     matching objects are used as the set). ``tolerance`` = max gap treated as touching.
     Each contact: {pair, contact_type (point|curve|surface), contact_point |
     contact_curve | contact_region_bbox, approx_area}. Non-solid objects -> skipped.
+    summary=True collapses each contact to {pair, contact_type, approx_area, location}
+    (a single representative point), dropping verbose polylines/bboxes — for large sets
+    whose curve contacts would otherwise overflow the response.
 
     Agnostic (see docs/agnostic_principle.md): touching is meaningful in any domain,
     needs no knowledge of what the object is, and the client cannot derive it without a
     geometry engine — so the primitive is exposed; the reasoning ON it stays in the client."""
-    return compute_contacts(object_ids=object_ids, filters=filters, tolerance=tolerance)
+    return compute_contacts(object_ids=object_ids, filters=filters, tolerance=tolerance, summary=summary)
 
 
 @mcp.tool(name="bill_of_materials")

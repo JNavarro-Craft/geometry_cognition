@@ -810,10 +810,31 @@ def _parse_metric(spec: str) -> tuple[str, str | None] | None:
     return None
 
 
+def _contact_location(contact: dict[str, Any]) -> list[float] | None:
+    """A single representative point for a contact, regardless of its type:
+    the point itself, the region-bbox center, or the curve's midpoint sample.
+    Lets summary mode report WHERE without the full polyline/bbox payload."""
+    p = contact.get("contact_point")
+    if isinstance(p, list) and len(p) == 3:
+        return [float(x) for x in p]
+    rb = contact.get("contact_region_bbox")
+    if isinstance(rb, dict) and isinstance(rb.get("min"), list) and isinstance(rb.get("max"), list):
+        mn, mx = rb["min"], rb["max"]
+        if len(mn) == 3 and len(mx) == 3:
+            return [(float(mn[i]) + float(mx[i])) / 2 for i in range(3)]
+    cv = contact.get("contact_curve")
+    if isinstance(cv, list) and cv:
+        mid = cv[len(cv) // 2]
+        if isinstance(mid, list) and len(mid) == 3:
+            return [float(x) for x in mid]
+    return None
+
+
 def compute_contacts(
     object_ids: list[str] | None = None,
     filters: dict[str, Any] | None = None,
     tolerance: float = 1e-3,
+    summary: bool = False,
 ) -> dict[str, Any]:
     """Detect REAL contacts between solids and report WHERE each contact is.
 
@@ -832,6 +853,13 @@ def compute_contacts(
     Each contact: ``{pair, contact_type, contact_point|contact_curve|
     contact_region_bbox, approx_area}``. ``contact_type`` is ``point`` | ``curve`` |
     ``surface``. Objects that are not solid breps are reported in ``skipped``.
+
+    With ``summary=True`` each contact is collapsed to ``{pair, contact_type,
+    approx_area, location}`` where ``location`` is a single representative point
+    (the contact point / region-bbox center / curve midpoint). Drops the full
+    polylines and bboxes — for large sets whose ``curve`` contacts carry dozens of
+    polyline points and would otherwise overflow the response. The graph and its
+    geometry are still fully described per pair; only the verbose path samples go.
 
     Agnostic acid test (see docs/agnostic_principle.md):
       1. Exists in any domain?  ✓ "two solids touch here" is meaningful for a
@@ -869,6 +897,21 @@ def compute_contacts(
         result = live_compute_contacts_bridge(bridge_url, timeout, ids, tolerance=tolerance)
     except Exception as exc:
         return _live_only_error(f"{type(exc).__name__}: {exc}")
+
+    if summary and isinstance(result.get("contacts"), list):
+        slim = []
+        for c in result["contacts"]:
+            if not isinstance(c, dict):
+                continue
+            slim.append({
+                "pair": c.get("pair"),
+                "contact_type": c.get("contact_type"),
+                "approx_area": c.get("approx_area"),
+                "location": _contact_location(c),
+            })
+        result = {k: v for k, v in result.items() if k != "contacts"}
+        result["contacts"] = slim
+        result["summarized"] = True
 
     if resolve_warnings:
         existing = result.get("fetch_warnings")
