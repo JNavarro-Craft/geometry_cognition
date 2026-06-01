@@ -66,17 +66,19 @@ def _normalize_raw_geometry_summary(src: dict[str, Any]) -> dict[str, Any]:
         if key in src and key not in raw_geometry_summary:
             raw_geometry_summary[key] = src.get(key)
 
-    # object_schema.v1 enforces bbox.additionalProperties=false -> keep only min/max.
+    # object_schema.v1 enforces bbox.additionalProperties=false and requires
+    # min+max. Keep only min/max; if either is missing (e.g. the bridge returns
+    # bbox:{} for geometry with no valid bounding box — empty/degenerate annotations,
+    # points), DROP the bbox key entirely rather than leaving an invalid {} that
+    # fails schema validation. bbox is optional in the schema, so absence is valid.
     bbox = raw_geometry_summary.get("bbox")
     if isinstance(bbox, dict):
         if "center" in bbox and "bbox_center" not in raw_geometry_summary:
             raw_geometry_summary["bbox_center"] = bbox.get("center")
-        cleaned_bbox: dict[str, Any] = {}
-        if "min" in bbox:
-            cleaned_bbox["min"] = bbox.get("min")
-        if "max" in bbox:
-            cleaned_bbox["max"] = bbox.get("max")
-        raw_geometry_summary["bbox"] = cleaned_bbox
+        if "min" in bbox and "max" in bbox:
+            raw_geometry_summary["bbox"] = {"min": bbox.get("min"), "max": bbox.get("max")}
+        else:
+            raw_geometry_summary.pop("bbox", None)
 
     raw_geometry_summary["source"] = "rhino_bridge"
     return raw_geometry_summary
@@ -108,8 +110,15 @@ def _normalize_bridge_objects(payload: dict[str, Any]) -> list[dict[str, Any]]:
             block_info = metadata["block_info"]
 
         is_block = bool(block_info.get("is_block_instance") or src.get("is_block_instance") or False)
-        block_name = block_info.get("block_name")
-        instance_definition_id = block_info.get("instance_definition_id") or block_info.get("instance_definition_index")
+        # The bridge emits the definition name under "definition_name"; older fixtures
+        # use "block_name". Accept both so describe_model/expand grouping sees the real
+        # name instead of falling back to "(unnamed)".
+        block_name = block_info.get("block_name") or block_info.get("definition_name")
+        instance_definition_id = (
+            block_info.get("instance_definition_id")
+            or block_info.get("instance_definition_index")
+            or block_info.get("instance_id")
+        )
 
         raw_geometry_summary = _normalize_raw_geometry_summary(src)
 

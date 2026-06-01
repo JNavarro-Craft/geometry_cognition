@@ -123,3 +123,54 @@ def test_bridge_failure_fallback_false_returns_error(monkeypatch):
     out = extract_objects({})
     assert out["status"] == "error"
     assert "bridge_backend_failed" in out["message"]
+
+
+def test_normalize_drops_empty_bbox():
+    """Bridge may return bbox:{} for geometry with no valid bounding box
+    (empty/degenerate annotations, points). The normalizer must drop it rather
+    than emit an invalid {} that fails object_schema.v1 (min/max required)."""
+    from gc_mcp.rhino_extractor.backend_adapter import _normalize_bridge_objects
+
+    payload = {
+        "objects": [
+            {
+                "object_id": "anno-empty",
+                "type": "Annotation",
+                "layer": "Notes",
+                "name": "",
+                "raw_geometry_summary": {"bbox": {}},
+            }
+        ]
+    }
+    out = _normalize_bridge_objects(payload)
+    assert len(out) == 1
+    # bbox must be absent (not an empty dict) so schema validation passes.
+    assert "bbox" not in out[0]["raw_geometry_summary"]
+
+
+def test_normalize_block_name_from_definition_name():
+    """The bridge emits the block name under block_info.definition_name (not
+    block_name). The normalizer must map it so block_context.block_name is set,
+    otherwise describe_model groups every instance as '(unnamed)'."""
+    from gc_mcp.rhino_extractor.backend_adapter import _normalize_bridge_objects
+
+    payload = {
+        "objects": [
+            {
+                "object_id": "inst-1",
+                "type": "InstanceReference",
+                "layer": "L",
+                "name": "",
+                "block_info": {
+                    "is_block_instance": True,
+                    "definition_name": "P-25 | Elevación SIP",
+                    "instance_id": "inst-1",
+                },
+                "raw_geometry_summary": {"bbox": {"min": [0, 0, 0], "max": [1, 1, 1]}},
+            }
+        ]
+    }
+    out = _normalize_bridge_objects(payload)
+    bc = out[0]["block_context"]
+    assert bc["is_block_instance"] is True
+    assert bc["block_name"] == "P-25 | Elevación SIP"
