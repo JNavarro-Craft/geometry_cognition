@@ -14,7 +14,9 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from gc_mcp.developer_server.tools import (
+    aggregate,
     assert_change,
+    bill_of_materials,
     delete_snapshot,
     describe_model,
     diff_object,
@@ -113,6 +115,29 @@ def query_objects_tool(
     return query_objects(filters=filters, source=source, limit=limit, fields=fields)
 
 
+@mcp.tool(name="aggregate")
+def aggregate_tool(
+    group_by: list[str] | None = None,
+    metrics: list[str] | None = None,
+    filters: dict[str, Any] | None = None,
+    source: str = "live",
+) -> dict[str, Any]:
+    """Group objects and compute metrics (counts/takeoffs), over the live model or a
+    snapshot. group_by: field names incl. "user_text.<key>" and geometry scalars
+    (volume, area, length, face_count, edge_count). metrics: ["count","sum:volume",
+    "avg:length","min:<f>","max:<f>"]. filters: same as query_objects. Agnostic: the
+    MCP groups/sums whatever you name; domain meaning is the caller's."""
+    return aggregate(group_by=group_by, metrics=metrics, filters=filters, source=source)
+
+
+@mcp.tool(name="bill_of_materials")
+def bill_of_materials_tool(only_with_instances: bool = True) -> dict[str, Any]:
+    """Per block definition: instance_count x content breakdown (member type counts,
+    annotation texts, total curve length/area). Shortcut over list_block_definitions +
+    expand_block. The caller multiplies by instance_count and applies domain meaning."""
+    return bill_of_materials(only_with_instances=only_with_instances)
+
+
 @mcp.tool(name="delete_snapshot")
 def delete_snapshot_tool(label: str) -> dict[str, Any]:
     """Delete all persisted snapshots for the given label. Returns status ``not_found`` if none exist."""
@@ -203,11 +228,13 @@ def list_block_definitions_tool() -> dict[str, Any]:
 
 
 @mcp.tool(name="expand_block")
-def expand_block_tool(definition_name: str) -> dict[str, Any]:
+def expand_block_tool(definition_name: str, resolve_instances: bool = False) -> dict[str, Any]:
     """Read the objects composing a block definition (raw content, no transform applied):
     child geometry, their user_text, materials and annotation text — data invisible from
-    the instance alone. definition_name is case-sensitive (see list_block_definitions)."""
-    return expand_block(definition_name=definition_name)
+    the instance alone. definition_name is case-sensitive (see list_block_definitions).
+    With resolve_instances=True, also returns an ``instances`` block placing each member's
+    bbox at every instance's location (lightweight; geometry not moved)."""
+    return expand_block(definition_name=definition_name, resolve_instances=resolve_instances)
 
 
 @mcp.tool(name="assert_change")

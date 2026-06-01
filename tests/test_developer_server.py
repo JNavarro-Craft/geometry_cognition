@@ -903,7 +903,7 @@ def test_expand_block_passthrough(monkeypatch, isolated_outputs):
 
     captured = {}
 
-    def fake(u, t, name):
+    def fake(u, t, name, *, resolve_instances=False):
         captured["name"] = name
         return {"definition_name": name, "object_count": 2, "transform_applied": False, "objects": [{"object_id": "c1"}, {"object_id": "c2"}]}
 
@@ -937,3 +937,151 @@ def test_snapshot_projects_and_diffs_annotation_text(monkeypatch, isolated_outpu
     zoom = diff_object("t0", "t1", "g-anno")
     assert zoom["status"] == "modified"
     assert zoom["changes"]["annotation_text"] == {"from": "PANEL-001", "to": "PANEL-002"}
+
+
+# ---------------------------------------------------------------------------
+# Fase 3: aggregate + bill_of_materials + expand_block(resolve_instances)
+# ---------------------------------------------------------------------------
+
+
+def test_aggregate_count_by_layer_live(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import aggregate
+
+    state = [
+        _bridge_object("g1", layer="L1"),
+        _bridge_object("g2", layer="L1"),
+        _bridge_object("g3", layer="L2"),
+    ]
+    _install_fake_bridge(monkeypatch, state)
+    out = aggregate(group_by=["layer"], metrics=["count"])
+    by = {tuple(g.get("layer") for _ in [0]): g["count"] for g in out["groups"]}
+    counts = {g["layer"]: g["count"] for g in out["groups"]}
+    assert counts == {"L1": 2, "L2": 1}
+    assert out["object_count"] == 3
+    assert out["group_count"] == 2
+
+
+def test_aggregate_sum_geometry_scalar(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import aggregate
+
+    a = _bridge_object("g1", layer="L1")
+    a["raw_geometry_summary"]["length"] = 10.0
+    b = _bridge_object("g2", layer="L1")
+    b["raw_geometry_summary"]["length"] = 5.0
+    c = _bridge_object("g3", layer="L2")
+    c["raw_geometry_summary"]["length"] = 2.0
+    _install_fake_bridge(monkeypatch, [a, b, c])
+
+    out = aggregate(group_by=["layer"], metrics=["count", "sum:length"])
+    rows = {g["layer"]: g for g in out["groups"]}
+    assert rows["L1"]["sum:length"] == 15.0
+    assert rows["L1"]["count"] == 2
+    assert rows["L2"]["sum:length"] == 2.0
+
+
+def test_aggregate_group_by_user_text(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import aggregate
+
+    state = [
+        _bridge_object("g1", user_text={"Material": "Steel"}),
+        _bridge_object("g2", user_text={"Material": "Steel"}),
+        _bridge_object("g3", user_text={"Material": "Wood"}),
+    ]
+    _install_fake_bridge(monkeypatch, state)
+    out = aggregate(group_by=["user_text.Material"], metrics=["count"])
+    counts = {g["user_text.Material"]: g["count"] for g in out["groups"]}
+    assert counts == {"Steel": 2, "Wood": 1}
+
+
+def test_aggregate_invalid_metric(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import aggregate
+
+    _install_fake_bridge(monkeypatch, _state_before())
+    out = aggregate(group_by=["layer"], metrics=["median:volume"])
+    assert out["error"] == "invalid_metric"
+
+
+def test_aggregate_skips_non_numeric(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import aggregate
+
+    a = _bridge_object("g1", layer="L1")
+    a["raw_geometry_summary"]["length"] = 10.0
+    b = _bridge_object("g2", layer="L1")
+    b["raw_geometry_summary"]["length"] = "not-a-number"
+    _install_fake_bridge(monkeypatch, [a, b])
+
+    out = aggregate(group_by=["layer"], metrics=["sum:length"])
+    assert out["groups"][0]["sum:length"] == 10.0
+    assert out["skipped_non_numeric"]["sum:length"] == 1
+
+
+def test_aggregate_over_snapshot(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import aggregate
+
+    _install_fake_bridge(monkeypatch, _state_before())
+    take_snapshot("past")
+    _install_fake_bridge(monkeypatch, _state_after())  # live changes
+    out = aggregate(group_by=["layer"], metrics=["count"], source="past")
+    counts = {g["layer"]: g["count"] for g in out["groups"]}
+    # _state_before: L_old(1), L1(2)
+    assert counts == {"L_old": 1, "L1": 2}
+
+
+def test_aggregate_with_filter(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import aggregate
+
+    state = [
+        _bridge_object("g1", layer="L1", raw_type="Brep"),
+        _bridge_object("g2", layer="L1", raw_type="Curve"),
+        _bridge_object("g3", layer="L2", raw_type="Brep"),
+    ]
+    _install_fake_bridge(monkeypatch, state)
+    out = aggregate(group_by=["layer"], metrics=["count"], filters={"types": ["Brep"]})
+    counts = {g["layer"]: g["count"] for g in out["groups"]}
+    assert counts == {"L1": 1, "L2": 1}
+    assert out["object_count"] == 2
+
+
+def test_bill_of_materials(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import bill_of_materials
+
+    defs = {
+        "definitions": [
+            {"definition_name": "P-25", "definition_id": "d1", "object_count": 2, "instance_count": 3},
+            {"definition_name": "Unused", "definition_id": "d2", "object_count": 1, "instance_count": 0},
+        ]
+    }
+    content = {
+        "P-25": {
+            "objects": [
+                {"type": "Annotation", "annotation_text": {"plain_text": "P-25"}, "raw_geometry_summary": {}},
+                {"type": "Curve", "raw_geometry_summary": {"length": 100.0, "area": 50.0}},
+            ]
+        },
+    }
+    monkeypatch.setattr(tools, "live_list_definitions_bridge", lambda u, t: defs)
+    monkeypatch.setattr(tools, "live_definition_objects_bridge", lambda u, t, name: content[name])
+
+    out = bill_of_materials(only_with_instances=True)
+    assert out["definition_count"] == 1  # Unused skipped
+    row = out["definitions"][0]
+    assert row["definition_name"] == "P-25"
+    assert row["instance_count"] == 3
+    assert row["content"]["type_counts"] == {"Annotation": 1, "Curve": 1}
+    assert "P-25" in row["content"]["annotation_texts"]
+    assert row["content"]["total_curve_length"] == 100.0
+
+
+def test_expand_block_resolve_instances_passes_flag(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import expand_block
+
+    captured = {}
+
+    def fake(u, t, name, *, resolve_instances=False):
+        captured["resolve_instances"] = resolve_instances
+        return {"definition_name": name, "transform_applied": resolve_instances, "objects": [], "instances": []}
+
+    monkeypatch.setattr(tools, "live_definition_objects_bridge", fake)
+    out = expand_block("P-25", resolve_instances=True)
+    assert captured["resolve_instances"] is True
+    assert out["transform_applied"] is True

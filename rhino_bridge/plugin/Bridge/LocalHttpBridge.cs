@@ -430,10 +430,11 @@ public class LocalHttpBridge
                 HttpJson.Write(res, 400, HttpJson.Error("Missing required query param: name", "bad_request"));
                 return true;
             }
+            var resolveInstances = string.Equals(req.QueryString["instances"]?.Trim(), "true", StringComparison.OrdinalIgnoreCase);
             var defObjects = ExecuteOnUiThread(() =>
             {
                 var doc = RequireActiveDoc();
-                return _neutralGeometryService.LiveGetDefinitionObjects(doc, defName);
+                return _neutralGeometryService.LiveGetDefinitionObjects(doc, defName, resolveInstances);
             });
             HttpJson.Write(res, 200, defObjects);
             return true;

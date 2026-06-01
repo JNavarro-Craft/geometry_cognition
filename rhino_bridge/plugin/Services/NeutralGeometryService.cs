@@ -369,11 +369,38 @@ public class NeutralGeometryService
         };
     }
 
-    public Dictionary<string, object> LiveGetDefinitionObjects(RhinoDoc doc, string definitionName)
+    private static Dictionary<string, object> TransformedBboxDict(BoundingBox bbox, Transform xform)
+    {
+        // Apply a transform to a bbox by mapping its 8 corners and taking the
+        // axis-aligned bounds of the result. Light (8 points), no heavy geometry
+        // resolution. Returns the same shape as BboxToSummaryDict.
+        if (!bbox.IsValid)
+        {
+            return BboxToSummaryDict(BoundingBox.Unset);
+        }
+        var corners = bbox.GetCorners();
+        var moved = BoundingBox.Unset;
+        foreach (var c in corners)
+        {
+            var p = c;
+            p.Transform(xform);
+            moved = moved.IsValid ? BoundingBox.Union(moved, new BoundingBox(p, p)) : new BoundingBox(p, p);
+        }
+        return BboxToSummaryDict(moved);
+    }
+
+    public Dictionary<string, object> LiveGetDefinitionObjects(
+        RhinoDoc doc,
+        string definitionName,
+        bool resolveInstances = false)
     {
         // Return the objects that COMPOSE a block definition (1.3a: raw content, no
         // instance transform applied). This is what lets a caller read attributes/
         // text/geometry that live INSIDE a block, previously unreachable.
+        //
+        // When resolveInstances is true, also return one row per placed instance with
+        // each member's bbox/centroid transformed by that instance's InstanceXform
+        // (2.3, lightweight: only the bbox is moved, not the heavy geometry).
         var name = (definitionName ?? string.Empty).Trim();
         if (name.Length == 0)
         {
@@ -401,31 +428,68 @@ public class NeutralGeometryService
             throw new KeyNotFoundException($"Block definition not found: {name}");
         }
 
+        var memberObjs = new List<RhinoObject>();
         var objects = new List<object>();
         foreach (var mid in idef.GetObjectIds() ?? Array.Empty<Guid>())
         {
             var mobj = doc.Objects.FindId(mid);
             if (mobj is not null)
             {
+                memberObjs.Add(mobj);
                 objects.Add(ExtractObject(doc, mobj));
             }
         }
 
-        int instanceCount;
-        try { instanceCount = idef.GetReferences(0)?.Length ?? 0; }
-        catch { instanceCount = 0; }
+        var references = Array.Empty<InstanceObject>();
+        try { references = idef.GetReferences(0) ?? Array.Empty<InstanceObject>(); }
+        catch { references = Array.Empty<InstanceObject>(); }
 
-        return new Dictionary<string, object>
+        var result = new Dictionary<string, object>
         {
             ["source"] = "rhino_bridge",
             ["api"] = "v1_live",
             ["definition_name"] = idef.Name ?? string.Empty,
             ["definition_id"] = idef.Id.ToString(),
-            ["instance_count"] = instanceCount,
+            ["instance_count"] = references.Length,
             ["object_count"] = objects.Count,
             ["transform_applied"] = false,
             ["objects"] = objects,
         };
+
+        if (resolveInstances)
+        {
+            var instances = new List<object>();
+            foreach (var inst in references)
+            {
+                if (inst is null)
+                {
+                    continue;
+                }
+                var xform = inst.InstanceXform;
+                var members = new List<object>();
+                foreach (var mobj in memberObjs)
+                {
+                    var rawBbox = GetValidBbox(mobj.Geometry);
+                    members.Add(new Dictionary<string, object>
+                    {
+                        ["member_object_id"] = mobj.Id.ToString(),
+                        ["type"] = mobj.Geometry?.ObjectType.ToString() ?? "Unknown",
+                        ["bbox"] = TransformedBboxDict(rawBbox, xform),
+                    });
+                }
+                instances.Add(new Dictionary<string, object>
+                {
+                    ["instance_id"] = inst.Id.ToString(),
+                    ["layer"] = LayerName(doc, inst.Attributes),
+                    ["transform"] = ReadTransform(inst),
+                    ["members"] = members,
+                });
+            }
+            result["transform_applied"] = true;
+            result["instances"] = instances;
+        }
+
+        return result;
     }
 
     public Dictionary<string, object> ExtractScene(RhinoDoc doc)
@@ -855,10 +919,20 @@ public class NeutralGeometryService
             edgeCount = mesh.TopologyEdges.Count;
             isClosed = mesh.IsClosed;
         }
-        else if (geometry is Curve curve)
+        double? length = null;
+        if (geometry is Curve curve)
         {
             edgeCount = 1;
             isClosed = curve.IsClosed;
+            try
+            {
+                var len = curve.GetLength();
+                if (len > 0 && !double.IsNaN(len) && !double.IsInfinity(len))
+                {
+                    length = len;
+                }
+            }
+            catch { length = null; }
         }
 
         volume = ComputeVolume(geometry);
@@ -888,6 +962,7 @@ public class NeutralGeometryService
             ["is_closed"] = isClosed.HasValue ? (object)isClosed.Value : null!,
             ["volume"] = volume.HasValue ? (object)volume.Value : null!,
             ["area"] = area.HasValue ? (object)area.Value : null!,
+            ["length"] = length.HasValue ? (object)length.Value : null!,
             ["source"] = "rhino_bridge"
         };
     }

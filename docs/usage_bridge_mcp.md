@@ -86,11 +86,15 @@ snapshots, detectar bloques (nombre + nº de instancias), **leer el texto de ano
 definición de un bloque** (`list_block_definitions` + `expand_block` → geometría, user_text,
 materiales y texto internos, sin transform).
 
+También puede: **agregar/cubicar** (`aggregate` group-by + sum/avg/min/max sobre live o
+snapshot, agnóstico), **bill of materials** por definición de bloque
+(`bill_of_materials`), **longitud de curvas** (`raw_geometry_summary.length`), y
+**posicionar miembros de bloque** por instancia (`expand_block(resolve_instances=True)`,
+bbox transformado).
+
 **No puede todavía (carencias reales del sistema, no errores de uso):**
-- Geometría real (vértices/curvas/contorno) — solo bbox.
-- Expandir instancias con su transform aplicado en espacio modelo (1.3b) — `expand_block`
-  da el contenido crudo de la definición, sin posicionar cada instancia.
-- Agregación server-side (sumas/group-by en una llamada) — hoy se agrega en cliente.
+- Geometría real completa (vértices/mallas/contorno) — solo bbox (y su versión
+  transformada por instancia); no se mueve la geometría pesada.
 - **Escribir/editar** el modelo — el bridge es read-only.
 
 (Estas carencias están en el plan: `docs/plan_bridge_developer_v2.md`.)

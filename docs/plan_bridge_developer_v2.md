@@ -129,21 +129,26 @@ query sobre snapshot pasado, snapshot_not_found, filtro is_block_instance).
   `annotation_text {kind, plain_text, rich_text?}` para `TextEntity` / `AnnotationBase`
   (cotas, leaders) / `TextDot`. Se propaga por el adapter (schema v1 actualizado), se
   proyecta al snapshot y es diffeable. Resuelve la brecha 🔴 "leer texto del modelo".
-- **2.3 (pendiente, = 1.3b)** `resolve_blocks` con transform aplicado en contexto (caro).
-  Flag `expand_blocks=true` en `query_objects`/`take_snapshot`. No hecho aún.
+- **2.3 (hecho, = 1.3b liviano)** `expand_block(definition_name, resolve_instances=True)`.
+  Bridge: `definition_objects?instances=true` devuelve un bloque `instances`, una fila
+  por instancia colocada con el **bbox/centroide de cada miembro transformado por la
+  `InstanceXform`** de esa instancia (liviano: solo se mueven 8 esquinas del bbox, no la
+  geometría pesada). Suficiente para ubicar cada pieza en el modelo. La variante cara
+  (transformar geometría real) queda fuera por decisión explícita.
 
-### Fase 3 — Primitivas de cómputo (habilita cotización/cubicación)
+### Fase 3 — Primitivas de cómputo (HECHA)
 *MCP Python, agnóstico. Bridge solo si falta una métrica geométrica.*
 
-- **3.1** Bridge (si falta): longitud de curvas, área por cara, volumen real de Breps
-  cerrados — verificar qué ya da `raw_geometry_summary` (hoy: bbox, volume, area,
-  face/edge count, is_closed).
-- **3.2** MCP: `aggregate(source, group_by=[campos], metrics=[count|sum:campo|...])`.
-  Agnóstico: agrupa por cualquier campo (incl. `user_text.<clave>`) y suma cualquier
-  escalar. Claude pide "group_by user_text.Material, sum volume" → el MCP no sabe qué
-  es "Material", solo agrupa. Esto convierte datos sueltos en cómputos pedibles.
-- **3.3** MCP: `bill_of_materials()` = atajo sobre 3.2 + Fase 2: por definición de
-  bloque, nº instancias × desglose del contenido.
+- **3.1 (hecho)** Bridge: añadido `length` (longitud de curva) a `raw_geometry_summary`
+  (vía `Curve.GetLength()`), para cubicaciones lineales. Ya existían volume/area/
+  face_count/edge_count/is_closed.
+- **3.2 (hecho)** MCP: `aggregate(group_by, metrics, filters, source)`. Agnóstico:
+  agrupa por cualquier campo (`layer`, `raw_type`, `user_text.<clave>`, escalares
+  geométricos) y aplica `count|sum:<f>|avg:<f>|min:<f>|max:<f>`. Sobre live o snapshot.
+  Valores no numéricos se omiten y se reportan en `skipped_non_numeric` (honesto).
+- **3.3 (hecho)** MCP: `bill_of_materials(only_with_instances=True)` = atajo sobre
+  list_block_definitions + expand_block: por definición, `instance_count` × resumen de
+  contenido (conteo de tipos, textos de anotación, longitud/área total de miembros).
 
 ### Fase 4 — Análisis de cambios robusto
 *MCP Python. Extiende diff/assert con lo nuevo.*

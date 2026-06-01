@@ -119,18 +119,27 @@ def live_definition_objects_bridge(
     base_url: str,
     timeout_seconds: float,
     definition_name: str,
+    *,
+    resolve_instances: bool = False,
 ) -> dict[str, Any]:
     """Objects composing a block definition (GET /v1/live/definition_objects?name=...).
 
     Raw definition content (no instance transform applied). Lets a caller read
     attributes/text/geometry that live INSIDE a block.
+
+    When ``resolve_instances`` is True, the response also includes an ``instances``
+    block: one row per placed instance with each member's bbox transformed by that
+    instance's transform (lightweight; geometry is not moved).
     """
     from urllib.parse import quote
 
     name = quote(str(definition_name).strip(), safe="")
+    path = f"/v1/live/definition_objects?name={name}"
+    if resolve_instances:
+        path += "&instances=true"
     return _bridge_json_request(
         base_url,
-        f"/v1/live/definition_objects?name={name}",
+        path,
         timeout_seconds,
         method="GET",
         body=None,

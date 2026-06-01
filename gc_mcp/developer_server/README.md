@@ -31,7 +31,9 @@
 | `diff_object(label_a, label_b, guid)` | Diff de un solo GUID, mismo detalle que `diff_snapshots(detail='full')`. |
 | `inspect_object(guid, detail_level="full", user_text="values")` | Pass-through a `/v1/live/objects/{guid}` del bridge. Con `detail_level="full"`, los objetos de anotación (texto, cotas, leaders) incluyen `annotation_text` con su `plain_text` resuelto. |
 | `list_block_definitions()` | Lista definiciones de bloque del modelo live: `definition_name`, `object_count` (miembros), `instance_count` (instancias en el modelo), `bbox`. |
-| `expand_block(definition_name)` | Lee los objetos que **componen** una definición de bloque (contenido crudo, sin transform): geometría hija, su user_text, materiales y texto de anotación — datos invisibles desde la instancia. `definition_name` case-sensitive. |
+| `expand_block(definition_name, resolve_instances=False)` | Lee los objetos que **componen** una definición de bloque (contenido crudo, sin transform): geometría hija, su user_text, materiales y texto de anotación — datos invisibles desde la instancia. `definition_name` case-sensitive. Con `resolve_instances=True` añade `instances`: una fila por instancia colocada con el bbox de cada miembro transformado a su posición real (liviano). |
+| `aggregate(group_by, metrics, filters, source="live")` | Agrupa objetos y calcula métricas (conteos/cubicaciones) sobre el modelo live o un snapshot. `group_by`: campos incl. `user_text.<clave>` y escalares (`volume`, `area`, `length`, `face_count`, `edge_count`). `metrics`: `["count","sum:volume","avg:length","min:<f>","max:<f>"]`. Agnóstico: agrupa/suma lo que nombres; la semántica de dominio la pone el cliente. |
+| `bill_of_materials(only_with_instances=True)` | Por definición de bloque: `instance_count` × desglose de contenido (conteo de tipos, textos de anotación, longitud/área total de miembros). Atajo sobre `list_block_definitions` + `expand_block`. |
 | `assert_change(label_a, label_b, expectations)` | Valida expectativas (`created.min`, `created.in_layer`, `created.with_user_text_key`, etc.) contra el diff. |
 
 ## Campos persistidos por objeto en el snapshot

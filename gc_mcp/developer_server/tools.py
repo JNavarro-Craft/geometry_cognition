@@ -709,6 +709,262 @@ def query_objects(
 
 
 # ---------------------------------------------------------------------------
+# aggregate (domain-agnostic group-by / sum over live or snapshot objects)
+# ---------------------------------------------------------------------------
+
+
+_GEO_SCALARS = ("volume", "area", "length", "face_count", "edge_count")
+
+
+def _resolve_field(obj: dict[str, Any], field: str) -> Any:
+    """Resolve a field name to a value on a normalized object.
+
+    Works over both live objects (geometry scalars under raw_geometry_summary)
+    and snapshot objects (scalars projected flat). Supported field forms:
+      - top-level keys: "layer", "raw_type", "name", "object_kind", "material"
+      - "user_text.<key>": a specific user_text value
+      - geometry scalars: "volume", "area", "length", "face_count", "edge_count"
+        (looked up flat first, then inside raw_geometry_summary)
+      - "annotation_text": plain text if present
+    Returns None when absent. Domain-agnostic: the field name is opaque.
+    """
+    if field.startswith("user_text."):
+        key = field[len("user_text."):]
+        ut = obj.get("user_text") if isinstance(obj.get("user_text"), dict) else {}
+        return ut.get(key)
+    if field in _GEO_SCALARS:
+        if field in obj and obj[field] is not None:
+            return obj[field]
+        rgs = obj.get("raw_geometry_summary")
+        if isinstance(rgs, dict):
+            return rgs.get(field)
+        return None
+    if field == "annotation_text":
+        at = obj.get("annotation_text")
+        if isinstance(at, dict):
+            return at.get("plain_text")
+        return at
+    return obj.get(field)
+
+
+def _parse_metric(spec: str) -> tuple[str, str | None] | None:
+    """Parse a metric spec into (op, field). 'count' -> ('count', None);
+    'sum:volume' -> ('sum','volume'). Supported ops: count, sum, avg, min, max."""
+    spec = str(spec).strip()
+    if spec == "count":
+        return ("count", None)
+    if ":" in spec:
+        op, _, field = spec.partition(":")
+        op = op.strip().lower()
+        field = field.strip()
+        if op in ("sum", "avg", "min", "max") and field:
+            return (op, field)
+    return None
+
+
+def aggregate(
+    group_by: list[str] | None = None,
+    metrics: list[str] | None = None,
+    filters: dict[str, Any] | None = None,
+    source: str = "live",
+) -> dict[str, Any]:
+    """Group objects and compute metrics — the agnostic primitive for counts/takeoffs.
+
+    Groups objects (from the live model or a snapshot label) by any field(s) and
+    computes metrics per group. The MCP does not interpret any field: it groups by
+    whatever you name (e.g. ``user_text.Material``) and sums whatever scalar you ask.
+
+    - ``group_by``: list of field names (see _resolve_field). Empty -> one total group.
+    - ``metrics``: list like ``["count", "sum:volume", "avg:length"]``.
+      Defaults to ``["count"]``.
+    - ``filters``: same AND-combined filters as ``query_objects`` (applied first).
+    - ``source``: ``"live"`` or a snapshot label.
+
+    Non-numeric values are skipped for numeric metrics and counted in
+    ``skipped_non_numeric`` per metric so the result stays honest.
+    """
+    group_fields = [str(f) for f in (group_by or [])]
+    metric_specs = [str(m) for m in (metrics or ["count"])] or ["count"]
+    parsed: list[tuple[str, str, str | None]] = []  # (label, op, field)
+    for spec in metric_specs:
+        p = _parse_metric(spec)
+        if p is None:
+            return {"error": "invalid_metric", "message": f"unsupported metric: {spec!r}", "supported": ["count", "sum:<field>", "avg:<field>", "min:<field>", "max:<field>"]}
+        parsed.append((spec, p[0], p[1]))
+
+    # Fetch full objects from the chosen source (live or a snapshot label).
+    if source == "live":
+        bridge_url, timeout = _bridge_settings()
+        try:
+            objects, warnings = _fetch_objects(bridge_url, timeout, filters=None)
+        except Exception as exc:
+            return _live_only_error(f"{type(exc).__name__}: {exc}")
+        src_label = "bridge_live"
+    else:
+        label_slug = slugify_label(source)
+        path = find_latest_by_label(label_slug)
+        if path is None:
+            return _snapshot_not_found(label_slug)
+        try:
+            snap = read_snapshot(path)
+        except Exception as exc:
+            return {"error": "snapshot_unreadable", "message": str(exc)}
+        objs_by_guid = snap.get("objects_by_guid") or {}
+        objects = list(objs_by_guid.values()) if isinstance(objs_by_guid, dict) else []
+        warnings = []
+        src_label = label_slug
+
+    flt = filters if isinstance(filters, dict) else {}
+    objects = [o for o in objects if _object_matches_query(o, flt)]
+
+    # Build groups.
+    groups: dict[tuple, dict[str, Any]] = {}
+    for obj in objects:
+        key = tuple(("" if (v := _resolve_field(obj, f)) is None else str(v)) for f in group_fields)
+        bucket = groups.get(key)
+        if bucket is None:
+            bucket = {"_rows": []}
+            groups[key] = bucket
+        bucket["_rows"].append(obj)
+
+    skipped: dict[str, int] = {}
+    rows_out: list[dict[str, Any]] = []
+    for key, bucket in groups.items():
+        rows = bucket["_rows"]
+        row: dict[str, Any] = {f: k for f, k in zip(group_fields, key)}
+        for label, op, field in parsed:
+            if op == "count":
+                row[label] = len(rows)
+                continue
+            nums: list[float] = []
+            for o in rows:
+                v = _resolve_field(o, field) if field else None
+                if _is_real_number(v):
+                    nums.append(float(v))
+                elif v is not None:
+                    skipped[label] = skipped.get(label, 0) + 1
+            if not nums:
+                row[label] = None
+            elif op == "sum":
+                row[label] = sum(nums)
+            elif op == "avg":
+                row[label] = sum(nums) / len(nums)
+            elif op == "min":
+                row[label] = min(nums)
+            elif op == "max":
+                row[label] = max(nums)
+        rows_out.append(row)
+
+    rows_out.sort(key=lambda r: tuple(str(r.get(f, "")) for f in group_fields))
+
+    out: dict[str, Any] = {
+        "source": src_label,
+        "group_by": group_fields,
+        "metrics": metric_specs,
+        "filters": flt,
+        "object_count": len(objects),
+        "group_count": len(rows_out),
+        "groups": rows_out,
+    }
+    if skipped:
+        out["skipped_non_numeric"] = skipped
+    if warnings:
+        out["fetch_warnings"] = warnings
+    return out
+
+
+# ---------------------------------------------------------------------------
+# bill_of_materials (definitions x instances x content breakdown)
+# ---------------------------------------------------------------------------
+
+
+def _summarize_definition_content(objects: list[dict[str, Any]]) -> dict[str, Any]:
+    """Agnostic per-definition content summary: type counts, annotation texts, and
+    total curve length / area of the member objects (raw, per single definition)."""
+    type_counts: dict[str, int] = {}
+    texts: list[str] = []
+    total_length = 0.0
+    total_area = 0.0
+    has_length = False
+    has_area = False
+    for o in objects:
+        rt = str(o.get("type") or o.get("raw_type") or "")
+        type_counts[rt] = type_counts.get(rt, 0) + 1
+        at = o.get("annotation_text")
+        if isinstance(at, dict) and at.get("plain_text"):
+            texts.append(str(at["plain_text"]))
+        rgs = o.get("raw_geometry_summary") if isinstance(o.get("raw_geometry_summary"), dict) else {}
+        length = rgs.get("length")
+        if _is_real_number(length):
+            total_length += float(length)
+            has_length = True
+        area = rgs.get("area")
+        if _is_real_number(area):
+            total_area += float(area)
+            has_area = True
+    return {
+        "type_counts": type_counts,
+        "annotation_texts": texts,
+        "total_curve_length": total_length if has_length else None,
+        "total_area": total_area if has_area else None,
+    }
+
+
+def bill_of_materials(only_with_instances: bool = True) -> dict[str, Any]:
+    """Per block definition: instance count x content breakdown.
+
+    Shortcut over list_block_definitions + expand_block: for each definition it
+    reports instance_count and an agnostic content summary (member type counts,
+    annotation texts, total curve length/area of members). The caller multiplies
+    by instance_count and applies domain meaning (price, material) in the session —
+    the MCP only provides the geometric facts.
+    """
+    bridge_url, timeout = _bridge_settings()
+    try:
+        defs_payload = live_list_definitions_bridge(bridge_url, timeout)
+    except Exception as exc:
+        return _live_only_error(f"{type(exc).__name__}: {exc}")
+
+    definitions = defs_payload.get("definitions") if isinstance(defs_payload, dict) else []
+    if not isinstance(definitions, list):
+        definitions = []
+
+    rows: list[dict[str, Any]] = []
+    for d in definitions:
+        if not isinstance(d, dict):
+            continue
+        instance_count = int(d.get("instance_count", 0) or 0)
+        if only_with_instances and instance_count <= 0:
+            continue
+        name = str(d.get("definition_name", ""))
+        try:
+            content = live_definition_objects_bridge(bridge_url, timeout, name)
+            members = content.get("objects") if isinstance(content, dict) else []
+            if not isinstance(members, list):
+                members = []
+            summary = _summarize_definition_content(members)
+        except Exception as exc:
+            summary = {"error": f"{type(exc).__name__}: {exc}"}
+        rows.append(
+            {
+                "definition_name": name,
+                "definition_id": str(d.get("definition_id", "")),
+                "instance_count": instance_count,
+                "member_count": int(d.get("object_count", 0) or 0),
+                "content": summary,
+            }
+        )
+
+    rows.sort(key=lambda r: (-r["instance_count"], r["definition_name"]))
+    return {
+        "source": "bridge_live",
+        "only_with_instances": bool(only_with_instances),
+        "definition_count": len(rows),
+        "definitions": rows,
+    }
+
+
+# ---------------------------------------------------------------------------
 # diff_snapshots
 # ---------------------------------------------------------------------------
 
@@ -1263,20 +1519,26 @@ def list_block_definitions() -> dict[str, Any]:
     return payload
 
 
-def expand_block(definition_name: str) -> dict[str, Any]:
+def expand_block(definition_name: str, resolve_instances: bool = False) -> dict[str, Any]:
     """Read the objects that compose a block definition (raw, no transform applied).
 
     This reaches data that lives INSIDE a block — child geometry, their user_text,
     materials and annotation text — which is invisible from the instance alone.
     The ``definition_name`` is matched exactly (case-sensitive); get valid names
     from ``list_block_definitions`` or ``describe_model``.
+
+    With ``resolve_instances=True`` the result also carries an ``instances`` block:
+    one row per placed instance, each member's bbox transformed by that instance's
+    transform (lightweight — only the bbox is moved, not the heavy geometry).
     """
     name = str(definition_name or "").strip()
     if not name:
         return {"error": "invalid_definition_name", "message": "definition_name is empty"}
     bridge_url, timeout = _bridge_settings()
     try:
-        payload = live_definition_objects_bridge(bridge_url, timeout, name)
+        payload = live_definition_objects_bridge(
+            bridge_url, timeout, name, resolve_instances=bool(resolve_instances)
+        )
     except Exception as exc:
         return _live_only_error(f"{type(exc).__name__}: {exc}")
     return payload
