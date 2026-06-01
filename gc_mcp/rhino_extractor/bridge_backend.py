@@ -24,7 +24,20 @@ def _bridge_json_request(
         with urlopen(req, timeout=timeout_seconds) as resp:
             text = resp.read().decode("utf-8")
     except HTTPError as exc:
-        raise RuntimeError(f"bridge_http_error:{exc.code}") from exc
+        # The bridge puts an honest {error, code} JSON in the body (e.g. a 400 for an
+        # unsupported geometry type). Surface it instead of flattening every non-2xx to
+        # a bare status code that callers then mistake for "bridge down".
+        detail = ""
+        try:
+            raw = exc.read().decode("utf-8") if exc.fp is not None else ""
+            if raw:
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict) and parsed.get("error"):
+                    code = parsed.get("code")
+                    detail = f":{parsed['error']}" + (f" ({code})" if code else "")
+        except Exception:
+            detail = ""
+        raise RuntimeError(f"bridge_http_error:{exc.code}{detail}") from exc
     except URLError as exc:
         raise RuntimeError(f"bridge_connection_error:{exc.reason}") from exc
 

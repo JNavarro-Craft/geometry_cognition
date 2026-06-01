@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -1732,7 +1733,29 @@ def _get_elements(guid: str, element: str) -> dict[str, Any]:
     try:
         return live_object_elements_bridge(bridge_url, timeout, guid_text, element)
     except Exception as exc:
-        return _live_only_error(f"{type(exc).__name__}: {exc}")
+        return _bridge_error_or_live_unavailable(exc, object_id=guid_text)
+
+
+def _bridge_error_or_live_unavailable(exc: Exception, *, object_id: str | None = None) -> dict[str, Any]:
+    """Classify a bridge call failure honestly.
+
+    A 4xx from the bridge is a client/usage error (e.g. unsupported geometry type,
+    object not found) and carries the bridge's own message — report it as such, NOT as
+    ``live_mode_unavailable`` which means "the live model could not be reached" and is
+    misleading for a 400. Connectivity/5xx still map to live_mode_unavailable.
+    """
+    msg = str(exc)
+    m = re.match(r"bridge_http_error:(\d{3})(?::(.*))?$", msg)
+    if m and m.group(1)[0] == "4":
+        out: dict[str, Any] = {
+            "error": "bridge_request_rejected",
+            "http_status": int(m.group(1)),
+            "message": (m.group(2) or "").strip() or "bridge rejected the request",
+        }
+        if object_id is not None:
+            out["object_id"] = object_id
+        return out
+    return _live_only_error(f"{type(exc).__name__}: {exc}")
 
 
 def get_vertices(guid: str) -> dict[str, Any]:
