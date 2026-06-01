@@ -132,6 +132,51 @@ def live_object_detail_bridge(
     )
 
 
+def live_compute_distance_bridge(
+    base_url: str,
+    timeout_seconds: float,
+    id_a: str,
+    id_b: str,
+) -> dict[str, Any]:
+    """Minimum surface-to-surface distance between two objects (GET /v1/live/distance)."""
+    from urllib.parse import quote
+
+    a = quote(str(id_a).strip(), safe=":")
+    b = quote(str(id_b).strip(), safe=":")
+    return _bridge_json_request(
+        base_url,
+        f"/v1/live/distance?a={a}&b={b}",
+        timeout_seconds,
+        method="GET",
+        body=None,
+        content_type=None,
+    )
+
+
+def live_find_nearby_bridge(
+    base_url: str,
+    timeout_seconds: float,
+    anchor_id: str,
+    radius: float,
+    candidate_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Objects within ``radius`` of an anchor (POST /v1/live/nearby)."""
+    from urllib.parse import quote
+
+    payload: dict[str, Any] = {"radius": radius}
+    if candidate_ids:
+        payload["object_ids"] = list(candidate_ids)
+    body = json.dumps(payload).encode("utf-8")
+    anchor = quote(str(anchor_id).strip(), safe=":")
+    return _bridge_json_request(
+        base_url,
+        f"/v1/live/nearby?anchor={anchor}",
+        timeout_seconds,
+        method="POST",
+        body=body,
+    )
+
+
 def live_object_elements_bridge(
     base_url: str,
     timeout_seconds: float,

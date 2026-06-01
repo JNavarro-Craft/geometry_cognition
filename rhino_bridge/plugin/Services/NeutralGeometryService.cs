@@ -1040,6 +1040,161 @@ public class NeutralGeometryService
         };
     }
 
+    // Minimum distance between two objects (model units). 0 means touching/overlapping.
+    // Agnostic geometric fact — like contact but for the GAP, the piece compute_contacts
+    // cannot give (it only reports things already touching). Uses bidirectional
+    // closest-point between breps; mesh via its vertices to the other brep as a robust,
+    // dependency-free estimate. Returns null when geometry is unusable.
+    private static double? MinDistanceBetween(GeometryBase a, GeometryBase b)
+    {
+        // RhinoCommon has no direct Brep-Brep closest-point. Estimate the minimum
+        // surface-to-surface distance by sampling points on each object and taking the
+        // closest-point onto the other, BOTH directions (a vertex of A may be far from
+        // any vertex of B yet B's surface passes close to it, and vice versa). Robust
+        // and dependency-free; exact at touching (0) and tight for convex-ish parts.
+        try
+        {
+            var pa = SamplePointsForDistance(a);
+            var pb = SamplePointsForDistance(b);
+            if (pa.Count == 0 || pb.Count == 0) return null;
+            var ba = GeometryAsBrepForElements(a);
+            var bb = GeometryAsBrepForElements(b);
+
+            double best = double.PositiveInfinity;
+            // A's points onto B's surface
+            if (bb is not null)
+                foreach (var p in pa) best = Math.Min(best, p.DistanceTo(bb.ClosestPoint(p)));
+            // B's points onto A's surface
+            if (ba is not null)
+                foreach (var p in pb) best = Math.Min(best, p.DistanceTo(ba.ClosestPoint(p)));
+            // Mesh fallback if neither converted to brep on a side: point-to-point.
+            if (ba is null && bb is null)
+                foreach (var p in pa) foreach (var q in pb) best = Math.Min(best, p.DistanceTo(q));
+
+            return double.IsInfinity(best) ? (double?)null : best;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // Sample points representing an object's surface for distance estimation:
+    // brep/extrusion vertices + face centers; mesh vertices; fallback to bbox corners.
+    private static List<Point3d> SamplePointsForDistance(GeometryBase g)
+    {
+        var pts = new List<Point3d>();
+        var brep = GeometryAsBrepForElements(g);
+        if (brep is not null)
+        {
+            foreach (var v in brep.Vertices) pts.Add(v.Location);
+            foreach (var f in brep.Faces)
+            {
+                var u = f.Domain(0).Mid; var w = f.Domain(1).Mid;
+                pts.Add(f.PointAt(u, w));
+            }
+        }
+        else if (g is Mesh m)
+        {
+            pts.AddRange(m.Vertices.ToPoint3dArray());
+        }
+        if (pts.Count == 0)
+        {
+            var bb = GetValidBbox(g);
+            if (bb.IsValid) pts.AddRange(bb.GetCorners());
+        }
+        return pts;
+    }
+
+    public Dictionary<string, object> ComputeDistance(RhinoDoc doc, string idA, string idB)
+    {
+        var (objA, geomA) = ResolveGeometryOrThrow(doc, idA);
+        var (objB, geomB) = ResolveGeometryOrThrow(doc, idB);
+        var d = MinDistanceBetween(geomA, geomB);
+        var bboxGap = ComputeBoundingBoxGap(GetValidBbox(geomA), GetValidBbox(geomB));
+        var result = new Dictionary<string, object>
+        {
+            ["source"] = "rhino_bridge",
+            ["api"] = "v1_live",
+            ["pair"] = new List<object> { objA.Id.ToString(), objB.Id.ToString() },
+            // bbox_gap is the axis-aligned-box separation (a lower bound, cheap);
+            // distance is the true minimum surface-to-surface distance.
+            ["bbox_gap"] = double.IsInfinity(bboxGap) ? null! : bboxGap,
+            ["distance"] = d.HasValue ? (object)d.Value : null!,
+        };
+        if (!d.HasValue)
+        {
+            result["warning"] = "distance_unavailable_for_geometry";
+        }
+        return result;
+    }
+
+    // Objects within `radius` of the anchor (surface-to-surface). Broad phase: only
+    // evaluate candidates whose bbox is within radius of the anchor's bbox.
+    public Dictionary<string, object> FindNearby(
+        RhinoDoc doc, string anchorId, double radius, IReadOnlyList<string>? candidateIds)
+    {
+        var (anchorObj, anchorGeom) = ResolveGeometryOrThrow(doc, anchorId);
+        var r = radius > 0 && !double.IsNaN(radius) && !double.IsInfinity(radius) ? radius : 0.0;
+        var anchorBox = GetValidBbox(anchorGeom);
+        var anchorGuid = anchorObj.Id.ToString();
+
+        // Candidate set: explicit list, or every object in the doc.
+        IEnumerable<RhinoObject> candidates;
+        if (candidateIds is { Count: > 0 })
+        {
+            var resolved = new List<RhinoObject>();
+            foreach (var t in candidateIds)
+            {
+                var o = TryFindObject(doc, t);
+                if (o is not null) resolved.Add(o);
+            }
+            candidates = resolved;
+        }
+        else
+        {
+            candidates = doc.Objects;
+        }
+
+        var near = new List<object>();
+        var tested = 0;
+        foreach (var cand in candidates)
+        {
+            if (cand is null || cand.Id.ToString() == anchorGuid) continue;
+            var cg = cand.Geometry;
+            if (cg is null) continue;
+            var cbox = GetValidBbox(cg);
+            if (!cbox.IsValid) continue;
+            // Broad phase: bbox-gap lower bound must be within radius.
+            var gap = ComputeBoundingBoxGap(anchorBox, cbox);
+            if (gap > r) continue;
+            tested++;
+            var d = MinDistanceBetween(anchorGeom, cg);
+            if (d.HasValue && d.Value <= r)
+            {
+                near.Add(new Dictionary<string, object>
+                {
+                    ["object_id"] = cand.Id.ToString(),
+                    ["type"] = cg.ObjectType.ToString(),
+                    ["distance"] = d.Value,
+                });
+            }
+        }
+        near.Sort((x, y) => ((double)((Dictionary<string, object>)x)["distance"])
+                            .CompareTo((double)((Dictionary<string, object>)y)["distance"]));
+
+        return new Dictionary<string, object>
+        {
+            ["source"] = "rhino_bridge",
+            ["api"] = "v1_live",
+            ["anchor"] = anchorGuid,
+            ["radius"] = r,
+            ["candidates_tested"] = tested,
+            ["nearby_count"] = near.Count,
+            ["nearby"] = near,
+        };
+    }
+
     private static Brep? AsBrep(GeometryBase? geometry)
     {
         if (geometry is Brep brep)

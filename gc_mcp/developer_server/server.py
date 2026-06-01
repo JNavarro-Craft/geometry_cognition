@@ -18,11 +18,13 @@ from gc_mcp.developer_server.tools import (
     assert_change,
     bill_of_materials,
     compute_contacts,
+    compute_distance,
     delete_snapshot,
     describe_model,
     diff_object,
     diff_snapshots,
     expand_block,
+    find_nearby,
     get_edges,
     get_faces,
     get_vertices,
@@ -164,6 +166,30 @@ def compute_contacts_tool(
     needs no knowledge of what the object is, and the client cannot derive it without a
     geometry engine — so the primitive is exposed; the reasoning ON it stays in the client."""
     return compute_contacts(object_ids=object_ids, filters=filters, tolerance=tolerance, summary=summary)
+
+
+@mcp.tool(name="compute_distance")
+def compute_distance_tool(guid_a: str, guid_b: str) -> dict[str, Any]:
+    """Minimum surface-to-surface distance between two objects (model units). 0 = touching.
+    Returns distance (true minimum) + bbox_gap (cheap axis-aligned lower bound). The gap
+    counterpart to compute_contacts (which only reports things already touching).
+    Agnostic per docs/agnostic_principle.md: universal, no domain knowledge, needs a
+    geometry engine (closest-point) — primitive exposed, reasoning stays in the client."""
+    return compute_distance(guid_a=guid_a, guid_b=guid_b)
+
+
+@mcp.tool(name="find_nearby")
+def find_nearby_tool(
+    guid: str,
+    radius: float,
+    object_ids: list[str] | None = None,
+    filters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Objects within radius (surface-to-surface) of an anchor. Candidate set: object_ids,
+    else filters (query_objects keys), else the whole model. Each hit {object_id, type,
+    distance}, nearest first; anchor excluded. The proximity counterpart to
+    compute_contacts. Agnostic per docs/agnostic_principle.md."""
+    return find_nearby(guid=guid, radius=radius, object_ids=object_ids, filters=filters)
 
 
 @mcp.tool(name="bill_of_materials")

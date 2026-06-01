@@ -24,7 +24,9 @@ from gc_mcp.rhino_extractor.bridge_backend import (
     extract_objects_bridge,
     fetch_scene_via_live_query_and_extract_objects,
     live_compute_contacts_bridge,
+    live_compute_distance_bridge,
     live_definition_objects_bridge,
+    live_find_nearby_bridge,
     live_list_definitions_bridge,
     live_object_detail_bridge,
     live_object_elements_bridge,
@@ -913,6 +915,73 @@ def compute_contacts(
         result["contacts"] = slim
         result["summarized"] = True
 
+    if resolve_warnings:
+        existing = result.get("fetch_warnings")
+        result["fetch_warnings"] = ([*existing] if isinstance(existing, list) else []) + resolve_warnings
+    return result
+
+
+def compute_distance(guid_a: str, guid_b: str) -> dict[str, Any]:
+    """Minimum surface-to-surface distance between two objects (model units).
+
+    0 means touching/overlapping. Returns ``distance`` (true minimum) and ``bbox_gap``
+    (axis-aligned-box separation, a cheap lower bound). This is the gap counterpart to
+    compute_contacts, which only reports things already touching — distance measures
+    the separation between things that do NOT touch.
+
+    Agnostic acid test (docs/agnostic_principle.md):
+      1. Exists in any domain?  ✓ distance between two solids is universal.
+      2. Needs to know what the object represents?  ✓ NO — pure geometry.
+      3. Client derivable from raw primitives?  ✓ NO — needs closest-point on the
+         surfaces; not reconstructable from bbox alone (bbox only bounds it).
+      4. An LLM can conclude it from raw geometric data?  ✓ NO — cannot run
+         closest-point from coordinates; expose the primitive.
+    """
+    a, b = str(guid_a or "").strip(), str(guid_b or "").strip()
+    if not a or not b:
+        return {"error": "invalid_guid", "message": "compute_distance needs two object ids (guid_a, guid_b)"}
+    bridge_url, timeout = _bridge_settings()
+    try:
+        return live_compute_distance_bridge(bridge_url, timeout, a, b)
+    except Exception as exc:
+        return _bridge_error_or_live_unavailable(exc)
+
+
+def find_nearby(
+    guid: str,
+    radius: float,
+    object_ids: list[str] | None = None,
+    filters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Objects within ``radius`` (surface-to-surface, model units) of an anchor object.
+
+    The candidate set is, in order of precedence: ``object_ids`` (explicit), the set
+    resolved from ``filters`` (same keys as query_objects), or the whole model. Each
+    hit: ``{object_id, type, distance}``, sorted nearest first. The anchor is excluded.
+
+    The proximity counterpart to compute_contacts: "what is near X without touching it".
+    Agnostic acid test (docs/agnostic_principle.md): universal, no domain knowledge,
+    needs a geometry engine (closest-point), not client/LLM-derivable from bbox alone.
+    """
+    anchor = str(guid or "").strip()
+    if not anchor:
+        return {"error": "invalid_guid", "message": "find_nearby needs an anchor object id (guid)"}
+    if not isinstance(radius, (int, float)) or radius <= 0:
+        return {"error": "invalid_radius", "message": "radius must be a positive number (model units)"}
+    bridge_url, timeout = _bridge_settings()
+    candidates = [str(x) for x in (object_ids or [])]
+    resolve_warnings: list[str] = []
+    if not candidates and filters:
+        try:
+            objs, resolve_warnings = _fetch_objects(bridge_url, timeout, filters=None)
+        except Exception as exc:
+            return _live_only_error(f"{type(exc).__name__}: {exc}")
+        flt = filters if isinstance(filters, dict) else {}
+        candidates = [str(o.get("object_id")) for o in objs if _object_matches_query(o, flt) and o.get("object_id")]
+    try:
+        result = live_find_nearby_bridge(bridge_url, timeout, anchor, float(radius), candidates or None)
+    except Exception as exc:
+        return _bridge_error_or_live_unavailable(exc)
     if resolve_warnings:
         existing = result.get("fetch_warnings")
         result["fetch_warnings"] = ([*existing] if isinstance(existing, list) else []) + resolve_warnings

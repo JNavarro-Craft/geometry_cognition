@@ -99,6 +99,8 @@ public class LocalHttpBridge
             || (isV1Live && path == "/v1/live/objects/query" && method == "POST")
             || (isV1Live && path == "/v1/live/contacts" && method == "POST")
             || (isV1Live && path == "/v1/live/project" && method == "POST")
+            || (isV1Live && path == "/v1/live/distance" && method == "GET")
+            || (isV1Live && path == "/v1/live/nearby" && method == "POST")
             || (isV1Live && path == "/v1/live/definitions" && method == "GET")
             || (isV1Live && path == "/v1/live/definition_objects" && method == "GET")
             || (isV1Live
@@ -453,6 +455,54 @@ public class LocalHttpBridge
                 return _neutralGeometryService.ProjectToPlane(doc, projIds, plane);
             });
             HttpJson.Write(res, 200, projection);
+            return true;
+        }
+
+        if (path == "/v1/live/distance" && method == "GET")
+        {
+            var a = req.QueryString["a"]?.Trim() ?? string.Empty;
+            var b = req.QueryString["b"]?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b))
+            {
+                HttpJson.Write(res, 400, HttpJson.Error("compute_distance requires query params a and b (object ids).", "bad_request"));
+                return true;
+            }
+            var dist = ExecuteOnUiThread(() =>
+            {
+                var doc = RequireActiveDoc();
+                return _neutralGeometryService.ComputeDistance(doc, a, b);
+            });
+            HttpJson.Write(res, 200, dist);
+            return true;
+        }
+
+        if (path == "/v1/live/nearby" && method == "POST")
+        {
+            var body = ReadRequestBody(req);
+            var anchor = req.QueryString["anchor"]?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(anchor))
+            {
+                // also accept anchor in the body's object_id list (first id)
+                var ids0 = ParseRequestedObjectIds(req, body);
+                if (ids0.Count > 0) anchor = ids0[0];
+            }
+            if (string.IsNullOrWhiteSpace(anchor))
+            {
+                HttpJson.Write(res, 400, HttpJson.Error("find_nearby requires an anchor object id (query param 'anchor').", "bad_request"));
+                return true;
+            }
+            var radius = ParseDoubleFromBodyOrQuery(req, body, "radius", 0.0);
+            // Optional candidate set: any object ids in the body other than the anchor.
+            var candidateIds = ParseRequestedObjectIds(req, body);
+            candidateIds.RemoveAll(id => string.Equals(id, anchor, StringComparison.OrdinalIgnoreCase));
+            var anchorForCall = anchor;
+            var nearby = ExecuteOnUiThread(() =>
+            {
+                var doc = RequireActiveDoc();
+                return _neutralGeometryService.FindNearby(
+                    doc, anchorForCall, radius, candidateIds.Count > 0 ? candidateIds : null);
+            });
+            HttpJson.Write(res, 200, nearby);
             return true;
         }
 
