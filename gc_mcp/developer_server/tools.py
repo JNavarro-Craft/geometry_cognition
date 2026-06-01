@@ -1673,16 +1673,20 @@ def diff_object(
 # ---------------------------------------------------------------------------
 
 
-def list_block_definitions(summary: bool = False) -> dict[str, Any]:
+def list_block_definitions(
+    summary: bool = False, limit: int | None = None, offset: int | None = None
+) -> dict[str, Any]:
     """List block definitions in the live model with instance and member counts.
 
     Returns one row per definition: definition_name, definition_id, object_count
     (members composing the definition), instance_count (placements in the model),
     and bbox. Use ``expand_block(name)`` to read the members' content.
 
-    With ``summary=True`` the per-definition ``bbox`` is dropped, leaving only names
-    and counts. In models with many definitions the bbox dicts dominate the response
-    size; the summary keeps the catalogue readable in one call.
+    With ``summary=True`` each row is slimmed to definition_name + object_count +
+    instance_count (bbox and definition_id dropped) — both are the bulk in large
+    catalogues. With many definitions even slim rows add up, so ``limit``/``offset``
+    page the list exactly like query_objects: the result carries next_offset +
+    has_more when more remain. Pass summary=True AND a limit for big models.
     """
     bridge_url, timeout = _bridge_settings()
     try:
@@ -1690,17 +1694,38 @@ def list_block_definitions(summary: bool = False) -> dict[str, Any]:
     except Exception as exc:
         return _live_only_error(f"{type(exc).__name__}: {exc}")
 
-    if summary and isinstance(payload.get("definitions"), list):
-        slim = [
-            {k: v for k, v in d.items() if k != "bbox"}
-            for d in payload["definitions"]
-            if isinstance(d, dict)
+    defs = payload.get("definitions")
+    if not isinstance(defs, list):
+        return payload
+
+    if summary:
+        # Keep only the discovery-relevant fields; drop bbox (geometry) and the GUID
+        # definition_id, which together dominate the size at catalogue scale.
+        rows = [
+            {k: v for k, v in d.items() if k in ("definition_name", "object_count", "instance_count")}
+            for d in defs if isinstance(d, dict)
         ]
-        out = {k: v for k, v in payload.items() if k != "definitions"}
-        out["definitions"] = slim
+    else:
+        rows = defs
+
+    total = len(rows)
+    off = max(0, int(offset)) if offset is not None else 0
+    page = rows[off:]
+    if limit is not None:
+        page = page[: max(0, int(limit))]
+
+    out = {k: v for k, v in payload.items() if k != "definitions"}
+    out["definitions"] = page
+    out["definition_count"] = total
+    out["returned_count"] = len(page)
+    out["offset"] = off
+    if summary:
         out["summarized"] = True
-        return out
-    return payload
+    next_off = off + len(page)
+    if next_off < total:
+        out["next_offset"] = next_off
+        out["has_more"] = True
+    return out
 
 
 def expand_block(

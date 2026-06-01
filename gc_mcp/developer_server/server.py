@@ -294,12 +294,15 @@ def get_faces_tool(guid: str) -> dict[str, Any]:
 
 
 @mcp.tool(name="list_block_definitions")
-def list_block_definitions_tool(summary: bool = False) -> dict[str, Any]:
+def list_block_definitions_tool(
+    summary: bool = False, limit: int | None = None, offset: int | None = None
+) -> dict[str, Any]:
     """List block definitions in the live model (definition_name, member object_count,
     instance_count, bbox). Use expand_block(name) to read what is inside a definition.
-    summary=True drops the per-definition bbox (the bulk in big catalogues), leaving
-    names + counts so the whole list fits in one response."""
-    return list_block_definitions(summary=summary)
+    summary=True slims each row to name + counts (drops bbox and definition_id).
+    limit/offset page the list (next_offset + has_more when more remain) — for models
+    with hundreds of definitions, pass summary=True together with a limit."""
+    return list_block_definitions(summary=summary, limit=limit, offset=offset)
 
 
 @mcp.tool(name="expand_block")
