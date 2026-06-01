@@ -27,6 +27,7 @@ from gc_mcp.rhino_extractor.bridge_backend import (
     live_list_definitions_bridge,
     live_object_detail_bridge,
     live_object_elements_bridge,
+    live_project_to_plane_bridge,
     live_scene_summary_bridge,
 )
 
@@ -852,6 +853,61 @@ def compute_contacts(
 
     try:
         result = live_compute_contacts_bridge(bridge_url, timeout, ids, tolerance=tolerance)
+    except Exception as exc:
+        return _live_only_error(f"{type(exc).__name__}: {exc}")
+
+    if resolve_warnings:
+        existing = result.get("fetch_warnings")
+        result["fetch_warnings"] = ([*existing] if isinstance(existing, list) else []) + resolve_warnings
+    return result
+
+
+def project_to_plane(
+    plane: dict[str, Any],
+    object_ids: list[str] | None = None,
+    filters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Project solids onto a plane; return 2D polygons in the plane's local (u,v).
+
+    One polygon per face (Brep face loop / mesh facet) in the plane's (u,v) frame.
+    This is the raw 3D->2D primitive: the client composes drawing, aperture detection
+    (gaps between projected polygons), coverage analysis — the MCP names none of those.
+
+    - ``plane``: ``{"origin": [x,y,z], "normal": [x,y,z]}``.
+    - ``object_ids``: explicit GUIDs, OR ``filters`` (same keys as query_objects) to
+      resolve the set from the live model.
+    Each projection: ``{object_id, polygons_2d, warnings}``. A face perpendicular to
+    the plane degenerates to a line -> returned as a near-zero-area polygon with a
+    ``face_perpendicular_to_plane`` warning, not an error. Non-projectable objects
+    are reported in ``skipped``.
+
+    Agnostic acid test (docs/agnostic_principle.md):
+      1. Exists in any domain?  ✓ projecting geometry to a plane is universal.
+      2. Needs to know what the object represents?  ✓ NO — pure geometry.
+      3. Client derivable from raw primitives?  ✓ NO — needs the kernel to map face
+         loops to plane space.
+      4. An LLM can conclude it from raw geometric data?  ✓ NO — cannot project exact
+         loops from coordinates; expose the primitive, let the LLM reason on it.
+    """
+    if not isinstance(plane, dict) or "origin" not in plane or "normal" not in plane:
+        return {"error": "invalid_plane", "message": 'plane must be {"origin":[x,y,z], "normal":[x,y,z]}'}
+
+    bridge_url, timeout = _bridge_settings()
+    ids = [str(x) for x in (object_ids or [])]
+    resolve_warnings: list[str] = []
+    if not ids and filters:
+        try:
+            objs, resolve_warnings = _fetch_objects(bridge_url, timeout, filters=None)
+        except Exception as exc:
+            return _live_only_error(f"{type(exc).__name__}: {exc}")
+        flt = filters if isinstance(filters, dict) else {}
+        ids = [str(o.get("object_id")) for o in objs if _object_matches_query(o, flt) and o.get("object_id")]
+
+    if not ids:
+        return {"error": "no_object_ids", "message": "project_to_plane needs object_ids, or filters that resolve to objects."}
+
+    try:
+        result = live_project_to_plane_bridge(bridge_url, timeout, ids, plane)
     except Exception as exc:
         return _live_only_error(f"{type(exc).__name__}: {exc}")
 

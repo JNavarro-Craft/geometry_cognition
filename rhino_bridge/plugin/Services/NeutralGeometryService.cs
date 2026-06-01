@@ -773,6 +773,164 @@ public class NeutralGeometryService
         return result;
     }
 
+    // Project solids onto a plane and return 2D polygons in the plane's LOCAL (u,v)
+    // coordinates. One polygon per face (Brep face loop / mesh facet), which is the
+    // agnostic raw output: the client composes drawing, aperture detection (gaps
+    // between projected polygons), coverage analysis — the MCP names none of those.
+    //
+    // Agnostic acid test (see docs/agnostic_principle.md):
+    //   1. Exists in any domain?  ✓ — projecting geometry to a plane is universal.
+    //   2. Needs to know what the object represents?  ✓ NO — pure geometry.
+    //   3. Client can derive it from raw primitives?  ✗ — needs the kernel to map
+    //      3D faces to plane space; not reconstructable from bbox alone.
+    //   4. An LLM can conclude it from raw geometric data?  ✗ — cannot project exact
+    //      face loops from coordinates; expose the primitive, let the LLM reason on it.
+    //
+    // Edge case: a face perpendicular to the plane degenerates to a line — it is
+    // returned as a (near-zero-area) polygon with a per-object warning, not dropped.
+    public Dictionary<string, object> ProjectToPlane(
+        RhinoDoc doc,
+        IReadOnlyList<string> objectIds,
+        Plane plane)
+    {
+        if (!plane.IsValid)
+        {
+            throw new InvalidOperationException("project_to_plane: invalid plane (origin/normal).");
+        }
+
+        var projections = new List<object>();
+        var skipped = new List<object>();
+
+        foreach (var token in objectIds ?? Array.Empty<string>())
+        {
+            var obj = TryFindObject(doc, token);
+            if (obj is null)
+            {
+                skipped.Add(new Dictionary<string, object> { ["object_id"] = token ?? string.Empty, ["reason"] = "not_found" });
+                continue;
+            }
+            var geometry = obj.Geometry;
+            var warnings = new List<object>();
+            var polygons = new List<object>();
+
+            var brep = GeometryAsBrepForElements(geometry);
+            if (brep is not null)
+            {
+                foreach (var face in brep.Faces)
+                {
+                    var loop = face.OuterLoop;
+                    if (loop is null) continue;
+                    var loopCurve = loop.To3dCurve();
+                    if (loopCurve is null) continue;
+                    var poly = PolylineFromCurve(loopCurve, 64);
+                    var uv = ProjectPointsToPlaneUV(poly, plane, out var degenerate);
+                    if (uv.Count >= 2)
+                    {
+                        polygons.Add(uv);
+                        if (degenerate) warnings.Add("face_perpendicular_to_plane");
+                    }
+                }
+            }
+            else if (geometry is Mesh mesh)
+            {
+                for (int i = 0; i < mesh.Faces.Count; i++)
+                {
+                    var mf = mesh.Faces[i];
+                    var pts = new List<Point3d>();
+                    pts.Add(mesh.Vertices[mf.A]); pts.Add(mesh.Vertices[mf.B]); pts.Add(mesh.Vertices[mf.C]);
+                    if (mf.IsQuad) pts.Add(mesh.Vertices[mf.D]);
+                    pts.Add(pts[0]);
+                    var uv = ProjectPointsToPlaneUV(pts, plane, out var degenerate);
+                    if (uv.Count >= 2)
+                    {
+                        polygons.Add(uv);
+                        if (degenerate) warnings.Add("face_perpendicular_to_plane");
+                    }
+                }
+            }
+            else
+            {
+                skipped.Add(new Dictionary<string, object>
+                {
+                    ["object_id"] = obj.Id.ToString(),
+                    ["reason"] = "not_projectable_geometry",
+                    ["type"] = geometry?.ObjectType.ToString() ?? "Unknown",
+                });
+                continue;
+            }
+
+            // De-duplicate warnings while preserving the honest signal.
+            var distinctWarnings = warnings.Select(w => (string)w).Distinct().Cast<object>().ToList();
+            projections.Add(new Dictionary<string, object>
+            {
+                ["object_id"] = obj.Id.ToString(),
+                ["polygons_2d"] = polygons,
+                ["warnings"] = distinctWarnings,
+            });
+        }
+
+        return new Dictionary<string, object>
+        {
+            ["source"] = "rhino_bridge",
+            ["api"] = "v1_live",
+            ["plane"] = new Dictionary<string, object>
+            {
+                ["origin"] = new List<double> { plane.OriginX, plane.OriginY, plane.OriginZ },
+                ["normal"] = new List<double> { plane.Normal.X, plane.Normal.Y, plane.Normal.Z },
+            },
+            ["projection_count"] = projections.Count,
+            ["projections"] = projections,
+            ["skipped"] = skipped,
+        };
+    }
+
+    private static List<Point3d> PolylineFromCurve(Curve curve, int count)
+    {
+        // Tessellate a (possibly curved) face-loop curve into points. A polyline loop
+        // returns its corners; otherwise sample the domain.
+        var pts = new List<Point3d>();
+        if (curve is null) return pts;
+        if (curve.TryGetPolyline(out var pl) && pl is not null && pl.Count >= 2)
+        {
+            foreach (var p in pl) pts.Add(p);
+            return pts;
+        }
+        return SampleCurve(curve, Math.Max(8, count));
+    }
+
+    // Map 3D points to the plane's local (u,v). degenerate=true if the points'
+    // spread perpendicular to the plane dominates (face nearly perpendicular -> the
+    // projection collapses toward a line). Reported, not thrown.
+    private static List<object> ProjectPointsToPlaneUV(IList<Point3d> pts, Plane plane, out bool degenerate)
+    {
+        degenerate = false;
+        var uv = new List<object>();
+        if (pts is null || pts.Count == 0) return uv;
+
+        double uMin = double.MaxValue, uMax = double.MinValue, vMin = double.MaxValue, vMax = double.MinValue;
+        double wMin = double.MaxValue, wMax = double.MinValue;
+        foreach (var p in pts)
+        {
+            // (u,v) in plane; w = signed distance along the normal.
+            double u = (p - plane.Origin) * plane.XAxis;
+            double v = (p - plane.Origin) * plane.YAxis;
+            double w = (p - plane.Origin) * plane.Normal;
+            uv.Add(new List<double> { u, v });
+            uMin = Math.Min(uMin, u); uMax = Math.Max(uMax, u);
+            vMin = Math.Min(vMin, v); vMax = Math.Max(vMax, v);
+            wMin = Math.Min(wMin, w); wMax = Math.Max(wMax, w);
+        }
+        var inPlaneSpan = Math.Max(uMax - uMin, vMax - vMin);
+        var normalSpan = wMax - wMin;
+        // Face is ~perpendicular to the plane when its in-plane footprint is tiny
+        // relative to its extent along the normal.
+        if (inPlaneSpan <= 1e-6 || (normalSpan > 0 && inPlaneSpan < normalSpan * 1e-3))
+        {
+            degenerate = true;
+        }
+        return uv;
+    }
+
     // Detect REAL contacts between solids (not bbox overlap) and report WHERE the
     // contact is, not just which pair touches. The location is the whole point: it is
     // the difference between "these two pieces touch" and "the connector sits here".

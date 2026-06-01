@@ -29,6 +29,7 @@ from gc_mcp.developer_server.tools import (
     inspect_object,
     list_block_definitions,
     list_snapshots,
+    project_to_plane,
     prune_snapshots_tool_logic,
     query_objects,
     take_snapshot,
@@ -244,6 +245,21 @@ def inspect_object_tool(
     With detail_level="full", annotation objects (text, dimensions, leaders) include
     an ``annotation_text`` field with their resolved plain_text."""
     return inspect_object(guid=guid, detail_level=detail_level, user_text=user_text)
+
+
+@mcp.tool(name="project_to_plane")
+def project_to_plane_tool(
+    plane: dict[str, Any],
+    object_ids: list[str] | None = None,
+    filters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Project solids onto a plane; return 2D polygons in the plane's local (u,v). One
+    polygon per face. Pass ``plane={"origin":[x,y,z],"normal":[x,y,z]}`` plus
+    ``object_ids`` or ``filters`` (query_objects keys). Each: {object_id, polygons_2d,
+    warnings}. A face perpendicular to the plane -> degenerate polygon + warning, not an
+    error. The raw 3D->2D primitive: the client composes drawing / aperture detection /
+    coverage; the MCP names none. Agnostic per docs/agnostic_principle.md."""
+    return project_to_plane(plane=plane, object_ids=object_ids, filters=filters)
 
 
 @mcp.tool(name="get_vertices")

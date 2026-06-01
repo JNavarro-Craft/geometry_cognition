@@ -10,6 +10,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Rhino;
+using Rhino.Geometry;
 using RhinoPrefabGeometryPlugin.Services;
 using RhinoPrefabGeometryPlugin.Utils;
 
@@ -97,6 +98,7 @@ public class LocalHttpBridge
             (isV1Live && path == "/v1/live/scene/summary" && method == "GET")
             || (isV1Live && path == "/v1/live/objects/query" && method == "POST")
             || (isV1Live && path == "/v1/live/contacts" && method == "POST")
+            || (isV1Live && path == "/v1/live/project" && method == "POST")
             || (isV1Live && path == "/v1/live/definitions" && method == "GET")
             || (isV1Live && path == "/v1/live/definition_objects" && method == "GET")
             || (isV1Live
@@ -431,6 +433,29 @@ public class LocalHttpBridge
             return true;
         }
 
+        if (path == "/v1/live/project" && method == "POST")
+        {
+            var body = ReadRequestBody(req);
+            var projIds = ParseRequestedObjectIds(req, body);
+            if (projIds.Count == 0)
+            {
+                HttpJson.Write(res, 400, HttpJson.Error("project_to_plane requires object_ids.", "bad_request"));
+                return true;
+            }
+            if (!TryParsePlane(body, out var plane))
+            {
+                HttpJson.Write(res, 400, HttpJson.Error("project_to_plane requires plane:{origin:[x,y,z], normal:[x,y,z]}.", "bad_request"));
+                return true;
+            }
+            var projection = ExecuteOnUiThread(() =>
+            {
+                var doc = RequireActiveDoc();
+                return _neutralGeometryService.ProjectToPlane(doc, projIds, plane);
+            });
+            HttpJson.Write(res, 200, projection);
+            return true;
+        }
+
         if (path == "/v1/live/definitions" && method == "GET")
         {
             var defs = ExecuteOnUiThread(() =>
@@ -539,6 +564,53 @@ public class LocalHttpBridge
             }
         }
         return defaultValue;
+    }
+
+    private static bool TryParsePlane(string body, out Plane plane)
+    {
+        plane = Plane.Unset;
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return false;
+        }
+        if (!TryParseVec3(body, "origin", out var origin) || !TryParseVec3(body, "normal", out var normalArr))
+        {
+            return false;
+        }
+        var normal = new Vector3d(normalArr[0], normalArr[1], normalArr[2]);
+        if (normal.IsTiny(1e-12))
+        {
+            return false;
+        }
+        var p = new Plane(new Point3d(origin[0], origin[1], origin[2]), normal);
+        if (!p.IsValid)
+        {
+            return false;
+        }
+        plane = p;
+        return true;
+    }
+
+    private static bool TryParseVec3(string body, string key, out double[] vec)
+    {
+        // Match "key": [a, b, c] (numbers, possibly scientific) in the JSON body.
+        vec = new double[3];
+        var m = System.Text.RegularExpressions.Regex.Match(
+            body,
+            "\"" + System.Text.RegularExpressions.Regex.Escape(key)
+                + "\"\\s*:\\s*\\[\\s*(-?\\d+(?:\\.\\d+)?(?:[eE][-+]?\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?(?:[eE][-+]?\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?(?:[eE][-+]?\\d+)?)\\s*\\]");
+        if (!m.Success)
+        {
+            return false;
+        }
+        for (int i = 0; i < 3; i++)
+        {
+            if (!double.TryParse(m.Groups[i + 1].Value, System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture, out vec[i]))
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static List<string> ReadListQueryParam(HttpListenerRequest req, string key)

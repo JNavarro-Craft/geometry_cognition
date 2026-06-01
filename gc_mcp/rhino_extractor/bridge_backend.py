@@ -141,6 +141,24 @@ def live_object_elements_bridge(
     )
 
 
+def live_project_to_plane_bridge(
+    base_url: str,
+    timeout_seconds: float,
+    object_ids: list[str],
+    plane: dict[str, Any],
+) -> dict[str, Any]:
+    """Project objects onto a plane, returning 2D polygons (POST /v1/live/project).
+    plane = {"origin": [x,y,z], "normal": [x,y,z]}."""
+    body = json.dumps({"object_ids": list(object_ids), "plane": plane}).encode("utf-8")
+    return _bridge_json_request(
+        base_url,
+        "/v1/live/project",
+        timeout_seconds,
+        method="POST",
+        body=body,
+    )
+
+
 def live_list_definitions_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
     """List block definitions with instance counts (GET /v1/live/definitions)."""
     return _bridge_json_request(
