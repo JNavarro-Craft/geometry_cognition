@@ -96,6 +96,7 @@ def query_objects_tool(
     source: str = "live",
     limit: int | None = None,
     fields: list[str] | None = None,
+    offset: int | None = None,
 ) -> dict[str, Any]:
     """Query objects by AND-combined filters over the live model (source="live")
     or a persisted snapshot (source=<label>, queries a past state).
@@ -116,8 +117,12 @@ def query_objects_tool(
     user_text keys in THIS model — never guess a filter value.
 
     Example: {"layers": ["Walls::Exterior"], "user_text": {"Material": "Steel"}}
+
+    Pagination: offset skips the first N matches, limit caps the page. When more
+    remain, the result carries next_offset + has_more — page through large match
+    sets instead of pulling everything (and overflowing) in one call.
     """
-    return query_objects(filters=filters, source=source, limit=limit, fields=fields)
+    return query_objects(filters=filters, source=source, limit=limit, fields=fields, offset=offset)
 
 
 @mcp.tool(name="aggregate")
@@ -289,20 +294,29 @@ def get_faces_tool(guid: str) -> dict[str, Any]:
 
 
 @mcp.tool(name="list_block_definitions")
-def list_block_definitions_tool() -> dict[str, Any]:
+def list_block_definitions_tool(summary: bool = False) -> dict[str, Any]:
     """List block definitions in the live model (definition_name, member object_count,
-    instance_count, bbox). Use expand_block(name) to read what is inside a definition."""
-    return list_block_definitions()
+    instance_count, bbox). Use expand_block(name) to read what is inside a definition.
+    summary=True drops the per-definition bbox (the bulk in big catalogues), leaving
+    names + counts so the whole list fits in one response."""
+    return list_block_definitions(summary=summary)
 
 
 @mcp.tool(name="expand_block")
-def expand_block_tool(definition_name: str, resolve_instances: bool = False) -> dict[str, Any]:
+def expand_block_tool(
+    definition_name: str, resolve_instances: bool = False, summary: bool = False
+) -> dict[str, Any]:
     """Read the objects composing a block definition (raw content, no transform applied):
     child geometry, their user_text, materials and annotation text — data invisible from
     the instance alone. definition_name is case-sensitive (see list_block_definitions).
     With resolve_instances=True, also returns an ``instances`` block placing each member's
-    bbox at every instance's location (lightweight; geometry not moved)."""
-    return expand_block(definition_name=definition_name, resolve_instances=resolve_instances)
+    bbox at every instance's location (lightweight; geometry not moved).
+    With summary=True, drops per-member geometry and returns a content_summary (member
+    type counts, annotation texts, total member length/area) — for definitions with
+    hundreds of members that would otherwise overflow the response."""
+    return expand_block(
+        definition_name=definition_name, resolve_instances=resolve_instances, summary=summary
+    )
 
 
 @mcp.tool(name="assert_change")

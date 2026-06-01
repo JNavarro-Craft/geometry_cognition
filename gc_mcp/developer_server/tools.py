@@ -682,6 +682,7 @@ def query_objects(
     source: str = "live",
     limit: int | None = None,
     fields: list[str] | None = None,
+    offset: int | None = None,
 ) -> dict[str, Any]:
     """Query objects by AND-combined filters, over the live model or a snapshot.
 
@@ -689,6 +690,11 @@ def query_objects(
     any other value is treated as a snapshot label to query the persisted objects.
     Snapshot mode lets you query a past state. Both report ``matched_count``;
     use ``describe_model`` first to discover valid filter values.
+
+    Pagination: ``offset`` skips the first N matches; ``limit`` caps the page size.
+    When more matches remain past the page, the result carries ``next_offset`` (and
+    ``has_more: true``) so a caller can fetch the next page without re-listing — the
+    way to read a large match set without blowing the token budget in one call.
     """
     flt = filters if isinstance(filters, dict) else {}
     field_list = [str(f) for f in fields] if isinstance(fields, list) and fields else list(QUERY_FIELDS_DEFAULT)
@@ -722,17 +728,24 @@ def query_objects(
 
     matched = [o for o in src_objects if _object_matches_query(o, flt)]
     total_matched = len(matched)
+    off = max(0, int(offset)) if offset is not None else 0
+    page = matched[off:]
     if limit is not None:
-        matched = matched[: max(0, int(limit))]
-    rows = [_project_query_fields(o, field_list) for o in matched]
+        page = page[: max(0, int(limit))]
+    rows = [_project_query_fields(o, field_list) for o in page]
 
     out: dict[str, Any] = {
         "source": src_label,
         "filters": flt,
         "matched_count": total_matched,
         "returned_count": len(rows),
+        "offset": off,
         "objects": rows,
     }
+    next_off = off + len(rows)
+    if next_off < total_matched:
+        out["next_offset"] = next_off
+        out["has_more"] = True
     out.update(extra)
     return out
 
@@ -1660,22 +1673,39 @@ def diff_object(
 # ---------------------------------------------------------------------------
 
 
-def list_block_definitions() -> dict[str, Any]:
+def list_block_definitions(summary: bool = False) -> dict[str, Any]:
     """List block definitions in the live model with instance and member counts.
 
     Returns one row per definition: definition_name, definition_id, object_count
     (members composing the definition), instance_count (placements in the model),
     and bbox. Use ``expand_block(name)`` to read the members' content.
+
+    With ``summary=True`` the per-definition ``bbox`` is dropped, leaving only names
+    and counts. In models with many definitions the bbox dicts dominate the response
+    size; the summary keeps the catalogue readable in one call.
     """
     bridge_url, timeout = _bridge_settings()
     try:
         payload = live_list_definitions_bridge(bridge_url, timeout)
     except Exception as exc:
         return _live_only_error(f"{type(exc).__name__}: {exc}")
+
+    if summary and isinstance(payload.get("definitions"), list):
+        slim = [
+            {k: v for k, v in d.items() if k != "bbox"}
+            for d in payload["definitions"]
+            if isinstance(d, dict)
+        ]
+        out = {k: v for k, v in payload.items() if k != "definitions"}
+        out["definitions"] = slim
+        out["summarized"] = True
+        return out
     return payload
 
 
-def expand_block(definition_name: str, resolve_instances: bool = False) -> dict[str, Any]:
+def expand_block(
+    definition_name: str, resolve_instances: bool = False, summary: bool = False
+) -> dict[str, Any]:
     """Read the objects that compose a block definition (raw, no transform applied).
 
     This reaches data that lives INSIDE a block — child geometry, their user_text,
@@ -1686,6 +1716,12 @@ def expand_block(definition_name: str, resolve_instances: bool = False) -> dict[
     With ``resolve_instances=True`` the result also carries an ``instances`` block:
     one row per placed instance, each member's bbox transformed by that instance's
     transform (lightweight — only the bbox is moved, not the heavy geometry).
+
+    With ``summary=True`` the heavy per-member geometry is dropped and ``objects`` is
+    replaced by a ``content_summary`` (member type counts, annotation texts, total
+    member curve length/area). Use it when you only need to know WHAT is inside a
+    definition without the full geometry — definitions with hundreds of members
+    otherwise overflow the response. ``resolve_instances`` is ignored in summary mode.
     """
     name = str(definition_name or "").strip()
     if not name:
@@ -1693,10 +1729,17 @@ def expand_block(definition_name: str, resolve_instances: bool = False) -> dict[
     bridge_url, timeout = _bridge_settings()
     try:
         payload = live_definition_objects_bridge(
-            bridge_url, timeout, name, resolve_instances=bool(resolve_instances)
+            bridge_url, timeout, name, resolve_instances=bool(resolve_instances) and not summary
         )
     except Exception as exc:
         return _live_only_error(f"{type(exc).__name__}: {exc}")
+
+    if summary:
+        objects = payload.get("objects") if isinstance(payload.get("objects"), list) else []
+        out = {k: v for k, v in payload.items() if k != "objects"}
+        out["content_summary"] = _summarize_definition_content(objects)
+        out["summarized"] = True
+        return out
     return payload
 
 
