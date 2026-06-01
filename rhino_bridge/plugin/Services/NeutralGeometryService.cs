@@ -898,33 +898,43 @@ public class NeutralGeometryService
         return SampleCurve(curve, Math.Max(8, count));
     }
 
-    // Map 3D points to the plane's local (u,v). degenerate=true if the points'
-    // spread perpendicular to the plane dominates (face nearly perpendicular -> the
-    // projection collapses toward a line). Reported, not thrown.
+    // Map 3D points to the plane's local (u,v). degenerate=true when the face's
+    // projection collapses toward a line (face ~perpendicular to the plane), detected
+    // by the projected polygon's 2D AREA being ~0 relative to its size — NOT by its
+    // (u,v) bbox, which a perpendicular face still spans along one axis. Reported, not
+    // thrown.
     private static List<object> ProjectPointsToPlaneUV(IList<Point3d> pts, Plane plane, out bool degenerate)
     {
         degenerate = false;
         var uv = new List<object>();
         if (pts is null || pts.Count == 0) return uv;
 
+        var us = new List<double>();
+        var vs = new List<double>();
         double uMin = double.MaxValue, uMax = double.MinValue, vMin = double.MaxValue, vMax = double.MinValue;
-        double wMin = double.MaxValue, wMax = double.MinValue;
         foreach (var p in pts)
         {
-            // (u,v) in plane; w = signed distance along the normal.
             double u = (p - plane.Origin) * plane.XAxis;
             double v = (p - plane.Origin) * plane.YAxis;
-            double w = (p - plane.Origin) * plane.Normal;
             uv.Add(new List<double> { u, v });
+            us.Add(u); vs.Add(v);
             uMin = Math.Min(uMin, u); uMax = Math.Max(uMax, u);
             vMin = Math.Min(vMin, v); vMax = Math.Max(vMax, v);
-            wMin = Math.Min(wMin, w); wMax = Math.Max(wMax, w);
         }
-        var inPlaneSpan = Math.Max(uMax - uMin, vMax - vMin);
-        var normalSpan = wMax - wMin;
-        // Face is ~perpendicular to the plane when its in-plane footprint is tiny
-        // relative to its extent along the normal.
-        if (inPlaneSpan <= 1e-6 || (normalSpan > 0 && inPlaneSpan < normalSpan * 1e-3))
+
+        // Shoelace area of the projected loop (points are a closed ring; the duplicated
+        // last==first vertex contributes 0).
+        double area2 = 0.0;
+        for (int i = 0; i < uv.Count - 1; i++)
+        {
+            area2 += us[i] * vs[i + 1] - us[i + 1] * vs[i];
+        }
+        double area = Math.Abs(area2) * 0.5;
+
+        // Characteristic length of the footprint; a real polygon has area ~ L^2, a line
+        // has area ~ 0. Degenerate when area is negligible vs the footprint's extent.
+        double extent = Math.Max(uMax - uMin, vMax - vMin);
+        if (extent <= 1e-9 || area < extent * 1e-6)
         {
             degenerate = true;
         }
