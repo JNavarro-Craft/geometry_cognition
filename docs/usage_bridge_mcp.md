@@ -81,14 +81,15 @@ filtro no se aplicó.
 
 **Puede (lectura):** contar/inventariar por capa/tipo/grupo, leer user_text por objeto,
 catálogo de claves (`describe_model`), bbox + face/edge count + volume/area, diff entre
-snapshots, detectar bloques (nombre + nº de instancias).
+snapshots, detectar bloques (nombre + nº de instancias), **leer el texto de anotaciones**
+(`inspect_object` → `annotation_text`, y se proyecta al snapshot), **entrar a la
+definición de un bloque** (`list_block_definitions` + `expand_block` → geometría, user_text,
+materiales y texto internos, sin transform).
 
 **No puede todavía (carencias reales del sistema, no errores de uso):**
-- Leer el **texto** de anotaciones (rótulos, cotas, etiquetas) — no se expone el
-  contenido textual.
-- **Entrar a la definición de un bloque** (sus objetos hijos, su texto/atributos
-  internos) — solo se ve el nombre de la definición.
 - Geometría real (vértices/curvas/contorno) — solo bbox.
+- Expandir instancias con su transform aplicado en espacio modelo (1.3b) — `expand_block`
+  da el contenido crudo de la definición, sin posicionar cada instancia.
 - Agregación server-side (sumas/group-by en una llamada) — hoy se agrega en cliente.
 - **Escribir/editar** el modelo — el bridge es read-only.
 

@@ -29,7 +29,9 @@
 | `prune_snapshots(keep_latest_n=1)` | Conserva los `keep_latest_n` más recientes por label, borra los más viejos. `keep_latest_n=0` borra todos. |
 | `diff_snapshots(label_a, label_b, bbox_tolerance=1e-6, detail="full")` | Diff por GUID. Reporta created / deleted / modified con detalle. Detecta cambios en `object_kind`, `material` y `block_context` además de layer/name/raw_type/user_text/grupos/bbox/geometría. |
 | `diff_object(label_a, label_b, guid)` | Diff de un solo GUID, mismo detalle que `diff_snapshots(detail='full')`. |
-| `inspect_object(guid, detail_level="full", user_text="values")` | Pass-through a `/v1/live/objects/{guid}` del bridge. |
+| `inspect_object(guid, detail_level="full", user_text="values")` | Pass-through a `/v1/live/objects/{guid}` del bridge. Con `detail_level="full"`, los objetos de anotación (texto, cotas, leaders) incluyen `annotation_text` con su `plain_text` resuelto. |
+| `list_block_definitions()` | Lista definiciones de bloque del modelo live: `definition_name`, `object_count` (miembros), `instance_count` (instancias en el modelo), `bbox`. |
+| `expand_block(definition_name)` | Lee los objetos que **componen** una definición de bloque (contenido crudo, sin transform): geometría hija, su user_text, materiales y texto de anotación — datos invisibles desde la instancia. `definition_name` case-sensitive. |
 | `assert_change(label_a, label_b, expectations)` | Valida expectativas (`created.min`, `created.in_layer`, `created.with_user_text_key`, etc.) contra el diff. |
 
 ## Campos persistidos por objeto en el snapshot

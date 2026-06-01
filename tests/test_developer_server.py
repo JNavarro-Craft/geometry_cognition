@@ -864,3 +864,76 @@ def test_take_snapshot_name_filter_persists_name_contains(monkeypatch, isolated_
     take_snapshot("byname", name="Foo")
     # The filter handed to the bridge must use the contract key, not "name".
     assert captured["filters"] == {"name_contains": "Foo"}
+
+
+# ---------------------------------------------------------------------------
+# Fase 2: block definitions + annotation text
+# ---------------------------------------------------------------------------
+
+
+def test_list_block_definitions_passthrough(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import list_block_definitions
+
+    payload = {
+        "source": "rhino_bridge",
+        "definition_count": 1,
+        "definitions": [
+            {"definition_name": "ModuleA", "object_count": 5, "instance_count": 40, "bbox": {}},
+        ],
+    }
+    monkeypatch.setattr(tools, "live_list_definitions_bridge", lambda u, t: payload)
+    out = list_block_definitions()
+    assert out["definition_count"] == 1
+    assert out["definitions"][0]["definition_name"] == "ModuleA"
+    assert out["definitions"][0]["instance_count"] == 40
+
+
+def test_list_block_definitions_live_unavailable(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import list_block_definitions
+
+    def boom(u, t):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(tools, "live_list_definitions_bridge", boom)
+    assert list_block_definitions()["error"] == "live_mode_unavailable"
+
+
+def test_expand_block_passthrough(monkeypatch, isolated_outputs):
+    from gc_mcp.developer_server.tools import expand_block
+
+    captured = {}
+
+    def fake(u, t, name):
+        captured["name"] = name
+        return {"definition_name": name, "object_count": 2, "transform_applied": False, "objects": [{"object_id": "c1"}, {"object_id": "c2"}]}
+
+    monkeypatch.setattr(tools, "live_definition_objects_bridge", fake)
+    out = expand_block("ModuleA")
+    assert captured["name"] == "ModuleA"
+    assert out["object_count"] == 2
+    assert out["transform_applied"] is False
+
+
+def test_expand_block_empty_name(isolated_outputs):
+    from gc_mcp.developer_server.tools import expand_block
+
+    assert expand_block("  ")["error"] == "invalid_definition_name"
+
+
+def test_snapshot_projects_and_diffs_annotation_text(monkeypatch, isolated_outputs):
+    before = [_bridge_object("g-anno", layer="Notes", raw_type="Annotation", name="")]
+    before[0]["annotation_text"] = {"kind": "TextEntity", "plain_text": "PANEL-001"}
+    _install_fake_bridge(monkeypatch, before)
+    take_snapshot("t0")
+
+    snap = _read_only_snapshot("t0")
+    assert snap["objects_by_guid"]["g-anno"]["annotation_text"] == "PANEL-001"
+
+    after = [_bridge_object("g-anno", layer="Notes", raw_type="Annotation", name="")]
+    after[0]["annotation_text"] = {"kind": "TextEntity", "plain_text": "PANEL-002"}
+    _install_fake_bridge(monkeypatch, after)
+    take_snapshot("t1")
+
+    zoom = diff_object("t0", "t1", "g-anno")
+    assert zoom["status"] == "modified"
+    assert zoom["changes"]["annotation_text"] == {"from": "PANEL-001", "to": "PANEL-002"}

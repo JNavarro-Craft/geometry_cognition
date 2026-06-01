@@ -19,7 +19,9 @@ from gc_mcp.developer_server.tools import (
     describe_model,
     diff_object,
     diff_snapshots,
+    expand_block,
     inspect_object,
+    list_block_definitions,
     list_snapshots,
     prune_snapshots_tool_logic,
     query_objects,
@@ -187,8 +189,25 @@ def diff_object_tool(
 def inspect_object_tool(
     guid: str, detail_level: str = "full", user_text: str = "values"
 ) -> dict[str, Any]:
-    """Fetch the live detail of a single object via /v1/live/objects/{guid}."""
+    """Fetch the live detail of a single object via /v1/live/objects/{guid}.
+    With detail_level="full", annotation objects (text, dimensions, leaders) include
+    an ``annotation_text`` field with their resolved plain_text."""
     return inspect_object(guid=guid, detail_level=detail_level, user_text=user_text)
+
+
+@mcp.tool(name="list_block_definitions")
+def list_block_definitions_tool() -> dict[str, Any]:
+    """List block definitions in the live model (definition_name, member object_count,
+    instance_count, bbox). Use expand_block(name) to read what is inside a definition."""
+    return list_block_definitions()
+
+
+@mcp.tool(name="expand_block")
+def expand_block_tool(definition_name: str) -> dict[str, Any]:
+    """Read the objects composing a block definition (raw content, no transform applied):
+    child geometry, their user_text, materials and annotation text — data invisible from
+    the instance alone. definition_name is case-sensitive (see list_block_definitions)."""
+    return expand_block(definition_name=definition_name)
 
 
 @mcp.tool(name="assert_change")

@@ -96,6 +96,8 @@ public class LocalHttpBridge
         var allowedMethod =
             (isV1Live && path == "/v1/live/scene/summary" && method == "GET")
             || (isV1Live && path == "/v1/live/objects/query" && method == "POST")
+            || (isV1Live && path == "/v1/live/definitions" && method == "GET")
+            || (isV1Live && path == "/v1/live/definition_objects" && method == "GET")
             || (isV1Live
                 && path.StartsWith("/v1/live/objects/", StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(path, "/v1/live/objects/query", StringComparison.OrdinalIgnoreCase)
@@ -406,6 +408,34 @@ public class LocalHttpBridge
                 return _neutralGeometryService.LiveQueryObjects(doc, queryRequest);
             });
             HttpJson.Write(res, 200, queryResult);
+            return true;
+        }
+
+        if (path == "/v1/live/definitions" && method == "GET")
+        {
+            var defs = ExecuteOnUiThread(() =>
+            {
+                var doc = RequireActiveDoc();
+                return _neutralGeometryService.LiveListDefinitions(doc);
+            });
+            HttpJson.Write(res, 200, defs);
+            return true;
+        }
+
+        if (path == "/v1/live/definition_objects" && method == "GET")
+        {
+            var defName = req.QueryString["name"]?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(defName))
+            {
+                HttpJson.Write(res, 400, HttpJson.Error("Missing required query param: name", "bad_request"));
+                return true;
+            }
+            var defObjects = ExecuteOnUiThread(() =>
+            {
+                var doc = RequireActiveDoc();
+                return _neutralGeometryService.LiveGetDefinitionObjects(doc, defName);
+            });
+            HttpJson.Write(res, 200, defObjects);
             return true;
         }
 

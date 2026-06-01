@@ -85,6 +85,16 @@
     "extraction_warnings": {
       "type": "array",
       "items": { "type": "string" }
+    },
+    "annotation_text": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Resolved textual content for annotation objects (text, dimensions, leaders). Observational; the bridge does not interpret it.",
+      "properties": {
+        "kind": { "type": "string" },
+        "plain_text": { "type": "string" },
+        "rich_text": { "type": "string" }
+      }
     }
   }
 }

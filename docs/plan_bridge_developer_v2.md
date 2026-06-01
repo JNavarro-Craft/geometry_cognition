@@ -116,20 +116,21 @@ Tests: 7 nuevos en `tests/test_developer_server.py` (catálogo, live-unavailable
 filtros live por layer/type/user_text/name, valor de filtro inexistente → vacío,
 query sobre snapshot pasado, snapshot_not_found, filtro is_block_instance).
 
-### Fase 2 — Expansión de bloques (el desbloqueo grande)
+### Fase 2 — Expansión de bloques + texto de anotaciones (PARCIAL: 2.1, 2.2, 1.2 HECHAS)
 *Bridge C# primero, luego MCP. Sin esto no hay cómputo real con bloques.*
 
-- **2.1** Bridge: nuevo endpoint `GET /v1/live/block_definitions` → lista de definiciones
-  (nombre, id, nº de instancias, bbox de la definición).
-- **2.2** Bridge: `GET /v1/live/block_definitions/{name}` → objetos que componen la
-  definición vía `InstanceDefinition.GetObjectList()`, cada uno con su geometría,
-  material, user_text y bbox **en coordenadas de la definición**.
-- **2.3** Bridge: opción en `query`/extract para **expandir instancias** (resolver el
-  transform de cada instancia sobre el contenido de su definición → geometría real en
-  espacio modelo). Marca cada objeto resultante con su `instance_id` y `definition_name`.
-- **2.4** MCP: tool `expand_block(definition_name)` y flag `expand_blocks=true` en
-  `query_objects`/`take_snapshot`. El snapshot puede capturarse expandido o no
-  (elección explícita, registrada en el snapshot).
+- **2.1 (hecho)** Bridge: `GET /v1/live/definitions` → lista de definiciones
+  (`definition_name`, `definition_id`, `object_count`, `instance_count`, `bbox`).
+- **2.2 (hecho, = 1.3a)** Bridge: `GET /v1/live/definition_objects?name=...` → objetos que
+  componen la definición vía `InstanceDefinition.GetObjectIds()`, cada uno extraído con
+  `ExtractObject` (geometría, material, user_text, **texto de anotación**), `transform_applied=false`.
+  MCP: tools `list_block_definitions()` y `expand_block(definition_name)`.
+- **1.2 (hecho)** Bridge: texto de anotaciones. `ExtractObject` ahora añade
+  `annotation_text {kind, plain_text, rich_text?}` para `TextEntity` / `AnnotationBase`
+  (cotas, leaders) / `TextDot`. Se propaga por el adapter (schema v1 actualizado), se
+  proyecta al snapshot y es diffeable. Resuelve la brecha 🔴 "leer texto del modelo".
+- **2.3 (pendiente, = 1.3b)** `resolve_blocks` con transform aplicado en contexto (caro).
+  Flag `expand_blocks=true` en `query_objects`/`take_snapshot`. No hecho aún.
 
 ### Fase 3 — Primitivas de cómputo (habilita cotización/cubicación)
 *MCP Python, agnóstico. Bridge solo si falta una métrica geométrica.*

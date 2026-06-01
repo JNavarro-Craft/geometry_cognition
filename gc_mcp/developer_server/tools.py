@@ -22,6 +22,8 @@ from gc_mcp.rhino_extractor.bridge_backend import (
     _bridge_json_request,
     extract_objects_bridge,
     fetch_scene_via_live_query_and_extract_objects,
+    live_definition_objects_bridge,
+    live_list_definitions_bridge,
     live_object_detail_bridge,
     live_scene_summary_bridge,
 )
@@ -201,6 +203,11 @@ def _project_object_for_snapshot(
             ),
         },
         "material": str(material) if material is not None else None,
+        "annotation_text": (
+            str(obj["annotation_text"].get("plain_text", ""))
+            if isinstance(obj.get("annotation_text"), dict)
+            else None
+        ),
         "transform": [float(x) for x in obj["transform"]] if isinstance(obj.get("transform"), list) and len(obj.get("transform")) == 16 else None,
         "bbox": bbox if isinstance(bbox, dict) else None,
         "bbox_center": list(bbox_center) if isinstance(bbox_center, list) else None,
@@ -947,6 +954,8 @@ def _diff_object(
         changes["object_kind"] = {"from": a.get("object_kind"), "to": b.get("object_kind")}
     if a.get("material") != b.get("material"):
         changes["material"] = {"from": a.get("material"), "to": b.get("material")}
+    if a.get("annotation_text") != b.get("annotation_text"):
+        changes["annotation_text"] = {"from": a.get("annotation_text"), "to": b.get("annotation_text")}
 
     block_diff = _diff_block_context(a.get("block_context") or {}, b.get("block_context") or {})
     if block_diff:
@@ -1237,6 +1246,40 @@ def diff_object(
 # ---------------------------------------------------------------------------
 # inspect_object
 # ---------------------------------------------------------------------------
+
+
+def list_block_definitions() -> dict[str, Any]:
+    """List block definitions in the live model with instance and member counts.
+
+    Returns one row per definition: definition_name, definition_id, object_count
+    (members composing the definition), instance_count (placements in the model),
+    and bbox. Use ``expand_block(name)`` to read the members' content.
+    """
+    bridge_url, timeout = _bridge_settings()
+    try:
+        payload = live_list_definitions_bridge(bridge_url, timeout)
+    except Exception as exc:
+        return _live_only_error(f"{type(exc).__name__}: {exc}")
+    return payload
+
+
+def expand_block(definition_name: str) -> dict[str, Any]:
+    """Read the objects that compose a block definition (raw, no transform applied).
+
+    This reaches data that lives INSIDE a block — child geometry, their user_text,
+    materials and annotation text — which is invisible from the instance alone.
+    The ``definition_name`` is matched exactly (case-sensitive); get valid names
+    from ``list_block_definitions`` or ``describe_model``.
+    """
+    name = str(definition_name or "").strip()
+    if not name:
+        return {"error": "invalid_definition_name", "message": "definition_name is empty"}
+    bridge_url, timeout = _bridge_settings()
+    try:
+        payload = live_definition_objects_bridge(bridge_url, timeout, name)
+    except Exception as exc:
+        return _live_only_error(f"{type(exc).__name__}: {exc}")
+    return payload
 
 
 def inspect_object(

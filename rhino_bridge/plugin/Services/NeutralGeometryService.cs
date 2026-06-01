@@ -314,6 +314,120 @@ public class NeutralGeometryService
         return BuildLiveObjectBasic(doc, obj, userTextMode);
     }
 
+    public Dictionary<string, object> LiveListDefinitions(RhinoDoc doc)
+    {
+        // List block (instance) definitions with instance counts and a bbox derived
+        // from the definition's own objects. Agnostic: names are opaque data.
+        var defs = new List<object>();
+        var table = doc.InstanceDefinitions;
+        if (table is not null)
+        {
+            foreach (var idef in table)
+            {
+                if (idef is null || idef.IsDeleted)
+                {
+                    continue;
+                }
+                int instanceCount;
+                try
+                {
+                    instanceCount = idef.GetReferences(0)?.Length ?? 0;
+                }
+                catch
+                {
+                    instanceCount = 0;
+                }
+
+                var defBbox = BoundingBox.Unset;
+                var memberIds = idef.GetObjectIds() ?? Array.Empty<Guid>();
+                foreach (var mid in memberIds)
+                {
+                    var mobj = doc.Objects.FindId(mid);
+                    var mb = GetValidBbox(mobj?.Geometry);
+                    if (mb.IsValid)
+                    {
+                        defBbox = defBbox.IsValid ? BoundingBox.Union(defBbox, mb) : mb;
+                    }
+                }
+
+                defs.Add(new Dictionary<string, object>
+                {
+                    ["definition_name"] = idef.Name ?? string.Empty,
+                    ["definition_id"] = idef.Id.ToString(),
+                    ["object_count"] = memberIds.Length,
+                    ["instance_count"] = instanceCount,
+                    ["bbox"] = BboxToSummaryDict(defBbox),
+                });
+            }
+        }
+        return new Dictionary<string, object>
+        {
+            ["source"] = "rhino_bridge",
+            ["api"] = "v1_live",
+            ["definition_count"] = defs.Count,
+            ["definitions"] = defs,
+        };
+    }
+
+    public Dictionary<string, object> LiveGetDefinitionObjects(RhinoDoc doc, string definitionName)
+    {
+        // Return the objects that COMPOSE a block definition (1.3a: raw content, no
+        // instance transform applied). This is what lets a caller read attributes/
+        // text/geometry that live INSIDE a block, previously unreachable.
+        var name = (definitionName ?? string.Empty).Trim();
+        if (name.Length == 0)
+        {
+            throw new InvalidOperationException("Missing definition name.");
+        }
+        var table = doc.InstanceDefinitions;
+        InstanceDefinition? idef = null;
+        if (table is not null)
+        {
+            foreach (var d in table)
+            {
+                if (d is null || d.IsDeleted)
+                {
+                    continue;
+                }
+                if (string.Equals(d.Name ?? string.Empty, name, StringComparison.Ordinal))
+                {
+                    idef = d;
+                    break;
+                }
+            }
+        }
+        if (idef is null)
+        {
+            throw new KeyNotFoundException($"Block definition not found: {name}");
+        }
+
+        var objects = new List<object>();
+        foreach (var mid in idef.GetObjectIds() ?? Array.Empty<Guid>())
+        {
+            var mobj = doc.Objects.FindId(mid);
+            if (mobj is not null)
+            {
+                objects.Add(ExtractObject(doc, mobj));
+            }
+        }
+
+        int instanceCount;
+        try { instanceCount = idef.GetReferences(0)?.Length ?? 0; }
+        catch { instanceCount = 0; }
+
+        return new Dictionary<string, object>
+        {
+            ["source"] = "rhino_bridge",
+            ["api"] = "v1_live",
+            ["definition_name"] = idef.Name ?? string.Empty,
+            ["definition_id"] = idef.Id.ToString(),
+            ["instance_count"] = instanceCount,
+            ["object_count"] = objects.Count,
+            ["transform_applied"] = false,
+            ["objects"] = objects,
+        };
+    }
+
     public Dictionary<string, object> ExtractScene(RhinoDoc doc)
     {
         var objects = doc.Objects
@@ -604,6 +718,59 @@ public class NeutralGeometryService
         return Math.Sqrt(Math.Max(0.0, gapSq));
     }
 
+    private static Dictionary<string, object>? ReadAnnotationText(GeometryBase? geometry)
+    {
+        // Resolve the textual content of annotations (text, dimensions, leaders).
+        // Domain-agnostic: we expose the plain text as data; we do not interpret it.
+        // Returns null for non-annotation geometry. Defensive: any RhinoCommon
+        // version/shape mismatch degrades to null rather than throwing.
+        if (geometry is null)
+        {
+            return null;
+        }
+        try
+        {
+            string? plain = null;
+            string? rich = null;
+            string kind = geometry.GetType().Name;
+
+            if (geometry is TextEntity textEntity)
+            {
+                plain = textEntity.PlainText;
+                rich = textEntity.RichText;
+            }
+            else if (geometry is AnnotationBase annotation)
+            {
+                // Dimensions, leaders, etc. PlainText resolves fields where possible.
+                plain = annotation.PlainText;
+                try { rich = annotation.RichText; } catch { rich = null; }
+            }
+            else if (geometry is TextDot dot)
+            {
+                plain = dot.Text;
+            }
+            else
+            {
+                return null;
+            }
+
+            var result = new Dictionary<string, object>
+            {
+                ["kind"] = kind,
+                ["plain_text"] = plain ?? string.Empty,
+            };
+            if (!string.IsNullOrEmpty(rich) && rich != plain)
+            {
+                result["rich_text"] = rich!;
+            }
+            return result;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static Dictionary<string, object> ExtractObject(RhinoDoc doc, RhinoObject obj)
     {
         var attrs = obj.Attributes;
@@ -622,7 +789,7 @@ public class NeutralGeometryService
             definitionName = instanceObject.InstanceDefinition?.Name ?? string.Empty;
         }
 
-        return new Dictionary<string, object>
+        var result = new Dictionary<string, object>
         {
             ["object_id"] = obj.Id.ToString(),
             ["type"] = geometry?.ObjectType.ToString() ?? "Unknown",
@@ -641,6 +808,13 @@ public class NeutralGeometryService
             },
             ["raw_geometry_summary"] = BuildRawGeometrySummary(geometry, bbox)
         };
+
+        var annotationText = ReadAnnotationText(geometry);
+        if (annotationText is not null)
+        {
+            result["annotation_text"] = annotationText;
+        }
+        return result;
     }
 
     private static Dictionary<string, object> BuildRawGeometrySummary(GeometryBase? geometry, BoundingBox bbox)

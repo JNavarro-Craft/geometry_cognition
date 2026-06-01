@@ -103,6 +103,41 @@ def live_object_detail_bridge(
     )
 
 
+def live_list_definitions_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
+    """List block definitions with instance counts (GET /v1/live/definitions)."""
+    return _bridge_json_request(
+        base_url,
+        "/v1/live/definitions",
+        timeout_seconds,
+        method="GET",
+        body=None,
+        content_type=None,
+    )
+
+
+def live_definition_objects_bridge(
+    base_url: str,
+    timeout_seconds: float,
+    definition_name: str,
+) -> dict[str, Any]:
+    """Objects composing a block definition (GET /v1/live/definition_objects?name=...).
+
+    Raw definition content (no instance transform applied). Lets a caller read
+    attributes/text/geometry that live INSIDE a block.
+    """
+    from urllib.parse import quote
+
+    name = quote(str(definition_name).strip(), safe="")
+    return _bridge_json_request(
+        base_url,
+        f"/v1/live/definition_objects?name={name}",
+        timeout_seconds,
+        method="GET",
+        body=None,
+        content_type=None,
+    )
+
+
 def extract_objects_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
     """Legacy full-scene extraction (POST /geometry/extract_scene)."""
     return _bridge_json_request(

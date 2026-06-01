@@ -140,6 +140,14 @@ def _normalize_bridge_objects(payload: dict[str, Any]) -> list[dict[str, Any]]:
             "raw_geometry_summary": raw_geometry_summary,
             "extraction_warnings": [str(x) for x in (src.get("extraction_warnings") or [])] + warnings,
         }
+        annotation_text = src.get("annotation_text")
+        if isinstance(annotation_text, dict):
+            out["annotation_text"] = {
+                "kind": str(annotation_text.get("kind", "")),
+                "plain_text": str(annotation_text.get("plain_text", "")),
+            }
+            if annotation_text.get("rich_text") is not None:
+                out["annotation_text"]["rich_text"] = str(annotation_text.get("rich_text"))
         validate_payload("object_schema.v1.json", out)
         normalized.append(out)
     return normalized

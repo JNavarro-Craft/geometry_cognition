@@ -71,7 +71,10 @@ Estos endpoints evitan volcar toda la escena en un único payload. El cliente Py
 
 - `GET /v1/live/scene/summary?sample_limit=20` — conteos, `global_bbox`, `type_counts`, `sample_objects` ligeros (sin normales/áreas por cara ni geometría pesada).
 - `POST /v1/live/objects/query` — cuerpo JSON: `filters` (layers, types, name_contains, has_user_text, user_text_key/value, bbox_intersects), `fields`, `limit`, `cursor`. Respuesta: `objects`, `matched_count`, `next_cursor` opcional.
-- `GET /v1/live/objects/{object_id}?detail_level=basic|full&user_text=none|keys|full` — detalle bajo demanda; `basic` usa resumen geométrico ligero (sin `face_normals` / `face_areas`).
+- `GET /v1/live/objects/{object_id}?detail_level=basic|full&user_text=none|keys|full` — detalle bajo demanda; `basic` usa resumen geométrico ligero (sin `face_normals` / `face_areas`). Con `detail_level=full`, las anotaciones incluyen `annotation_text {kind, plain_text, rich_text?}`.
+- `GET /v1/live/definitions` — definiciones de bloque: `definition_name`, `definition_id`, `object_count` (miembros), `instance_count` (instancias en el doc), `bbox`.
+- `GET /v1/live/definition_objects?name=<definition_name>` — objetos que componen una definición (vía `InstanceDefinition.GetObjectIds()`), extraídos con el mismo shape que un objeto normal, `transform_applied=false` (contenido crudo de la definición, sin posicionar). `name` case-sensitive.
+- La respuesta de `POST /v1/live/objects/query` incluye `filter_warnings.unknown_filter_keys` si se envían claves de filtro no reconocidas (en vez de ignorarlas en silencio).
 
 ### Variables de entorno (lado Python `gc_mcp/rhino_extractor`)
 
