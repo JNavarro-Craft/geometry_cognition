@@ -89,6 +89,8 @@ Match on either; the bridge does not interpret the system.
 | `GET /v1/sections` | `get_sections` | section catalogue: name + type |
 | `GET /v1/sections/{name}/properties` | `get_section_properties` | dimensions + universal section props |
 | `GET /v1/materials` | `get_materials` | material catalogue: type + mechanical facts |
+| **`POST`** `/v1/materials` | `create_material` | **write**: create a material (prefixed) |
+| **`POST`** `/v1/materials/{name}/properties/isotropic` | `set_material_properties_isotropic` | **write**: set isotropic properties |
 | `GET /v1/load_patterns` | `get_load_patterns` | load patterns: type + self-weight multiplier |
 | `GET /v1/load_cases` | `get_load_cases` | analysis cases: name + type |
 | `GET /v1/load_cases/{name}/details` | `get_load_case_details` | one case's composition (LinearStatic) |
@@ -629,6 +631,16 @@ dry_run/confirm, result `applied`/`preview_only`/`error_<code>`, result_details,
 elapsed_ms). Errors are logged too. Read-only primitives (e.g. `list_savepoints`) are not
 logged. The logs are git-ignored runtime artifacts.
 
+**Namespace** (design doc §1, [`namespace.py`](namespace.py)): every object a `create_<noun>`
+makes must carry the bridge prefix — `BRIDGE_NAMESPACE_PREFIX` env var, default `AI_`. The
+prefix marks what the bridge owns:
+- create without the prefix → `prefix_required`.
+- create with a name already taken → `name_already_exists` (SAP would otherwise overwrite
+  silently — verified, §23).
+- modify/`set_properties` on a **bridge-owned** object (prefixed) → no confirm.
+- modify a **pre-existing** (non-prefixed) object → `confirm` required (§5.1).
+- creating a new prefixed object needs no confirm (non-destructive).
+
 ### `POST /v1/model/settings/active_dof`  *(write — global setting)*
 
 Set the model's active DOFs. The write counterpart of the `active_dof` field from
@@ -695,6 +707,47 @@ existing [`units` object](#the-units-object) shape.
 > metres) while forces rescale (frame 4133 distributed load 19.4 → 190.249, a factor of
 > 9.80665 = kgf→N). `database_units` is **not** touched (that would convert stored data —
 > out of scope). `model_is_locked` is unaffected.
+
+### `POST /v1/materials`  *(write — new object)*
+
+Create a material in the bridge namespace.
+
+```json
+{ "name": "AI_MGP10_Custom", "material_type": "NoDesign", "dry_run": false }
+```
+
+- `name` must carry the bridge prefix → else `prefix_required`. An existing name →
+  `name_already_exists`.
+- `material_type` is an `eMatType` member name — `Steel`, `Concrete`, `NoDesign`,
+  `Aluminum`, `ColdFormed`, `Rebar`, `Tendon`, `Masonry`. **There is no `Wood`** in SAP26
+  (use `NoDesign` for timber); an unknown name → `unknown_material_type` (lists the valid
+  ones). No confirm (creating a new prefixed object). `dry_run` previews.
+- Dry-run → `would_apply` (name, material_type, type_code); real run → `applied`.
+
+> A freshly created material has **default** properties (not null) — set its properties next
+> with the endpoint below. The two are separate atomic primitives; the client composes them
+> (client_patterns.md Pattern 6).
+
+### `POST /v1/materials/{name}/properties/isotropic`  *(write)*
+
+Set a material's isotropic mechanical properties.
+
+```json
+{ "E": 1020000000, "poisson_ratio": 0.4, "thermal_coef": 0.0000117, "dry_run": false, "confirm": false }
+```
+
+- The material must exist → else `object_not_found`.
+- `confirm` is required **only** for a non-bridge (pre-existing) material like `MGP10`
+  (§5.1); a bridge-owned `AI_` material needs none.
+- `E`, `poisson_ratio`, `thermal_coef` are in the model's **present units** — the client
+  must know what those are (the bridge converts nothing). SAP derives the shear modulus
+  `G = E / (2(1+nu))`; it is reported, not an input.
+- Dry-run → `would_apply` (`current_properties`, `new_properties`, `changes`); real run →
+  `applied` (`previous_properties`, `current_properties`, `changes`).
+
+> Validated on TEST_01: created `AI_MGP10_Custom` (NoDesign), set its isotropic properties
+> without confirm (bridge-owned); modifying `MGP10` without confirm → `confirm_required`,
+> with confirm → applied; a savepoint reverted both the new material and the `MGP10` change.
 
 ### `GET /v1/savepoints`
 

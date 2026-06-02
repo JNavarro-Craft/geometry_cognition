@@ -345,6 +345,35 @@ sugerencia del prompt.
 
 ---
 
+## 🔶 Hallazgos OAPI Fase 1g.4 — create_material + isotropic + namespace (resueltos)
+
+### 23. `SetMaterial` SOBRESCRIBE silencioso; NO hay 'Wood'; `SetMPIsotropic` deriva G
+- `cPropMaterial.SetMaterial(Name, eMatType, Color, Notes, GUID)` → toma el **miembro**
+  eMatType (resuelto por nombre, no int), retorna 0. ⚠️ **Con un nombre EXISTENTE
+  sobrescribe en silencio** (ret=0, sin error, sin duplicado). Por eso el guard
+  `name_already_exists` (consultar get_materials antes) es esencial — sin él un create
+  clobberaría un material del usuario. Justifica la decisión #1 del design doc en la práctica.
+- **eMatType tiene 8 miembros**: Steel, Concrete, NoDesign, Aluminum, ColdFormed, Rebar,
+  Tendon, Masonry. **NO existe 'Wood'** (el prompt lo usaba) — la madera se modela como
+  `NoDesign` (lo que usa MGP10). Resolver name→miembro por reflexión cazó esto y devuelve
+  `unknown_material_type` con la lista real (anti-patrón #5).
+- `cPropMaterial.SetMPIsotropic(Name, E, U, A, Temp)` → 4 inputs (NO toma G; SAP **deriva**
+  G = E/(2(1+U)), verificado), Temp input (0.0), retorna 0. Material inexistente → ret=1.
+  Valores en **present units**; el bridge NO convierte (responsabilidad del cliente).
+- Un material recién creado por SetMaterial **trae propiedades default** de SAP (no null:
+  E≈2.53e9, nu=0.2), no vacías — por eso create + set_properties son atómicas separadas.
+
+### Namespace en código (write_side_design.md §1, primera vez operativo)
+`namespace.py`: `get_bridge_prefix` (env `BRIDGE_NAMESPACE_PREFIX`, default `AI_`, leído una
+vez), `has_bridge_prefix` (startswith), `assert_prefix_required` (PREFIX_REQUIRED),
+`assert_no_conflict` (NAME_ALREADY_EXISTS). Enforcement UNIVERSAL: todo create lo usa. El
+prefijo es del SISTEMA, no se hardcodea fuera de aquí. Validado: create sin prefijo →
+rechazo; **distinción de ownership confirmada** — set_properties sobre material `AI_` aplica
+sin confirm, sobre `MGP10` (preexistente) exige confirm (regla §5.1). El savepoint revierte
+en bloque tanto el material AI_ nuevo como la modificación al MGP10 preexistente.
+
+---
+
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
 
 Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fase.
@@ -382,9 +411,12 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
   - ✅ **1g.3** — `set_present_units` (segundo setting global; valida que la plantilla
     generaliza). **Hecha** (sesión 10); ciclo del patrón cliente + TEST KEY de propagación
     de units validados. 22 primitivas.
-  - ◾ **1g.4+** — SALTO CUALITATIVO: writes sobre OBJETOS (create_material/create_section…
-    introducen el prefijo AI_), luego assign (batches + stop-on-first-failure), modify,
-    delete. Evitar el delete-all-then-recreate peligroso de `RhinoSAP/SapFrameSynchronizer`.
+  - ✅ **1g.4** — SALTO CUALITATIVO: `namespace.py` (prefijo en código) + `create_material`
+    + `set_material_properties_isotropic`. Primer write sobre objetos. **Hecha** (sesión 11);
+    ciclo de 13 pasos validado (prefijo, tipo, duplicado, ownership confirm). 24 primitivas.
+  - ◾ **1g.5+** — `create_section` (solo Rectangular probablemente), luego assign (batches +
+    stop-on-first-failure), modify, delete. Evitar el delete-all-then-recreate peligroso de
+    `RhinoSAP/SapFrameSynchronizer`.
 - ◾ **Fase 1h** — snapshots + diff.
 - ◾ **Fase 1i** — poblar `docs/domains/structural/` (códigos, materiales, factores,
   recetas, casos) — conocimiento del cliente, no tools.

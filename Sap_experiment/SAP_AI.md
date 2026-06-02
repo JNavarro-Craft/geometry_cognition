@@ -61,6 +61,8 @@ día uno.
 | Savepoint: listar | `GET /v1/savepoints` | `list_savepoints` | ✅ scan de filesystem; [] si ninguno; sin OAPI |
 | 🔶 **set_active_dof (MUTA modelo)** | `POST /v1/model/settings/active_dof` | `set_active_dof` | ✅ confirm obligatorio; dry_run con diff legible; locked → rechaza; ciclo cliente validado |
 | 🔶 **set_present_units (MUTA modelo)** | `POST /v1/model/settings/present_units` | `set_present_units` | ✅ name→enum; confirm + dry_run; TEST KEY: propagación a read-side (fuerzas ×9.80665, distancias intactas) |
+| 🔶 **create_material (CREA objeto)** | `POST /v1/materials` | `create_material` | ✅ prefijo AI_ obligatorio; tipo→eMatType (no 'Wood'); rechaza duplicado (overwrite silencioso); dry_run |
+| 🔶 **set_material_properties_isotropic** | `POST /v1/materials/{name}/properties/isotropic` | `set_material_properties_isotropic` | ✅ confirm solo si preexistente (§5.1); dry_run con diff; G derivado por SAP; present units |
 | Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; `case_not_run`, `unsupported_case_type`, `confirm_required`, `savepoint_not_found`, `savepoint_already_exists` |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
@@ -118,6 +120,16 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 > Hecho, no juicio: un displacement grande es un número, no "falla" (anti-patrón #4); las
 > reacciones equilibran las cargas pero ese cross-check lo compone el cliente, no el bridge.
 > Sigue fuera: stresses (1e.2), envelope (1e.3), modal/spectrum (1f).
+
+> Actualización sesión 11 (Fase 1g.4 — SALTO CUALITATIVO, primer write sobre objetos):
+> `namespace.py` lleva el prefijo del bridge (`AI_`, configurable por `BRIDGE_NAMESPACE_PREFIX`)
+> a código por primera vez — enforcement universal en todo `create_<noun>`. `create_material`
+> (crea en el namespace propio; tipo→eMatType, **no hay 'Wood'**, madera es `NoDesign`;
+> rechaza duplicado porque SAP sobrescribe en silencio) + `set_material_properties_isotropic`
+> (confirm solo si el material es preexistente del usuario, §5.1; G derivado por SAP; valores
+> en present units, el bridge no convierte). **24 primitivas**. Atómicas separadas (crear vs
+> configurar). Ciclo de 13 pasos validado, incl. que el savepoint revierte en bloque el
+> material nuevo Y la modificación a un preexistente.
 
 > Actualización sesión 10 (Fase 1g.3 — generalización de la plantilla write):
 > `set_present_units` (`POST /v1/model/settings/present_units`) cambia el sistema de
