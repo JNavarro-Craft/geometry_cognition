@@ -16,9 +16,11 @@ from . import error_codes
 from .contracts import (
     ErrorResponse,
     HealthResponse,
+    JointsResponse,
     UnitsResponse,
 )
 from .path_resolver import resolve_oapi_dll
+from .primitives import joints as joints_primitive
 from .primitives import units as units_primitive
 from .sap_session import SapSessionError, get_session
 
@@ -77,3 +79,15 @@ def get_units() -> UnitsResponse:
     with session.lock():
         model = session.sap_model()
         return units_primitive.get_present_units(model)
+
+
+@app.get("/v1/joints", response_model=JointsResponse)
+def get_joints() -> JointsResponse:
+    """Every point object: name, global Cartesian coordinates (in the present units,
+    echoed in ``units``) and the raw 6-DOF restraint flags. No domain naming."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        present_units = units_primitive.get_present_units(model)
+        rows = joints_primitive.get_joints(model)
+        return JointsResponse(units=present_units, count=len(rows), joints=rows)
