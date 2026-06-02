@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "sap_developer_server": {
+      "command": "python",
+      "args": ["-m", "Sap_experiment.sap_developer_server.server"],
+      "env": {
+        "PYTHONPATH": "i:\\Mi unidad\\geometry_cognition",
+        "SAP_BRIDGE_BASE_URL": "http://127.0.0.1:8766"
+      }
+    }
+  }
+}
