@@ -58,7 +58,16 @@ Shape en ejecución real:
 - `restore_savepoint(name)` → abre el archivo, reemplazando el modelo actual. Requiere `confirm=true`
 - `list_savepoints()` → enumera savepoints existentes
 
-Implementación: `cFile.Save_2(path)` y `cFile.OpenFile(path)`. Sin serialización custom.
+Implementación: `cFile.Save` y `cFile.OpenFile(path)` (NO `Save_2` — no existe en SAP26, ver brechas §18). Sin serialización custom.
+
+**Convención reservada `__sp_` (Fase 1g.8).** El sufijo `__sp_<name>` en el nombre de archivo es **reservado por el bridge** para savepoints. Tras un `restore_savepoint`, la sesión queda cargada en el archivo del savepoint (`<base>__sp_<name>.sdb`); para evitar que un siguiente create/restore anide los nombres recursivamente (`__sp_X__sp_Y` — el bug que §26 reveló), todas las primitivas de savepoint resuelven el path contra el **modelo BASE** (stripeando recursivamente cualquier `__sp_*` del nombre cargado), no contra el archivo actual. **Limitación conocida**: si un modelo legítimo del usuario tiene `__sp_` en su nombre (caso raro), el stripping lo malinterpretaría — evitar ese patrón en nombres de modelo. Para volver al modelo base tras iterar, usar `open_model(<base_path>)`.
+
+### 3b. Lock management y open_model (Fase 1g.8)
+
+`run_analysis` lockea el modelo; SAP rechaza modificar la definición (create/assign/modify) con el modelo locked. El bridge **no** hace auto-unlock (mantiene primitivas predecibles): cada write sigue devolviendo `oapi_call_failed` con el modelo locked, pero el cliente ahora **puede** resolverlo:
+
+- `set_model_locked(locked, confirm)` → toggle del lock state (setting global → confirm; idempotente). Permite escapar del locked tras `run_analysis` para seguir modificando.
+- `open_model(path, confirm)` → reemplaza el modelo cargado (recupera el base tras restore, cambia de modelo). El handle OAPI sobrevive a `OpenFile` (§18). `OpenFile` **descarta cambios no guardados** sin avisar — el cliente debe haber tomado savepoint si los quería.
 
 ### 4. Atomicidad: stop on first failure + pre-validación del cliente
 

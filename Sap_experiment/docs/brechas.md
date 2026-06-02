@@ -36,6 +36,15 @@ respetarlas.
 > input. El `dry_run` puede mostrar el valor propuesto como estimación, pero el `applied`
 > siempre refleja lo que SAP guardó.
 
+### Anti-patrón #6 — Validación sintética ≠ validación de uso real
+> Pasar los tests end-to-end de cada sesión **no** es prueba de completitud para uso real.
+> Los tests por primitiva cazan bugs **por primitiva**; los workflows iterativos cazan bugs
+> en la **composición temporal** (el orden y la acumulación de estado entre llamadas).
+> Solo someter el sistema a un **caso de uso real, iterativo**, revela los bloqueantes de
+> USO (qué impide al cliente cerrar su flujo) frente a los bloqueantes de implementación
+> (qué primitiva tiene un bug). Fase 1g.7.5 (§26) demostró esto: 28 primitivas que pasaban
+> todos sus tests individuales **no cerraban** un loop modificar→analizar→modificar.
+
 ---
 
 ## 🔶 Hallazgos técnicos de la OAPI vía pythonnet (resueltos)
@@ -462,6 +471,45 @@ así que cambiar solo `depth` preserva width/material/color/notes (validado).
 
 ---
 
+## 🔬 §26 — Validación por uso real (Fase 1g.7.5)
+
+En vez de asumir que 28 primitivas alcanzan, se sometió el Objetivo 1 a un **caso de
+verificación de ingeniería real**, resuelto end-to-end actuando como el cliente LLM:
+*"si reemplazo la cuerda inferior MGP10_33x73 por una sección 41x95, ¿qué pasa con las
+deflexiones y los momentos máximos?"*
+
+**El caso se resolvió completo** (el principio agnóstico se sostuvo: el bridge dio hechos —
+coords, secciones, fuerzas — y el cliente compuso "cuerda inferior" geométricamente, "41x95
+= depth 0.095/width 0.041", y la interpretación estructural). Resultado de ingeniería (case
+MUERTA, 40 frames de cuerda inferior reasignados): deflexión vertical máx **0.664 → 0.450 mm
+(−32%)**, axial máx **−12%**, momento máx **+38%** (la cuerda más rígida atrae más flexión).
+Físicamente coherente. El bridge nunca juzgó "mejor/peor".
+
+**Pero el workflow iterativo NO cerró sin intervención manual.** Dos bloqueantes de USO
+(no de implementación — cada primitiva funcionaba):
+
+1. 🚫 **No hay unlock.** `run_analysis` lockea el modelo; toda modificación de definición
+   (create/assign/modify) requiere unlocked → `SetRectangle` devolvió ret=1 con el modelo
+   locked. El loop modificar→analizar→modificar **no cierra**: el cliente queda atrapado
+   sin un `set_model_locked(false)`. → **Resuelto en 1g.8 Parte B.**
+2. 🚫 **Savepoint naming en cascada.** El filo §19 (tras restore la sesión queda en el
+   archivo del savepoint) **escala a fallo** con múltiples savepoint/restore: los nombres
+   anidan (`TEST_01__sp_X__sp_Y__sp_X.sdb`) y `restore_savepoint("X")` ya no encuentra el
+   baseline por nombre. El Patrón 7 (el caso de uso central) **no es robusto para iteración**.
+   → **Resuelto en 1g.8 Parte C** (pattern stripping al base path) **+ `open_model`** (Parte D)
+   para recuperar el modelo base.
+
+Gaps menores (no bloqueantes): sin resultados de combinaciones/envolventes (1e.3 — se usó
+MUERTA como proxy de "máximos"); el análisis genera muchos auxiliares en disco (`.Y00-.Y05`,
+`.K_*` — un `delete_savepoint` futuro debe limpiarlos a fondo).
+
+**Lección (anti-patrón #6):** los dos bloqueantes eran invisibles a los tests por-primitiva
+y solo aparecieron al iterar el caso real. El roadmap se reordenó: **1g.8 = lock management
++ savepoint reflow + open_model** (esta fase, los bloqueantes de uso); las fases que el
+roadmap listaba (assign material→sections, deletes) bajan en prioridad por no ser bloqueantes.
+
+---
+
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
 
 Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fase.
@@ -505,9 +553,17 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
   - ✅ **1g.5** — `create_rectangular_section` + `modify_rectangular_section` (segundo object
     type; valida que el patrón create+modify generaliza). **Hecha** (sesión 12); ciclo de 13
     pasos + casos adicionales validados. 26 primitivas.
-  - ◾ **1g.6+** — otros tipos de sección (Circle, I…), luego assign (batches reales +
-    stop-on-first-failure + failed_at/not_attempted), modify masivo, delete. Evitar el
-    delete-all-then-recreate peligroso de `RhinoSAP/SapFrameSynchronizer`.
+  - ✅ **1g.7** — `assign_section_to_frames` + `assign_sections_to_frames` (primera operación
+    BATCH sobre preexistentes; applied/failed_at/not_attempted, pre-validación estricta).
+    **Hecha** (sesión 13). 28 primitivas.
+  - 🔬 **1g.7.5** — validación por uso real (§26). Reveló 2 bloqueantes de USO → reordenó el roadmap.
+  - ✅ **1g.8** — lock management + savepoint reflow + open_model (`set_model_locked`,
+    `open_model`, fix de naming de savepoints). **Resuelve los bloqueantes de §26**. Hace el
+    workflow iterativo robusto. **Hecha** (sesión 14). 30 primitivas.
+  - ◾ **1g.9+** (prioridad bajada tras §26) — otros tipos de sección (Circle, I…),
+    `assign_material_to_sections`, modify masivo, delete. Evitar el delete-all-then-recreate
+    peligroso de `RhinoSAP/SapFrameSynchronizer`. También `get_combination_results` (gap menor
+    de §26).
 - ◾ **Fase 1h** — snapshots + diff.
 - ◾ **Fase 1i** — poblar `docs/domains/structural/` (códigos, materiales, factores,
   recetas, casos) — conocimiento del cliente, no tools.
