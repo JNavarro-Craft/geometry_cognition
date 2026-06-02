@@ -14,15 +14,28 @@ from ..contracts import UnitsResponse
 logger = logging.getLogger("sap_bridge.primitives.units")
 
 
-def get_present_units(sap_model: Any) -> UnitsResponse:
-    """Return the present units of the model.
+def _units_response(units_enum: Any) -> UnitsResponse:
+    """Wrap a raw eUnits enum as a UnitsResponse (name + integer code).
 
-    ``cSapModel.GetPresentUnits()`` returns the eUnits enum directly (no out-param).
-    We report both the enum's name and its integer value so a client can match on
-    either without the bridge interpreting the system.
+    pythonnet exposes the enum value; str() gives the member name (e.g. 'kgf_m_C',
+    which already carries the temperature unit — the 'C' is Celsius). The bridge does
+    not interpret the system, only relays both forms so a client can match on either.
     """
-    units_enum = sap_model.GetPresentUnits()
-    # pythonnet exposes the enum value; str() gives the member name (e.g. 'kgf_m_C').
-    name = str(units_enum)
-    code = int(units_enum)
-    return UnitsResponse(present_units=name, present_units_code=code)
+    return UnitsResponse(present_units=str(units_enum), present_units_code=int(units_enum))
+
+
+def get_present_units(sap_model: Any) -> UnitsResponse:
+    """Return the present units of the model. ``cSapModel.GetPresentUnits()`` returns the
+    eUnits enum directly (no out-param)."""
+    return _units_response(sap_model.GetPresentUnits())
+
+
+def get_database_units(sap_model: Any) -> UnitsResponse:
+    """Return the database units — the system the model stores data in internally, vs the
+    present 'view'. ``cSapModel.GetDatabaseUnits()`` returns the eUnits enum directly.
+
+    OAPI note (SAP26, brechas §17): the documented ``_2`` variants (which would also
+    return temperature separately) do NOT exist in this assembly; the plain getters
+    return the full eUnits member, temperature included, so no ``_2`` is needed.
+    """
+    return _units_response(sap_model.GetDatabaseUnits())

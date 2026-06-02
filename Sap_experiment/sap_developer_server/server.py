@@ -34,6 +34,7 @@ from Sap_experiment.sap_developer_server.tools import (
     get_load_cases,
     get_load_patterns,
     get_materials,
+    get_model_settings,
     get_point_loads_on_joint,
     get_section_properties,
     get_sections,
@@ -190,6 +191,15 @@ def get_frame_forces_tool(frame_name: str, case_name: str, station: Optional[flo
     that one; omit for all. case_not_run / unsupported_case_type as above. A large moment
     is a number, not 'overstress'."""
     return get_frame_forces(frame_name, case_name, station)
+
+
+@mcp.tool(name="get_model_settings")
+def get_model_settings_tool() -> dict[str, Any]:
+    """The model's configuration: active_dof (6 flags [U1,U2,U3,R1,R2,R3], True=active,
+    same convention as joint restraints), model_is_locked, present_units + database_units
+    (present = active view, database = internal storage). Facts only — the MCP never
+    labels the DOF pattern 'Plane Frame'/'2D'; you recognise it from the flags."""
+    return get_model_settings()
 
 
 if __name__ == "__main__":

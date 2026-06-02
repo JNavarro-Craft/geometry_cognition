@@ -76,6 +76,12 @@ def get_units_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
     )
 
 
+def get_model_settings_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
+    return _bridge_json_request(
+        base_url, "/v1/model/settings", timeout_seconds, method="GET", body=None, content_type=None
+    )
+
+
 def get_joints_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
     return _bridge_json_request(
         base_url, "/v1/joints", timeout_seconds, method="GET", body=None, content_type=None

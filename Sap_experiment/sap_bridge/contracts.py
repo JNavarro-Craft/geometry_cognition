@@ -454,3 +454,29 @@ class FrameForcesResponse(BaseModel):
     case_name: str
     count: int
     stations: list[FrameForceStation]
+
+
+class ModelSettings(BaseModel):
+    """Model configuration facts: structural envelope (active DOFs + lock state) and
+    units (present + database).
+
+    ``active_dof`` is the raw 6-tuple SAP returns from GetActiveDOF, in the standard order
+    [U1, U2, U3, R1, R2, R3] — the same index convention as joint restraints/reactions/
+    displacements. The bridge does NOT name a pattern: [true,false,true,false,true,false]
+    is reported as-is, never labelled 'Plane Frame XZ' (the client recognises that).
+    ``present_units`` is the active 'view'; ``database_units`` is the system the model
+    stores data in internally. They may differ; both are reported as facts.
+    """
+
+    active_dof: list[bool] = Field(
+        ..., description="6 active-DOF flags [U1,U2,U3,R1,R2,R3]; True = active"
+    )
+    model_is_locked: bool = Field(
+        ..., description="True if analysis results are current (editing would invalidate them)"
+    )
+    present_units: UnitsResponse
+    database_units: UnitsResponse
+
+
+class ModelSettingsResponse(BaseModel):
+    settings: ModelSettings

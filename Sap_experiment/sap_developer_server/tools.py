@@ -13,6 +13,7 @@ from .bridge_backend import (
     bridge_settings,
     get_analysis_status_bridge,
     get_combinations_bridge,
+    get_model_settings_bridge,
     get_distributed_loads_on_frame_bridge,
     get_frame_forces_bridge,
     get_frames_bridge,
@@ -38,6 +39,24 @@ def _bridge_error(exc: Exception) -> dict[str, Any]:
         "message": str(exc),
         "hint": "Is the SAP bridge running on its port and is SAP2000 open with a model?",
     }
+
+
+def get_model_settings() -> dict[str, Any]:
+    """The open SAP model's configuration facts: ``active_dof`` (6 flags
+    [U1,U2,U3,R1,R2,R3], True = active — same index convention as joint restraints),
+    ``model_is_locked`` (analysis results current), and ``present_units`` +
+    ``database_units`` (present is the active view; database is the internal storage
+    system).
+
+    Facts only. The MCP does not interpret the DOF vector — it never labels a model
+    'Plane Frame XZ', '2D' or 'Space Frame'. You recognise that pattern from the flags;
+    e.g. [true,false,true,false,true,false] means U1/U3/R2 active.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return get_model_settings_bridge(base_url, timeout)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
 
 
 def get_joints() -> dict[str, Any]:

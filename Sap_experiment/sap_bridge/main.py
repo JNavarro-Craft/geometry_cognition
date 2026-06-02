@@ -32,6 +32,7 @@ from .contracts import (
     LoadCasesResponse,
     LoadPatternsResponse,
     MaterialsResponse,
+    ModelSettingsResponse,
     PointLoadsResponse,
     SectionPropertiesResponse,
     SectionsResponse,
@@ -50,6 +51,7 @@ from .primitives import load_case_details as load_case_details_primitive
 from .primitives import load_cases as load_cases_primitive
 from .primitives import load_patterns as load_patterns_primitive
 from .primitives import materials as materials_primitive
+from .primitives import model_settings as model_settings_primitive
 from .primitives import section_properties as section_properties_primitive
 from .primitives import sections as sections_primitive
 from .primitives import units as units_primitive
@@ -111,6 +113,17 @@ def get_units() -> UnitsResponse:
     with session.lock():
         model = session.sap_model()
         return units_primitive.get_present_units(model)
+
+
+@app.get("/v1/model/settings", response_model=ModelSettingsResponse)
+def get_model_settings() -> ModelSettingsResponse:
+    """Model configuration facts: active_dof [U1,U2,U3,R1,R2,R3], model_is_locked, and
+    present + database units. The bridge does not interpret the DOF vector — it never
+    labels a model 'Plane Frame' or '2D'; the client recognises that from the flags."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return ModelSettingsResponse(settings=model_settings_primitive.get_model_settings(model))
 
 
 @app.get("/v1/joints", response_model=JointsResponse)
