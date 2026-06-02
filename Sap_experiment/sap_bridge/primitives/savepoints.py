@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .. import error_codes
+from ..audit_log import audited
 from ..contracts import (
     SavepointCreateResponse,
     SavepointInfo,
@@ -88,52 +89,57 @@ def create_savepoint(sap_model: Any, name: str, dry_run: bool) -> SavepointCreat
 
     Refuses with SAVEPOINT_ALREADY_EXISTS if the target file exists (no silent overwrite).
     In dry-run, returns the target path + writability + estimated size without writing.
+    Audited (write_side_design.md logging).
     """
-    original, model_dir, model_name = _model_paths(sap_model)
-    sp_path = _savepoint_path(model_dir, model_name, name)
+    with audited("create_savepoint", {"name": name, "dry_run": dry_run}) as ctx:
+        original, model_dir, model_name = _model_paths(sap_model)
+        sp_path = _savepoint_path(model_dir, model_name, name)
 
-    if os.path.exists(sp_path):
-        raise SapSessionError(
-            error_codes.SAVEPOINT_ALREADY_EXISTS,
-            f"savepoint '{name}' already exists at {sp_path}; use a different name "
-            "(delete is not implemented this phase)",
-        )
-
-    if dry_run:
-        if not os.access(model_dir, os.W_OK):
+        if os.path.exists(sp_path):
             raise SapSessionError(
-                error_codes.DRY_RUN_VALIDATION_FAILED,
-                f"savepoint directory is not writable: {model_dir}",
+                error_codes.SAVEPOINT_ALREADY_EXISTS,
+                f"savepoint '{name}' already exists at {sp_path}; use a different name "
+                "(delete is not implemented this phase)",
             )
-        # Estimate size from the current model file (the savepoint is a copy of it).
-        est = os.path.getsize(original) if os.path.exists(original) else 0
-        return SavepointCreateResponse(
-            dry_run=True,
-            validation_passed=True,
-            would_apply=_info(name, sp_path, size_override=est),
-        )
 
-    # Real write. Save acts like Save As (it repoints the in-memory model), so save to the
-    # savepoint and then reopen the original to leave the session on the user's model.
-    sret = sap_model.File.Save(sp_path)
-    if sret != 0:
-        raise SapSessionError(
-            error_codes.OAPI_CALL_FAILED,
-            f"cFile.Save('{sp_path}') returned {sret}",
-        )
-    oret = sap_model.File.OpenFile(original)
-    if oret != 0:
-        raise SapSessionError(
-            error_codes.OAPI_CALL_FAILED,
-            f"savepoint written but reopening the original returned {oret}; the session "
-            f"may be pointing at the savepoint ({sp_path}) — reopen {original} in SAP",
-        )
-    if not os.path.exists(sp_path):
-        raise SapSessionError(
-            error_codes.OAPI_UNEXPECTED_SHAPE,
-            f"cFile.Save returned 0 but no file appeared at {sp_path}",
-        )
-    return SavepointCreateResponse(dry_run=False, applied=_info(name, sp_path))
+        if dry_run:
+            if not os.access(model_dir, os.W_OK):
+                raise SapSessionError(
+                    error_codes.DRY_RUN_VALIDATION_FAILED,
+                    f"savepoint directory is not writable: {model_dir}",
+                )
+            # Estimate size from the current model file (the savepoint is a copy of it).
+            est = os.path.getsize(original) if os.path.exists(original) else 0
+            ctx["result"] = "preview_only"
+            ctx["result_details"] = {"target_path": sp_path, "estimated_size_bytes": est}
+            return SavepointCreateResponse(
+                dry_run=True,
+                validation_passed=True,
+                would_apply=_info(name, sp_path, size_override=est),
+            )
+
+        # Real write. Save acts like Save As (it repoints the in-memory model), so save to
+        # the savepoint and then reopen the original to leave the session on the user's model.
+        sret = sap_model.File.Save(sp_path)
+        if sret != 0:
+            raise SapSessionError(
+                error_codes.OAPI_CALL_FAILED,
+                f"cFile.Save('{sp_path}') returned {sret}",
+            )
+        oret = sap_model.File.OpenFile(original)
+        if oret != 0:
+            raise SapSessionError(
+                error_codes.OAPI_CALL_FAILED,
+                f"savepoint written but reopening the original returned {oret}; the session "
+                f"may be pointing at the savepoint ({sp_path}) — reopen {original} in SAP",
+            )
+        if not os.path.exists(sp_path):
+            raise SapSessionError(
+                error_codes.OAPI_UNEXPECTED_SHAPE,
+                f"cFile.Save returned 0 but no file appeared at {sp_path}",
+            )
+        ctx["result_details"] = {"path": sp_path, "size_bytes": os.path.getsize(sp_path)}
+        return SavepointCreateResponse(dry_run=False, applied=_info(name, sp_path))
 
 
 def restore_savepoint(
@@ -145,31 +151,37 @@ def restore_savepoint(
     dry_run. Refuses with SAVEPOINT_NOT_FOUND if the file is missing. The cSapModel handle
     stays valid after OpenFile, so no re-attach is needed.
     """
-    _original, model_dir, model_name = _model_paths(sap_model)
-    sp_path = _savepoint_path(model_dir, model_name, name)
+    with audited(
+        "restore_savepoint", {"name": name, "confirm": confirm, "dry_run": dry_run}
+    ) as ctx:
+        _original, model_dir, model_name = _model_paths(sap_model)
+        sp_path = _savepoint_path(model_dir, model_name, name)
 
-    if not os.path.exists(sp_path):
-        raise SapSessionError(
-            error_codes.SAVEPOINT_NOT_FOUND,
-            f"savepoint '{name}' not found at {sp_path} (list with GET /v1/savepoints)",
-        )
-    info = _info(name, sp_path)
+        if not os.path.exists(sp_path):
+            raise SapSessionError(
+                error_codes.SAVEPOINT_NOT_FOUND,
+                f"savepoint '{name}' not found at {sp_path} (list with GET /v1/savepoints)",
+            )
+        info = _info(name, sp_path)
 
-    if dry_run:
-        return SavepointRestoreResponse(dry_run=True, would_replace_with=info)
+        if dry_run:
+            ctx["result"] = "preview_only"
+            ctx["result_details"] = {"would_replace_with": sp_path}
+            return SavepointRestoreResponse(dry_run=True, would_replace_with=info)
 
-    if not confirm:
-        raise SapSessionError(
-            error_codes.CONFIRM_REQUIRED,
-            f"restore_savepoint('{name}') replaces the loaded model with the savepoint and "
-            "discards unsaved changes; pass confirm=true to proceed",
-        )
+        if not confirm:
+            raise SapSessionError(
+                error_codes.CONFIRM_REQUIRED,
+                f"restore_savepoint('{name}') replaces the loaded model with the savepoint "
+                "and discards unsaved changes; pass confirm=true to proceed",
+            )
 
-    oret = sap_model.File.OpenFile(sp_path)
-    if oret != 0:
-        raise SapSessionError(
-            error_codes.OAPI_CALL_FAILED,
-            f"cFile.OpenFile('{sp_path}') returned {oret}",
-        )
-    model_file = sap_model.GetModelFilename(True)
-    return SavepointRestoreResponse(dry_run=False, restored_from=info, model_file=model_file)
+        oret = sap_model.File.OpenFile(sp_path)
+        if oret != 0:
+            raise SapSessionError(
+                error_codes.OAPI_CALL_FAILED,
+                f"cFile.OpenFile('{sp_path}') returned {oret}",
+            )
+        model_file = sap_model.GetModelFilename(True)
+        ctx["result_details"] = {"restored_from": sp_path, "model_file": model_file}
+        return SavepointRestoreResponse(dry_run=False, restored_from=info, model_file=model_file)

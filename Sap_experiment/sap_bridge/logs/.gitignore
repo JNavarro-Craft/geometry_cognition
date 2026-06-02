@@ -1,0 +1,2 @@
+# Audit logs are runtime artifacts, not source. Keep the directory, ignore the logs.
+*.jsonl
