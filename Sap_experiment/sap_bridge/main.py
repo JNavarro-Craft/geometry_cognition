@@ -14,18 +14,24 @@ from fastapi.responses import JSONResponse
 
 from . import error_codes
 from .contracts import (
+    CombinationsResponse,
     ErrorResponse,
     FramesResponse,
     HealthResponse,
     JointsResponse,
+    LoadCasesResponse,
+    LoadPatternsResponse,
     MaterialsResponse,
     SectionPropertiesResponse,
     SectionsResponse,
     UnitsResponse,
 )
 from .path_resolver import resolve_oapi_dll
+from .primitives import combinations as combinations_primitive
 from .primitives import frames as frames_primitive
 from .primitives import joints as joints_primitive
+from .primitives import load_cases as load_cases_primitive
+from .primitives import load_patterns as load_patterns_primitive
 from .primitives import materials as materials_primitive
 from .primitives import section_properties as section_properties_primitive
 from .primitives import sections as sections_primitive
@@ -155,3 +161,44 @@ def get_materials() -> MaterialsResponse:
         present_units = units_primitive.get_present_units(model)
         rows = materials_primitive.get_materials(model, session.oapi_namespace())
         return MaterialsResponse(units=present_units, count=len(rows), materials=rows)
+
+
+@app.get("/v1/load_patterns", response_model=LoadPatternsResponse)
+def get_load_patterns() -> LoadPatternsResponse:
+    """The load pattern catalogue defined in the model: name, raw eLoadPatternType and
+    self-weight multiplier. Names are model-supplied labels relayed verbatim ('PESO
+    PROPIO' stays as-is, not translated to 'Dead'); the bridge never assumes which
+    patterns a model should have."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        present_units = units_primitive.get_present_units(model)
+        rows = load_patterns_primitive.get_load_patterns(model, session.oapi_namespace())
+        return LoadPatternsResponse(units=present_units, count=len(rows), load_patterns=rows)
+
+
+@app.get("/v1/load_cases", response_model=LoadCasesResponse)
+def get_load_cases() -> LoadCasesResponse:
+    """The analysis load case catalogue: name + raw eLoadCaseType (LinearStatic, Modal,
+    …). Facts only — the case's internal definition (patterns/factors it uses) is a
+    later primitive."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        present_units = units_primitive.get_present_units(model)
+        rows = load_cases_primitive.get_load_cases(model, session.oapi_namespace())
+        return LoadCasesResponse(units=present_units, count=len(rows), load_cases=rows)
+
+
+@app.get("/v1/combinations", response_model=CombinationsResponse)
+def get_combinations() -> CombinationsResponse:
+    """The load combination catalogue: each combo's name, type (mapped from SAP's raw
+    code) and consolidated component items (referenced case/combo + scale factor). The
+    bridge recomposes SAP's parallel arrays so the client doesn't; it interprets
+    nothing — 'ENVOLVENTE' is reported with combo_type 'Envelope', no domain labels."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        present_units = units_primitive.get_present_units(model)
+        rows = combinations_primitive.get_combinations(model)
+        return CombinationsResponse(units=present_units, count=len(rows), combinations=rows)

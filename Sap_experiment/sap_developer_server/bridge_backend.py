@@ -100,6 +100,24 @@ def get_materials_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any
     )
 
 
+def get_load_patterns_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
+    return _bridge_json_request(
+        base_url, "/v1/load_patterns", timeout_seconds, method="GET", body=None, content_type=None
+    )
+
+
+def get_load_cases_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
+    return _bridge_json_request(
+        base_url, "/v1/load_cases", timeout_seconds, method="GET", body=None, content_type=None
+    )
+
+
+def get_combinations_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
+    return _bridge_json_request(
+        base_url, "/v1/combinations", timeout_seconds, method="GET", body=None, content_type=None
+    )
+
+
 def get_section_properties_bridge(
     base_url: str, timeout_seconds: float, name: str
 ) -> dict[str, Any]:

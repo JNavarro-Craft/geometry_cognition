@@ -154,3 +154,80 @@ class SectionProperties(BaseModel):
 class SectionPropertiesResponse(BaseModel):
     units: UnitsResponse
     section: SectionProperties
+
+
+class LoadPattern(BaseModel):
+    """One load pattern defined in the model: its name, raw SAP type and self-weight
+    multiplier.
+
+    ``load_type`` is the raw eLoadPatternType member name (e.g. 'Dead', 'Live', 'Wind',
+    'Snow') — a fact. A name like 'PESO PROPIO' is a model-supplied label relayed
+    verbatim; the bridge does not translate it to 'Dead' or know it is Spanish.
+    ``self_weight_multiplier`` is the factor SAP applies to the pattern's self weight
+    (typically 1.0 for a self-weight pattern, 0.0 otherwise).
+    """
+
+    name: str
+    load_type: str = Field(..., description="Raw eLoadPatternType member name (Dead/Live/Wind/…)")
+    self_weight_multiplier: float = Field(..., description="Self-weight multiplier for this pattern")
+
+
+class LoadPatternsResponse(BaseModel):
+    units: UnitsResponse
+    count: int
+    load_patterns: list[LoadPattern]
+
+
+class LoadCase(BaseModel):
+    """One analysis load case defined in the model: its name and raw SAP case type.
+
+    ``case_type`` is the raw eLoadCaseType member name (e.g. 'LinearStatic',
+    'Modal'). The bridge reports the type as a fact and does not resolve the case's
+    internal definition (which patterns/factors it uses) — that is a later primitive.
+    """
+
+    name: str
+    case_type: str = Field(..., description="Raw eLoadCaseType member name (LinearStatic/Modal/…)")
+
+
+class LoadCasesResponse(BaseModel):
+    units: UnitsResponse
+    count: int
+    load_cases: list[LoadCase]
+
+
+class ComboItem(BaseModel):
+    """One component of a load combination: a referenced case/combo and its scale factor.
+
+    SAP returns combination contents as parallel arrays (NumberItems + CName[] +
+    CNameType[] + SF[]); the bridge consolidates them into a list of these objects so
+    the client never recomposes indices. ``case_type`` distinguishes whether
+    ``case_name`` references a load case ('LoadCase') or another combination
+    ('LoadCombo') — the raw eCNameType member name.
+    """
+
+    case_name: str = Field(..., description="Referenced case or combo name (raw)")
+    case_type: str = Field(..., description="Raw eCNameType: 'LoadCase' or 'LoadCombo'")
+    scale_factor: float = Field(..., description="Scale factor applied to this component")
+
+
+class Combination(BaseModel):
+    """One load combination defined in the model: its name, type and component items.
+
+    ``combo_type_code`` is the raw integer SAP returns (this assembly exposes no
+    eComboType enum). ``combo_type`` is the corresponding SAP type name from the OAPI's
+    documented mapping (0=Linear Additive, 1=Envelope, 2=Absolute Add, 3=SRSS,
+    4=Range Add); 'Unknown' if SAP returns a code outside that set — reported, never
+    guessed. ``items`` is the consolidated component list (see ComboItem).
+    """
+
+    name: str
+    combo_type: str = Field(..., description="SAP combo type name from the documented code mapping")
+    combo_type_code: int = Field(..., description="Raw integer combo type from GetTypeOAPI")
+    items: list[ComboItem]
+
+
+class CombinationsResponse(BaseModel):
+    units: UnitsResponse
+    count: int
+    combinations: list[Combination]

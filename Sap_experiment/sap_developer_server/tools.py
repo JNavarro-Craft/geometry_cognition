@@ -11,8 +11,11 @@ from typing import Any
 
 from .bridge_backend import (
     bridge_settings,
+    get_combinations_bridge,
     get_frames_bridge,
     get_joints_bridge,
+    get_load_cases_bridge,
+    get_load_patterns_bridge,
     get_materials_bridge,
     get_section_properties_bridge,
     get_sections_bridge,
@@ -108,5 +111,53 @@ def get_section_properties(name: str) -> dict[str, Any]:
     base_url, timeout = bridge_settings()
     try:
         return get_section_properties_bridge(base_url, timeout, name)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def get_load_patterns() -> dict[str, Any]:
+    """The load pattern catalogue defined in the open SAP model: each pattern's ``name``,
+    raw SAP ``load_type`` (e.g. 'Dead', 'Live', 'Wind', 'Snow') and
+    ``self_weight_multiplier``.
+
+    Facts only. Names are model-supplied labels relayed verbatim — 'PESO PROPIO' is not
+    translated to 'Dead', and the MCP never assumes which patterns a model should have.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return get_load_patterns_bridge(base_url, timeout)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def get_load_cases() -> dict[str, Any]:
+    """The analysis load case catalogue in the open SAP model: each case's ``name`` and
+    raw SAP ``case_type`` (e.g. 'LinearStatic', 'Modal').
+
+    Facts only. The case's internal definition (which patterns/factors it uses) is not
+    resolved here — that is a later primitive. To see applied loads, that is also a later
+    phase; this lists what cases are *defined*.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return get_load_cases_bridge(base_url, timeout)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def get_combinations() -> dict[str, Any]:
+    """The load combination catalogue in the open SAP model: each combo's ``name``,
+    ``combo_type`` (e.g. 'Linear Additive', 'Envelope') with its raw ``combo_type_code``,
+    and ``items`` — the consolidated component list, each with ``case_name``,
+    ``case_type`` ('LoadCase' or 'LoadCombo') and ``scale_factor``.
+
+    Facts only. SAP's parallel arrays are recomposed for you. The MCP does not interpret
+    a combo: 'ENVOLVENTE' is reported with combo_type 'Envelope', never labelled a
+    seismic/ULS combo. Items of type 'LoadCase' reference names from get_load_cases;
+    items of type 'LoadCombo' reference other combos (combo-of-combo is real).
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return get_combinations_bridge(base_url, timeout)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)

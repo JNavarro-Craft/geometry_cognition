@@ -20,8 +20,11 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from Sap_experiment.sap_developer_server.tools import (
+    get_combinations,
     get_frames,
     get_joints,
+    get_load_cases,
+    get_load_patterns,
     get_materials,
     get_section_properties,
     get_sections,
@@ -73,6 +76,32 @@ def get_section_properties_tool(name: str) -> dict[str, Any]:
     torsion, moduli, radii of gyration), all in present units. Facts only — no
     cross-shape normalization. Unsupported shapes return a structured error."""
     return get_section_properties(name)
+
+
+@mcp.tool(name="get_load_patterns")
+def get_load_patterns_tool() -> dict[str, Any]:
+    """The load pattern catalogue: each pattern's name, raw load_type (Dead/Live/Wind/
+    Snow/…) and self_weight_multiplier. Names relayed verbatim ('PESO PROPIO' not
+    translated); the MCP never assumes which patterns a model should have."""
+    return get_load_patterns()
+
+
+@mcp.tool(name="get_load_cases")
+def get_load_cases_tool() -> dict[str, Any]:
+    """The analysis load case catalogue: each case's name and raw case_type
+    (LinearStatic/Modal/…). Facts only — a case's internal definition is a later
+    primitive."""
+    return get_load_cases()
+
+
+@mcp.tool(name="get_combinations")
+def get_combinations_tool() -> dict[str, Any]:
+    """The load combination catalogue: each combo's name, combo_type ('Linear Additive'/
+    'Envelope'/…) with raw combo_type_code, and items (consolidated: case_name,
+    case_type 'LoadCase'|'LoadCombo', scale_factor). Parallel arrays recomposed for you.
+    No interpretation — 'ENVOLVENTE' is just combo_type 'Envelope'. LoadCase items
+    reference get_load_cases names; LoadCombo items reference other combos."""
+    return get_combinations()
 
 
 if __name__ == "__main__":
