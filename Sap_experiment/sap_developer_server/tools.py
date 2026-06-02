@@ -12,11 +12,14 @@ from typing import Any
 from .bridge_backend import (
     bridge_settings,
     get_combinations_bridge,
+    get_distributed_loads_on_frame_bridge,
     get_frames_bridge,
     get_joints_bridge,
+    get_load_case_details_bridge,
     get_load_cases_bridge,
     get_load_patterns_bridge,
     get_materials_bridge,
+    get_point_loads_on_joint_bridge,
     get_section_properties_bridge,
     get_sections_bridge,
 )
@@ -159,5 +162,55 @@ def get_combinations() -> dict[str, Any]:
     base_url, timeout = bridge_settings()
     try:
         return get_combinations_bridge(base_url, timeout)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def get_distributed_loads_on_frame(frame_name: str) -> dict[str, Any]:
+    """Distributed loads on ONE frame, by its exact ``frame_name`` (as in get_frames),
+    across all load patterns. Each item has ``load_pattern``, ``load_type`` ('Force'/
+    'Displacement'), ``direction`` (e.g. 'Gravity', 'Local 2') with raw ``direction_code``,
+    ``coord_system``, ``rel_dist_start``/``rel_dist_end`` (0..1) and ``value_start``/
+    ``value_end`` (present units).
+
+    Facts only. An empty ``loads`` list means the frame has no distributed loads — not an
+    error. Directions are relayed raw ('Gravity' stays 'Gravity'); ``load_pattern`` values
+    reference names from get_load_patterns. To scan the model, loop get_frames client-side.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return get_distributed_loads_on_frame_bridge(base_url, timeout, frame_name)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def get_point_loads_on_joint(joint_name: str) -> dict[str, Any]:
+    """Point loads (force + moment) on ONE joint, by its exact ``joint_name`` (as in
+    get_joints), across all load patterns. Each item has ``load_pattern``,
+    ``coord_system`` and the six components ``f1/f2/f3`` (force) and ``m1/m2/m3`` (moment),
+    in present units.
+
+    Facts only. An empty ``loads`` list means the joint has no point loads — not an error.
+    ``load_pattern`` values reference names from get_load_patterns.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return get_point_loads_on_joint_bridge(base_url, timeout, joint_name)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def get_load_case_details(case_name: str) -> dict[str, Any]:
+    """Composition of ONE load case, by its exact ``case_name`` (as in get_load_cases).
+    Returns ``case_type`` and ``loads`` — for a LinearStatic case, the applied patterns
+    with ``load_type``, ``load_pattern`` and ``scale_factor`` (mirrors get_combinations
+    items). For any other case type, ``unsupported_case_type`` is true and ``loads`` is
+    empty: the case and its type are reported, internals deferred (not an error).
+
+    Facts only. ``load_pattern`` values reference names from get_load_patterns.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return get_load_case_details_bridge(base_url, timeout, case_name)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)

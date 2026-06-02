@@ -118,6 +118,33 @@ def get_combinations_bridge(base_url: str, timeout_seconds: float) -> dict[str, 
     )
 
 
+def get_distributed_loads_on_frame_bridge(
+    base_url: str, timeout_seconds: float, frame_name: str
+) -> dict[str, Any]:
+    path = f"/v1/frames/{quote(frame_name, safe='')}/loads/distributed"
+    return _bridge_json_request(
+        base_url, path, timeout_seconds, method="GET", body=None, content_type=None
+    )
+
+
+def get_point_loads_on_joint_bridge(
+    base_url: str, timeout_seconds: float, joint_name: str
+) -> dict[str, Any]:
+    path = f"/v1/joints/{quote(joint_name, safe='')}/loads/point"
+    return _bridge_json_request(
+        base_url, path, timeout_seconds, method="GET", body=None, content_type=None
+    )
+
+
+def get_load_case_details_bridge(
+    base_url: str, timeout_seconds: float, case_name: str
+) -> dict[str, Any]:
+    path = f"/v1/load_cases/{quote(case_name, safe='')}/details"
+    return _bridge_json_request(
+        base_url, path, timeout_seconds, method="GET", body=None, content_type=None
+    )
+
+
 def get_section_properties_bridge(
     base_url: str, timeout_seconds: float, name: str
 ) -> dict[str, Any]:

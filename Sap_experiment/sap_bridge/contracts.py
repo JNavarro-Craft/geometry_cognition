@@ -231,3 +231,95 @@ class CombinationsResponse(BaseModel):
     units: UnitsResponse
     count: int
     combinations: list[Combination]
+
+
+class DistributedLoad(BaseModel):
+    """One distributed load on a frame, in one load pattern.
+
+    All fields are facts SAP returns. ``load_type`` is the raw type ('Force' or
+    'Displacement'). ``direction_code`` is the raw integer SAP uses for the load
+    direction (this assembly exposes no direction enum, same as combo_type); ``direction``
+    is the documented name for that code (1-3=Local, 4-6=Global X/Y/Z, 7-9=Projected,
+    10=Gravity, 11=Projected Gravity), 'Unknown' if the code is outside that set —
+    reported, never guessed. ``coord_system`` is the raw CSys name ('GLOBAL', 'Local', a
+    custom name). ``rel_dist_start``/``end`` are the 0..1 relative positions; ``value_*``
+    are the load magnitudes in the model's present units. No interpretation: 'Gravity'
+    stays 'Gravity', not 'down'.
+    """
+
+    load_pattern: str = Field(..., description="Load pattern name this load belongs to (raw)")
+    load_type: str = Field(..., description="Raw load type: 'Force' or 'Displacement'")
+    direction: str = Field(..., description="Documented direction name for direction_code")
+    direction_code: int = Field(..., description="Raw integer load direction from the OAPI")
+    coord_system: str = Field(..., description="Raw coordinate system name (GLOBAL/Local/custom)")
+    rel_dist_start: float = Field(..., description="Relative start position along the frame, 0..1")
+    rel_dist_end: float = Field(..., description="Relative end position along the frame, 0..1")
+    value_start: float = Field(..., description="Load value at start, present units")
+    value_end: float = Field(..., description="Load value at end, present units")
+
+
+class DistributedLoadsResponse(BaseModel):
+    units: UnitsResponse
+    frame: str
+    count: int
+    loads: list[DistributedLoad]
+
+
+class PointLoad(BaseModel):
+    """One point load (force + moment) on a joint, in one load pattern.
+
+    ``f1/f2/f3`` and ``m1/m2/m3`` are the force and moment components in ``coord_system``,
+    in the model's present units. Raw facts; the bridge does not resolve the coordinate
+    system or name the direction.
+    """
+
+    load_pattern: str = Field(..., description="Load pattern name this load belongs to (raw)")
+    coord_system: str = Field(..., description="Raw coordinate system name the components are in")
+    f1: float = Field(..., description="Force component 1, present units")
+    f2: float = Field(..., description="Force component 2, present units")
+    f3: float = Field(..., description="Force component 3, present units")
+    m1: float = Field(..., description="Moment component 1, present units")
+    m2: float = Field(..., description="Moment component 2, present units")
+    m3: float = Field(..., description="Moment component 3, present units")
+
+
+class PointLoadsResponse(BaseModel):
+    units: UnitsResponse
+    joint: str
+    count: int
+    loads: list[PointLoad]
+
+
+class LoadCaseLoadItem(BaseModel):
+    """One component of a LinearStatic load case: a load pattern and its scale factor.
+
+    ``load_type`` is the raw type SAP reports for the entry ('Load' for a load pattern).
+    Mirrors ComboItem in shape so case composition reads like combo composition.
+    """
+
+    load_type: str = Field(..., description="Raw load entry type (e.g. 'Load')")
+    load_pattern: str = Field(..., description="Referenced load pattern name (raw)")
+    scale_factor: float = Field(..., description="Scale factor applied to this load")
+
+
+class LoadCaseDetails(BaseModel):
+    """The composition of one load case: its type and the loads it applies.
+
+    For ``case_type == 'LinearStatic'``, ``loads`` lists the applied load patterns with
+    scale factors. For any other case type (Modal, ResponseSpectrum, …) the bridge does
+    not resolve composition this phase: ``loads`` is empty and ``unsupported_case_type``
+    is True — the case exists and its type is reported, but its internals are deferred
+    (information, not an error).
+    """
+
+    case_name: str
+    case_type: str = Field(..., description="Raw eLoadCaseType member name")
+    unsupported_case_type: bool = Field(
+        False, description="True if composition is not resolved for this case type this phase"
+    )
+    loads: list[LoadCaseLoadItem]
+
+
+class LoadCaseDetailsResponse(BaseModel):
+    units: UnitsResponse
+    case: LoadCaseDetails

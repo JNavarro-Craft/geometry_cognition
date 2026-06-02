@@ -21,11 +21,14 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from Sap_experiment.sap_developer_server.tools import (
     get_combinations,
+    get_distributed_loads_on_frame,
     get_frames,
     get_joints,
+    get_load_case_details,
     get_load_cases,
     get_load_patterns,
     get_materials,
+    get_point_loads_on_joint,
     get_section_properties,
     get_sections,
 )
@@ -102,6 +105,35 @@ def get_combinations_tool() -> dict[str, Any]:
     No interpretation — 'ENVOLVENTE' is just combo_type 'Envelope'. LoadCase items
     reference get_load_cases names; LoadCombo items reference other combos."""
     return get_combinations()
+
+
+@mcp.tool(name="get_distributed_loads_on_frame")
+def get_distributed_loads_on_frame_tool(frame_name: str) -> dict[str, Any]:
+    """Distributed loads on ONE frame (exact name from get_frames), across all patterns.
+    Each item: load_pattern, load_type ('Force'/'Displacement'), direction (e.g.
+    'Gravity', 'Local 2') + raw direction_code, coord_system, rel_dist_start/end (0..1),
+    value_start/end (present units). Empty loads = none on that frame (not an error).
+    Directions relayed raw; load_pattern references get_load_patterns names."""
+    return get_distributed_loads_on_frame(frame_name)
+
+
+@mcp.tool(name="get_point_loads_on_joint")
+def get_point_loads_on_joint_tool(joint_name: str) -> dict[str, Any]:
+    """Point loads (force + moment) on ONE joint (exact name from get_joints), across all
+    patterns. Each item: load_pattern, coord_system, f1/f2/f3 (force), m1/m2/m3 (moment),
+    present units. Empty loads = none on that joint (not an error). load_pattern
+    references get_load_patterns names."""
+    return get_point_loads_on_joint(joint_name)
+
+
+@mcp.tool(name="get_load_case_details")
+def get_load_case_details_tool(case_name: str) -> dict[str, Any]:
+    """Composition of ONE load case (exact name from get_load_cases): case_type and
+    loads. LinearStatic → applied patterns with load_type, load_pattern, scale_factor
+    (mirrors get_combinations items). Other types → unsupported_case_type=true, loads=[]
+    (type reported, internals deferred; not an error). load_pattern references
+    get_load_patterns names."""
+    return get_load_case_details(case_name)
 
 
 if __name__ == "__main__":
