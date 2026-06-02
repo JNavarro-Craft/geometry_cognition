@@ -59,6 +59,7 @@ día uno.
 | 🔶 **Savepoint: crear (WRITE fs)** | `POST /v1/savepoints` | `create_savepoint` | ✅ escribe `<model>__sp_<name>.sdb`; dry_run; rechaza duplicado; Save+reabrir original |
 | 🔶 **Savepoint: restaurar (WRITE destr.)** | `POST /v1/savepoints/{name}/restore` | `restore_savepoint` | ✅ confirm obligatorio; dry_run; ciclo undo validado (revierte cambio real de active_dof) |
 | Savepoint: listar | `GET /v1/savepoints` | `list_savepoints` | ✅ scan de filesystem; [] si ninguno; sin OAPI |
+| 🔶 **set_active_dof (MUTA modelo)** | `POST /v1/model/settings/active_dof` | `set_active_dof` | ✅ confirm obligatorio; dry_run con diff legible; locked → rechaza; ciclo cliente validado |
 | Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; `case_not_run`, `unsupported_case_type`, `confirm_required`, `savepoint_not_found`, `savepoint_already_exists` |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
@@ -116,6 +117,15 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 > Hecho, no juicio: un displacement grande es un número, no "falla" (anti-patrón #4); las
 > reacciones equilibran las cargas pero ese cross-check lo compone el cliente, no el bridge.
 > Sigue fuera: stresses (1e.2), envelope (1e.3), modal/spectrum (1f).
+
+> Actualización sesión 9 (Fase 1g.2 — primer write que MUTA el modelo): `set_active_dof`
+> (`POST /v1/model/settings/active_dof`) cambia los DOFs activos en memoria. Setting global
+> → **confirm obligatorio** (design doc §5.3, primera vez que se USA en código); dry_run
+> previsualiza con diff legible (`U2: false → true`). El bridge valida **shape** (6 booleans),
+> NO juzga el patrón (SAP acepta hasta all-false) ni auto-deslockea (locked → relay
+> `oapi_call_failed`). Más **audit logging** compartido (`audit_log.py` → JSONL por op,
+> errores incluidos) con retrofit a savepoints. **21 primitivas**. Ciclo del patrón cliente
+> validado end-to-end: savepoint → preview → rechazo-sin-confirm → aplicar → restore.
 
 > Actualización sesión 8 (Fase 1g.1 — primer write-side): `create_savepoint`,
 > `restore_savepoint`, `list_savepoints` — la **infraestructura de undo**. Escriben el

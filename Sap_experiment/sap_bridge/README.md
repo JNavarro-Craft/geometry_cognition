@@ -82,6 +82,7 @@ Match on either; the bridge does not interpret the system.
 |---|---|---|
 | `GET /v1/units` | (internal) | active SAP unit system |
 | `GET /v1/model/settings` | `get_model_settings` | active DOFs, lock state, present + database units |
+| **`POST`** `/v1/model/settings/active_dof` | `set_active_dof` | **write**: set active DOFs (global setting) |
 | `GET /v1/joints` | `get_joints` | points: name, coords, 6-DOF restraints |
 | `GET /v1/frames` | `get_frames` | frames: name, i/j connectivity, section |
 | `GET /v1/sections` | `get_sections` | section catalogue: name + type |
@@ -618,7 +619,54 @@ mandatory for destructive operations. New error codes: `confirm_required`,
 `savepoint_not_found`, `savepoint_already_exists` (all `409`, client-fixable).
 
 The first write primitives (Fase 1g.1) are savepoints — undo infrastructure that writes
-the **filesystem**, not the model in memory.
+the **filesystem**, not the model in memory. The first primitive that mutates the model in
+memory is `set_active_dof` (Fase 1g.2).
+
+**Audit log**: every write records one JSON-Lines entry to
+`sap_bridge/logs/writes_<YYYY-MM-DD>.jsonl` (timestamp, operation, parameters incl.
+dry_run/confirm, result `applied`/`preview_only`/`error_<code>`, result_details,
+elapsed_ms). Errors are logged too. Read-only primitives (e.g. `list_savepoints`) are not
+logged. The logs are git-ignored runtime artifacts.
+
+### `POST /v1/model/settings/active_dof`  *(write — global setting)*
+
+Set the model's active DOFs. The write counterpart of the `active_dof` field from
+`GET /v1/model/settings`.
+
+```json
+{ "active_dof": [true, true, true, true, true, true], "dry_run": false, "confirm": true }
+```
+
+- `active_dof`: exactly **6 booleans** `[U1, U2, U3, R1, R2, R3]` (a malformed list →
+  `422` from the contract or `oapi_unexpected_shape`). The bridge validates **shape only**;
+  it does not judge whether a pattern is structurally sensible (SAP accepts even all-false,
+  anti-pattern #4).
+- `confirm` is **mandatory** (a global setting, design doc §5.3): without it →
+  `confirm_required`. `dry_run: true` previews the change with a per-DOF diff, without
+  applying.
+
+Dry-run → `would_apply` (`current_active_dof`, `new_active_dof`, `changes`); real run →
+`applied` (`previous_active_dof`, `current_active_dof`, `changes`). `model_is_locked` is
+echoed as a fact.
+
+```json
+{
+  "dry_run": false,
+  "applied": {
+    "previous_active_dof": [true, false, true, false, true, false],
+    "current_active_dof":  [true, true, true, true, true, true],
+    "changes": ["U2: false → true", "R1: false → true", "R3: false → true"]
+  },
+  "model_is_locked": false
+}
+```
+
+- On a **locked** model SAP rejects the change (`SetActiveDOF` returns non-zero) →
+  `oapi_call_failed`. The bridge does **not** auto-unlock; unlock in SAP if intended.
+
+> Validated end-to-end on TEST_01 via the client pattern: `create_savepoint` → dry-run
+> preview → reject without confirm → apply with confirm → restore. The audit log captured
+> all steps including the errors.
 
 ### `GET /v1/savepoints`
 

@@ -277,6 +277,39 @@ no sobrescritura); dry_run en create y restore (sin escribir/reemplazar) — tod
 
 ---
 
+## 🔶 Hallazgos OAPI Fase 1g.2 — set_active_dof + audit log (resueltos)
+
+### 21. `cAnalyze.SetActiveDOF`: input Boolean[], rechaza si locked, NO valida degenerados
+- Firma `SetActiveDOF(Boolean[] DOF)` → toma un `System.Array[Boolean]` de 6 (pythonnet no
+  acepta una lista Python directa) y devuelve `(ret, dof)` vía tupla; el primer elemento es
+  el status.
+- **Sobre modelo LOCKED**: retorna **ret=1 y NO aplica** el cambio, y **NO auto-deslockea**.
+  El bridge relaya eso como `oapi_call_failed` — política explícita: el bridge **no** hace
+  unlock proactivo (el cliente decide). Validado en pre-vuelo.
+- **SAP NO valida casos degenerados**: `SetActiveDOF([F,F,F,F,F,F])` se aplicó con ret=0.
+  El bridge tampoco juzga (anti-patrón #4) — solo valida **shape** (exactamente 6 booleans).
+  Si el patrón es estructuralmente absurdo, es decisión del cliente, no del bridge.
+- Cambiar active_dof en un modelo unlocked no toca por sí mismo el lock state.
+
+### Audit log (write_side_design.md §logging)
+- Módulo compartido `sap_bridge/audit_log.py`: una línea JSONL por operación write a
+  `logs/writes_<YYYY-MM-DD>.jsonl` (timestamp ISO-8601, operation, parameters, result,
+  result_details, elapsed_ms). Context manager `audited()` que **también audita los
+  errores** (`error_<code>`) re-lanzándolos. Escritura plana `open(..,"a")` + json.dumps,
+  sin deps; un fallo de logging **nunca rompe** la operación (se traga y warnea).
+- **Decisión: `list_savepoints` NO se loguea** — es read-only (filesystem scan, no muta);
+  el audit trail responde "qué cambió y cuándo". Sí se loguean create/restore_savepoint
+  (retrofit) y set_active_dof. Validado: 7 entradas tras el ciclo, incl. errores.
+
+### ◾ Filo menor: dos códigos para input mal formado
+La validación de shape de `active_dof` da **422** (pydantic, tipo no-lista, rechazado en el
+contrato) o **502 `oapi_unexpected_shape`** (longitud ≠ 6, en el primitive). Ambos son
+rechazos claros sin crash, pero `oapi_unexpected_shape` es impreciso para "input del
+cliente mal formado" (no falló la OAPI). Posible mejora futura: un código `invalid_input`
+dedicado. Anotado, no parcheado (no bloquea).
+
+---
+
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
 
 Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fase.
@@ -307,9 +340,13 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
   - ✅ **1g.1** — savepoints (`create_savepoint`, `restore_savepoint`, `list_savepoints`):
     infraestructura de undo. **Hecha** (sesión 8); ciclo de undo validado en vivo. Las
     primitivas escriben el filesystem, no el modelo en memoria.
-  - ◾ **1g.2+** — writes "reales" (`set_active_dof`, `set_present_units`, create/modify/
-    delete sections, assign sections…), cada una apoyada en savepoints como red de
-    seguridad. Evitar el delete-all-then-recreate peligroso de `RhinoSAP/SapFrameSynchronizer`.
+  - ✅ **1g.2** — `set_active_dof` (primer write que MUTA el modelo en memoria; setting
+    global → confirm obligatorio) + **audit logging** compartido (retrofit a savepoints).
+    **Hecha** (sesión 9); ciclo del patrón cliente validado end-to-end (savepoint → preview
+    → rechazo-sin-confirm → aplicar → restore). 21 primitivas.
+  - ◾ **1g.3+** — writes "reales" restantes (`set_present_units`, create/modify/delete
+    sections, assign sections…), cada una apoyada en savepoints + audit log. Evitar el
+    delete-all-then-recreate peligroso de `RhinoSAP/SapFrameSynchronizer`.
 - ◾ **Fase 1h** — snapshots + diff.
 - ◾ **Fase 1i** — poblar `docs/domains/structural/` (códigos, materiales, factores,
   recetas, casos) — conocimiento del cliente, no tools.
