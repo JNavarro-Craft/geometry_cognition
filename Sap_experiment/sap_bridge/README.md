@@ -85,10 +85,14 @@ Match on either; the bridge does not interpret the system.
 | `GET /v1/joints/{name}/loads/point` | `get_point_loads_on_joint` | point loads on one joint |
 | `GET /v1/analysis/status` | `get_analysis_status` | per-case run status + model lock |
 | **`POST`** `/v1/analysis/run` | `run_analysis` | **mutates**: runs analysis, returns status |
+| `GET /v1/joints/{name}/displacements/{case}` | `get_joint_displacements` | 6-DOF joint displacement (LinearStatic) |
+| `GET /v1/joints/{name}/reactions/{case}` | `get_joint_reactions` | 6-DOF joint reaction (LinearStatic) |
+| `GET /v1/frames/{name}/forces/{case}` | `get_frame_forces` | frame internal forces per station |
 
-All read (`GET`) except the one mutating op (`POST /v1/analysis/run`). Results
-(displacements, reactions, forces), point loads on frames, temperature/displacement loads,
-and model writes are future phases (see [`../docs/brechas.md`](../docs/brechas.md)).
+All read (`GET`) except the one mutating op (`POST /v1/analysis/run`). Frame stresses,
+envelope/combination results, non-LinearStatic results, point loads on frames,
+temperature/displacement loads, and model writes are future phases (see
+[`../docs/brechas.md`](../docs/brechas.md)).
 
 ---
 
@@ -486,6 +490,78 @@ Response:
 
 ---
 
+## Analysis results (read-only, post-analysis)
+
+These read the results the analysis produced. They depend on computation state: a case
+must have been run. Two new error codes gate that: `case_not_run` (the case exists but has
+no results — `409`, call `run_analysis` first) and `unsupported_case_type` (the case is
+not LinearStatic — Modal/spectrum/… not exposed this phase, `502`). An unknown case name
+is `oapi_call_failed`. Values are in present units; the bridge never converts.
+
+### `GET /v1/joints/{name}/displacements/{case_name}`
+
+The 6-DOF displacement of one joint in one LinearStatic case (global system).
+
+```json
+{
+  "units": { "present_units": "kgf_m_C", "present_units_code": 8 },
+  "displacements": {
+    "joint": "9", "case_name": "MUERTA", "coord_system": "Global", "step_number": 0.0,
+    "u1": 0.0, "u2": 0.0, "u3": 0.0, "r1": 0.0, "r2": 0.000133, "r3": 0.0
+  }
+}
+```
+
+- `u1/u2/u3` translations, `r1/r2/r3` rotations. A restrained DOF reads ~0 (reported as
+  SAP gives it, never nullified). `step_number` is 0 for LinearStatic.
+
+### `GET /v1/joints/{name}/reactions/{case_name}`
+
+The 6-DOF reaction (force + moment) of one joint in one LinearStatic case.
+
+```json
+{
+  "units": { "present_units": "kgf_m_C", "present_units_code": 8 },
+  "reactions": {
+    "joint": "9", "case_name": "MUERTA", "coord_system": "Global", "step_number": 0.0,
+    "f1": 72.02, "f2": 0.0, "f3": 7.40, "m1": 0.0, "m2": 0.0, "m3": 0.0
+  }
+}
+```
+
+- `f1/f2/f3` forces, `m1/m2/m3` moments. An unrestrained DOF reads ~0; a fully free joint
+  reads the zero vector — correct information, not an error.
+
+> The reactions at the restrained joints balance the applied loads. Cross-checked on
+> TEST_01: the 30 restrained joints' `f3` for MUERTA sum to ~1290.86 (vertical), `f1`/`f2`
+> ~0 — equilibrating the 78 MUERTA gravity loads. The bridge does **not** compute this; it
+> is a fact-composition the client can do over these endpoints.
+
+### `GET /v1/frames/{name}/forces/{case_name}`  ·  `?station=0..1`
+
+Internal forces at the stations SAP computed along one frame, in one LinearStatic case.
+
+```json
+{
+  "units": { "present_units": "kgf_m_C", "present_units_code": 8 },
+  "frame": "4133", "case_name": "MUERTA", "count": 2,
+  "stations": [
+    { "relative_distance": 0.0, "absolute_distance": 0.0,
+      "p": -0.767, "v2": -2.398, "v3": 0.0, "t": 0.0, "m2": 0.0, "m3": -0.155 },
+    { "relative_distance": 1.0, "absolute_distance": 0.4916,
+      "p": -0.767, "v2": 7.138, "v3": 0.0, "t": 0.0, "m2": 0.0, "m3": -1.320 }
+  ]
+}
+```
+
+- One item per station: `relative_distance` (0..1, derived as `absolute_distance` /
+  frame length), `absolute_distance` (from the i-end), then `p` (axial), `v2`/`v3`
+  (shears), `t` (torsion), `m2`/`m3` (moments).
+- `?station=0..1` returns just the nearest station; omit for all. A large moment is a
+  number, not "overstress" (anti-pattern #4).
+
+---
+
 ## Session model
 
 Attach-only this phase: the bridge connects (COM `GetObject`) to a SAP2000 the user
@@ -499,10 +575,11 @@ process-wide lock (COM is single-threaded).
 Honest scope (see [`../docs/brechas.md`](../docs/brechas.md)): no pagination/filters
 (all rows in one payload — fine at 112/180, revisit before large models), and no model
 **writes** (creating/assigning/deleting objects — Fase 1g, gated behind a design doc).
-Running analysis is covered (Phase 1d, the one mutating op) but **results** (displacements,
-reactions, forces, stresses) are not yet — that is Phase 1e. Load definitions (1c) and
-applied loads (1c.2) are covered; not yet point loads on frames, temperature/displacement/
-area loads, or non-LinearStatic case composition (1c.3, additive). Section dimensions (1b)
-cover `Rectangular`; other shapes return `oapi_unexpected_shape` until their extractor is
-added. These remaining gaps are future phases and should extend this contract
-**additively**.
+Running analysis (Phase 1d) and results (Phase 1e: joint displacements/reactions, frame
+forces — LinearStatic) are covered. **Not yet**: frame stresses (1e.2), envelope/
+combination results (1e.3), non-LinearStatic results (modal/spectrum — 1f). Load
+definitions (1c) and applied loads (1c.2) are covered; not yet point loads on frames,
+temperature/displacement/area loads, or non-LinearStatic case composition (1c.3). Section
+dimensions (1b) cover `Rectangular`; other shapes return `oapi_unexpected_shape` until
+their extractor is added. These remaining gaps are future phases and should extend this
+contract **additively**.

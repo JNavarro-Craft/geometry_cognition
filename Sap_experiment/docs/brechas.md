@@ -185,6 +185,37 @@ ret≠0 → `oapi_call_failed` con el código; el cliente lo interpreta, el brid
 
 ---
 
+## 🔶 Hallazgos OAPI Fase 1e — resultados de análisis (resueltos)
+
+### 15. `cAnalysisResults` shapes: 13 elementos (joints), 15 (frames), componentes en 7..12
+- `JointDispl`/`JointReact(Name, eItemTypeElm, ref NumberResults, ref Obj[], ref Elm[],
+  ref LoadCase[], ref StepType[], ref StepNum[], ref C1[]..C6[])` → tupla de **13**
+  elementos: `ret(0), n(1), Obj(2), Elm(3), LoadCase(4), StepType(5), StepNum(6),
+  C1..C6(7..12)`. **Los componentes están en 7..12, NO 8..13** — cazado en pre-vuelo
+  (un IndexError al asumir 8..14, la misma clase del 4-tuple de Fase 1d §14). Displ:
+  U1/U2/U3/R1/R2/R3. React: F1/F2/F3/M1/M2/M3.
+- `FrameForce(...)` → **15** elementos: `ret, n, Obj, ObjSta(3), Elm, ElmSta, LoadCase,
+  StepType, StepNum, P(9), V2, V3, T, M2, M3(14)`. `ObjSta` = distancia absoluta desde
+  el i-end; la relativa se deriva como `ObjSta / longitud` (longitud de FrameObj.GetPoints
+  + coords). Múltiples stations por frame (4133 → 2).
+
+### 16. Resultados exigen selección de output + el guard de case
+- **Hay que seleccionar el case para output ANTES de leer**:
+  `Setup.DeselectAllCasesAndCombosForOutput()` + `SetCaseSelectedForOutput(name, True)`.
+  Sin selección, la llamada devuelve `ret=1, NumberResults=0` — silencio confuso. Por eso
+  el bridge **no** se fía de ese silencio: usa `Analyze.GetCaseStatus` (status==4 Finished)
+  para detectar un case no corrido y devolver `case_not_run` estructurado (409, client-
+  fixable). Un case no-LinearStatic → `unsupported_case_type` (no se intenta leer).
+- `StepType` viene `None` y `StepNum=0.0` para LinearStatic — manejado.
+- **Equilibrio global verificado** (criterio de validación): suma de reacciones de los 30
+  nudos restringidos para MUERTA = F3 1290.86 kgf (vertical), F1/F2 ≈ 0 — equilibra el
+  peso de las 78 cargas MUERTA (verticales/Gravity). El bridge NO computa esto; es una
+  composición del cliente sobre los hechos.
+- Dos códigos de error nuevos: `CASE_NOT_RUN` (409, precondición), `UNSUPPORTED_CASE_TYPE`
+  (502). Anti-patrón #4: un displacement grande es un número, no "falla".
+
+---
+
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
 
 Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fase.
@@ -204,7 +235,11 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
   **Hecha** (sesión 5); validada en vivo (run 7 cases en 5.8s → todos Finished, modelo
   locked; subset con restauración de flags; idempotencia 0.0s; error path estructurado;
   integridad referencial OK). POST muta / GET lee. Falta cancel (OAPI no lo expone fiable).
-- ◾ **Fase 1e** — `get_displacements`, `get_reactions`, `get_forces`, `get_stresses`.
+- ✅ **Fase 1e** — `get_joint_displacements`, `get_joint_reactions`, `get_frame_forces`
+  (resultados post-análisis; cierra el ciclo input→análisis→output). **Hecha** (sesión 6);
+  validada en vivo (joint 9 restringido: reacción F1/F3, displ solo r2; frame 4133: 2
+  stations con M3≠0; equilibrio global F3=1290.86 kgf; case_not_run + unsupported_case_type
+  + case inexistente). Falta `get_frame_stresses` (1e.2) y resultados de envelope (1e.3).
 - ◾ **Fase 1f** — `get_modal_results`, `get_response_spectrum`.
 - ◾ **Fase 1g** — escritura (`create_joint/frame`, `set_section`…) con dry-run + undo,
   y **namespace/registry** para tocar solo lo propio (evitar el delete-all-then-recreate

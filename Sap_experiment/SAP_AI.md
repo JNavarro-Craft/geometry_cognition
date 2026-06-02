@@ -43,7 +43,10 @@ día uno.
 | Point loads en UN joint | `GET /v1/joints/{name}/loads/point` | `get_point_loads_on_joint` | ✅ camino vacío (0/112 en TEST_01); shape F1-3/M1-3 vs firma OAPI |
 | Estado de análisis por case | `GET /v1/analysis/status` | `get_analysis_status` | ✅ 7 cases; status int→nombre; has_run; model_is_locked |
 | 🔶 **Correr análisis (MUTA)** | `POST /v1/analysis/run` | `run_analysis` | ✅ 7 cases en 5.8s → Finished, modelo locked; subset con restauración de flags; idempotente; case inexistente → error |
-| Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; sección no soportada → `oapi_unexpected_shape` con el tipo |
+| Desplazamientos de UN nudo | `GET /v1/joints/{name}/displacements/{case}` | `get_joint_displacements` | ✅ joint 9 restringido: u1-u3=0, solo r2≠0; vs UI |
+| Reacciones de UN nudo | `GET /v1/joints/{name}/reactions/{case}` | `get_joint_reactions` | ✅ joint 9: F1/F3≠0 (coherente con restraints); equilibrio global F3=1290.86 kgf |
+| Fuerzas internas de UNA barra | `GET /v1/frames/{name}/forces/{case}` | `get_frame_forces` | ✅ frame 4133: 2 stations, M3≠0, P axial cte; ?station opcional |
+| Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; `case_not_run`, `unsupported_case_type` (MODAL), case inexistente |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
 unir frames↔joints por nombre de punto para reconstruir geometría; cruzar
@@ -58,7 +61,8 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 
 - ◾ **Escritura al MODELO** (create_joint/frame, set_section…). Read-only excepto correr
   análisis — ver nota del cruce abajo. La escritura al modelo es Fase 1g (tras design doc).
-- ◾ **Resultados** (displacements, reactions, forces, stresses) — Fase 1e.
+- ◾ **Stresses** (tensiones, 1e.2), **resultados de envelope/combos** (1e.3), **modal/
+  spectrum** (1f). Los resultados LinearStatic (displ, react, forces) ya están — ver abajo.
 - ◾ **Snapshots / diff.** (Cuando los read-only maduren.)
 - ◾ **Plugins de Rhino sobre el bridge** (Objetivo 2) y **wrappers MCP de plugins**
   (Objetivo 3).
@@ -88,8 +92,17 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 > `get_analysis_status` (`GET`) lee. El método HTTP señala intent: POST muta, GET lee. NO
 > confirm (no destructivo, re-correr es idempotente); el confirm se exigirá en Fase 1g
 > (escritura al modelo). Errores de análisis (singular matrix…) se relayan como
-> `oapi_call_failed` con el código — el bridge nunca dice "tu modelo está mal". Resultados
-> (Fase 1e) siguen fuera: esto corre el análisis, no lee solicitaciones.
+> `oapi_call_failed` con el código — el bridge nunca dice "tu modelo está mal".
+
+> Actualización sesión 6 (Fase 1e — CICLO VERTICAL COMPLETO): los **resultados** ya **no**
+> están fuera. `get_joint_displacements`, `get_joint_reactions`, `get_frame_forces` leen lo
+> que el análisis produjo (LinearStatic), read-only post-análisis. Con **16 primitivas** el
+> ciclo input→análisis→output está cerrado: el cliente puede preguntar qué define el modelo,
+> correrlo, y leer solicitaciones. Dependen del estado de cómputo: case no corrido →
+> `case_not_run` (el cliente llama run_analysis); no-LinearStatic → `unsupported_case_type`.
+> Hecho, no juicio: un displacement grande es un número, no "falla" (anti-patrón #4); las
+> reacciones equilibran las cargas pero ese cross-check lo compone el cliente, no el bridge.
+> Sigue fuera: stresses (1e.2), envelope (1e.3), modal/spectrum (1f).
 
 ## 🚫 Fuera por principio (leaks — nunca van en el bridge ni el MCP)
 
