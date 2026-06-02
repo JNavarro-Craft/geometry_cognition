@@ -63,6 +63,8 @@ día uno.
 | 🔶 **set_present_units (MUTA modelo)** | `POST /v1/model/settings/present_units` | `set_present_units` | ✅ name→enum; confirm + dry_run; TEST KEY: propagación a read-side (fuerzas ×9.80665, distancias intactas) |
 | 🔶 **create_material (CREA objeto)** | `POST /v1/materials` | `create_material` | ✅ prefijo AI_ obligatorio; tipo→eMatType (no 'Wood'); rechaza duplicado (overwrite silencioso); dry_run |
 | 🔶 **set_material_properties_isotropic** | `POST /v1/materials/{name}/properties/isotropic` | `set_material_properties_isotropic` | ✅ confirm solo si preexistente (§5.1); dry_run con diff; G derivado por SAP; present units |
+| 🔶 **create_rectangular_section (CREA)** | `POST /v1/sections` | `create_rectangular_section` | ✅ prefijo + material existe + dims>0; rechaza duplicado (overwrite silencioso); lee color real de SAP |
+| 🔶 **modify_rectangular_section** | `PATCH /v1/sections/{name}` | `modify_rectangular_section` | ✅ merge selectivo; confirm si preexistente; section_type_mismatch / nothing_to_modify |
 | Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; `case_not_run`, `unsupported_case_type`, `confirm_required`, `savepoint_not_found`, `savepoint_already_exists` |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
@@ -120,6 +122,14 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 > Hecho, no juicio: un displacement grande es un número, no "falla" (anti-patrón #4); las
 > reacciones equilibran las cargas pero ese cross-check lo compone el cliente, no el bridge.
 > Sigue fuera: stresses (1e.2), envelope (1e.3), modal/spectrum (1f).
+
+> Actualización sesión 12 (Fase 1g.5 — el patrón create+modify generaliza): segundo object
+> type, secciones rectangulares. `create_rectangular_section` (prefijo + material existente +
+> dims>0; rechaza duplicado porque `SetRectangle` sobrescribe en silencio como SetMaterial;
+> lee el color real de SAP de vuelta) + `modify_rectangular_section` (merge de campos provistos
+> con el current state; confirm solo si preexistente §5.1; `section_type_mismatch`,
+> `nothing_to_modify`). **26 primitivas**. La plantilla de 1g.4 se replicó sin fricción —
+> queda validada como reusable para object types. PATCH para modify, POST para create.
 
 > Actualización sesión 11 (Fase 1g.4 — SALTO CUALITATIVO, primer write sobre objetos):
 > `namespace.py` lleva el prefijo del bridge (`AI_`, configurable por `BRIDGE_NAMESPACE_PREFIX`)

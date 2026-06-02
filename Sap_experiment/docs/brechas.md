@@ -374,6 +374,33 @@ en bloque tanto el material AI_ nuevo como la modificación al MGP10 preexistent
 
 ---
 
+## 🔶 Hallazgos OAPI Fase 1g.5 — create/modify rectangular section (resueltos)
+
+### 24. `SetRectangle` SOBRESCRIBE silencioso (como SetMaterial); valida material; color real
+- `cPropFrame.SetRectangle(Name, MatProp, T3, T2, Color, Notes, GUID)` → **T3=depth,
+  T2=width**, input directo (sin ref), retorna 0. ⚠️ **Con un nombre EXISTENTE sobrescribe
+  en silencio** (verificado: T3 0.045→0.05, ret=0, sin error) — exactamente como SetMaterial
+  §23. El guard `name_already_exists` (consultar get_sections antes) es esencial; sin él un
+  create clobberaría una sección del usuario. **El patrón del filo silent-overwrite
+  generaliza** entre object types — confirma la regla del design doc.
+- **Material inexistente → ret=1** (SAP rechaza). El bridge además pre-valida vía
+  get_materials para un `object_not_found` más claro que un `oapi_call_failed` genérico.
+- `GetTypeOAPI(name, eFramePropType&)` → **ret=1 para nombre inexistente**; se usa para
+  existencia + check de tipo (section_type_mismatch en modify).
+- 🔶 **Color**: al pasar `-1` SAP NO deja 255 — asigna un color real (visto 65280). Por eso
+  create LEE de vuelta con GetRectangle y reporta el color real de SAP, no el asumido. El
+  preview (dry_run) muestra 255 como estimación; el `applied` muestra el valor real.
+
+### Generalización del patrón create+modify (segunda aplicación)
+La plantilla de 1g.4 (materials) se replicó sobre secciones rectangulares **sin fricción**:
+prefijo en create, confirm solo si preexistente en modify, savepoint revierte create +
+modif a preexistente, audit de todo incl. errores. **Confirma la plantilla como reusable**
+para object types. Nuevos códigos: `invalid_dimensions`, `section_type_mismatch`,
+`nothing_to_modify`. `modify` mergea campos provistos con el current state (GetRectangle),
+así que cambiar solo `depth` preserva width/material/color/notes (validado).
+
+---
+
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
 
 Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fase.
@@ -414,9 +441,12 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
   - ✅ **1g.4** — SALTO CUALITATIVO: `namespace.py` (prefijo en código) + `create_material`
     + `set_material_properties_isotropic`. Primer write sobre objetos. **Hecha** (sesión 11);
     ciclo de 13 pasos validado (prefijo, tipo, duplicado, ownership confirm). 24 primitivas.
-  - ◾ **1g.5+** — `create_section` (solo Rectangular probablemente), luego assign (batches +
-    stop-on-first-failure), modify, delete. Evitar el delete-all-then-recreate peligroso de
-    `RhinoSAP/SapFrameSynchronizer`.
+  - ✅ **1g.5** — `create_rectangular_section` + `modify_rectangular_section` (segundo object
+    type; valida que el patrón create+modify generaliza). **Hecha** (sesión 12); ciclo de 13
+    pasos + casos adicionales validados. 26 primitivas.
+  - ◾ **1g.6+** — otros tipos de sección (Circle, I…), luego assign (batches reales +
+    stop-on-first-failure + failed_at/not_attempted), modify masivo, delete. Evitar el
+    delete-all-then-recreate peligroso de `RhinoSAP/SapFrameSynchronizer`.
 - ◾ **Fase 1h** — snapshots + diff.
 - ◾ **Fase 1i** — poblar `docs/domains/structural/` (códigos, materiales, factores,
   recetas, casos) — conocimiento del cliente, no tools.

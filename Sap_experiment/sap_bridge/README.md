@@ -88,6 +88,8 @@ Match on either; the bridge does not interpret the system.
 | `GET /v1/frames` | `get_frames` | frames: name, i/j connectivity, section |
 | `GET /v1/sections` | `get_sections` | section catalogue: name + type |
 | `GET /v1/sections/{name}/properties` | `get_section_properties` | dimensions + universal section props |
+| **`POST`** `/v1/sections` | `create_rectangular_section` | **write**: create a rectangular section |
+| **`PATCH`** `/v1/sections/{name}` | `modify_rectangular_section` | **write**: modify a rectangular section |
 | `GET /v1/materials` | `get_materials` | material catalogue: type + mechanical facts |
 | **`POST`** `/v1/materials` | `create_material` | **write**: create a material (prefixed) |
 | **`POST`** `/v1/materials/{name}/properties/isotropic` | `set_material_properties_isotropic` | **write**: set isotropic properties |
@@ -748,6 +750,39 @@ Set a material's isotropic mechanical properties.
 > Validated on TEST_01: created `AI_MGP10_Custom` (NoDesign), set its isotropic properties
 > without confirm (bridge-owned); modifying `MGP10` without confirm → `confirm_required`,
 > with confirm → applied; a savepoint reverted both the new material and the `MGP10` change.
+
+### `POST /v1/sections`  *(write — new object)*
+
+Create a rectangular frame section. Material is always required.
+
+```json
+{ "name": "AI_Test45x95", "material": "MGP10", "depth": 0.045, "width": 0.095, "notes": "", "dry_run": false }
+```
+
+- `name` must carry the bridge prefix → else `prefix_required`. An existing name →
+  `name_already_exists` (SAP would otherwise overwrite silently — verified, §24).
+- `material` must exist → else `object_not_found`. `depth` (T3) and `width` (T2) must be
+  `> 0` → else `invalid_dimensions`, in present length units. `color`/`notes` optional.
+- No confirm (new prefixed object). `dry_run` previews. The `applied` values are read back
+  from SAP (e.g. SAP assigns a real `color`, not the placeholder).
+
+### `PATCH /v1/sections/{name}`  *(write)*
+
+Modify a rectangular section — only the fields you pass change (merged with current state).
+
+```json
+{ "depth": 0.050, "confirm": false }
+```
+
+- The section must exist and be `Rectangular` → else `object_not_found` /
+  `section_type_mismatch`. No fields → `nothing_to_modify`.
+- `confirm` is required **only** for a non-bridge (pre-existing) section like `MGP10_33x73`
+  (§5.1); a bridge-owned `AI_` section needs none. `dry_run` previews with a per-field diff.
+
+> Validated on TEST_01: created `AI_Test45x95` (MGP10, 45×95); modified its depth without
+> confirm (bridge-owned), only `depth` changed (width/material preserved by the merge);
+> `MGP10_33x73` depth change rejected without confirm, applied with confirm; a savepoint
+> reverted both the new section and the `MGP10_33x73` change.
 
 ### `GET /v1/savepoints`
 
