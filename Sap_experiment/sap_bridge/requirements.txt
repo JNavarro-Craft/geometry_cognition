@@ -1,0 +1,6 @@
+# SAP bridge — HTTP service over the SAP2000 OAPI.
+# Python 3.11+ on Windows (pythonnet + the SAP2000v1 .NET assembly).
+fastapi>=0.110
+uvicorn>=0.29
+pydantic>=2.6
+pythonnet>=3.0
