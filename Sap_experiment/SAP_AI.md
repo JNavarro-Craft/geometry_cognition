@@ -7,6 +7,15 @@ Complemento de [`docs/agnostic_principle.md`](docs/agnostic_principle.md): aqué
 Marcadores: ✅ logrado y validado en vivo · ◾ fuera por diseño en esta fase ·
 🔶 hallazgo / pendiente documentado.
 
+> **Cruce al write-side (sesión 8).** Tras 17 primitivas read-only, el experimento cruza
+> a escritura. Las reglas del write-side están consolidadas en
+> [`docs/write_side_design.md`](docs/write_side_design.md) — **autoridad arquitectónica:
+> toda primitiva write debe ajustarse a ella** (namespace por prefijo, dry-run, savepoints,
+> stop-on-first-failure, confirm). Los patrones del consumidor en
+> [`docs/client_patterns.md`](docs/client_patterns.md). La Fase 1g.1 implementa solo la
+> **infraestructura de undo** (savepoints); las primitivas write "reales" (set_active_dof,
+> create_section…) vienen después, apoyadas en ella.
+
 ---
 
 ## Qué es esto (y qué no)

@@ -1,8 +1,9 @@
 # sap_bridge — HTTP contract
 
-Read-only HTTP service over the **SAP2000 OAPI**. The **single integration point** with
-SAP2000: consumers (the MCP today; Rhino plugins and scripts tomorrow, per Objetivo 2)
-talk HTTP and nobody embeds the SAP DLL.
+HTTP service over the **SAP2000 OAPI**. The **single integration point** with SAP2000:
+consumers (the MCP today; Rhino plugins and scripts tomorrow, per Objetivo 2) talk HTTP
+and nobody embeds the SAP DLL. Mostly read; running analysis and savepoints mutate (and
+the write-side grows from here — see Architecture below).
 
 Strictly **agnostic** (see [`../docs/agnostic_principle.md`](../docs/agnostic_principle.md)):
 exposes facts — coordinates, connectivity, property names — and interprets no structural
@@ -11,6 +12,14 @@ domain. **Treat this document as a public API contract; future consumers depend 
 - Base URL: `http://127.0.0.1:8766`
 - Versioned under `/v1`
 - All payloads JSON; all responses `application/json`
+
+## Architecture
+
+- Read-side: facts only, agnostic (the bulk of the endpoints below).
+- Write-side: governed by [`../docs/write_side_design.md`](../docs/write_side_design.md)
+  — **the architectural authority every write primitive must follow** (namespace prefix,
+  dry-run, savepoints, stop-on-first-failure, confirm). Consumer-side patterns in
+  [`../docs/client_patterns.md`](../docs/client_patterns.md).
 
 ---
 
