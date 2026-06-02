@@ -12,11 +12,13 @@ from typing import Any
 from .bridge_backend import (
     bridge_settings,
     create_material_bridge,
+    create_rectangular_section_bridge,
     create_savepoint_bridge,
     get_analysis_status_bridge,
     get_combinations_bridge,
     get_model_settings_bridge,
     list_savepoints_bridge,
+    modify_rectangular_section_bridge,
     restore_savepoint_bridge,
     set_active_dof_bridge,
     set_material_properties_isotropic_bridge,
@@ -459,6 +461,47 @@ def set_material_properties_isotropic(
     try:
         return set_material_properties_isotropic_bridge(
             base_url, timeout, name, E, poisson_ratio, thermal_coef, dry_run, confirm
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def create_rectangular_section(
+    name: str, material: str, depth: float, width: float,
+    color: int | None = None, notes: str = "", dry_run: bool = False
+) -> dict[str, Any]:
+    """Create a rectangular frame section (WRITE — new object). ``name`` MUST start with the
+    bridge prefix (default 'AI_') else ``prefix_required``. ``material`` must be an existing
+    material (else ``object_not_found``). ``depth`` (T3) and ``width`` (T2) must be > 0 (else
+    ``invalid_dimensions``), in the model's present length units. An existing name →
+    ``name_already_exists`` (SAP would otherwise overwrite it silently). No confirm needed.
+    ``dry_run=true`` previews. The applied values are read back from SAP.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return create_rectangular_section_bridge(
+            base_url, timeout, name, material, depth, width, color, notes, dry_run
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def modify_rectangular_section(
+    name: str, material: str | None = None, depth: float | None = None,
+    width: float | None = None, color: int | None = None, notes: str | None = None,
+    dry_run: bool = False, confirm: bool = False
+) -> dict[str, Any]:
+    """Modify an existing rectangular frame section (WRITE). The section must exist and be
+    Rectangular (else ``object_not_found`` / ``section_type_mismatch``). Pass only the fields
+    you want to change — all None → ``nothing_to_modify``. ``confirm=true`` is required only
+    for a NON-bridge (pre-existing) section like 'MGP10_33x73' (§5.1); a bridge-owned 'AI_'
+    section needs none. ``dry_run=true`` previews with a per-field diff. Dimensions in present
+    units; the bridge converts nothing.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return modify_rectangular_section_bridge(
+            base_url, timeout, name, material, depth, width, color, notes, dry_run, confirm
         )
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)

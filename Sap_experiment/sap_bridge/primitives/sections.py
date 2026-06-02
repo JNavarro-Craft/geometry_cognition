@@ -63,3 +63,22 @@ def get_sections(sap_model: Any, oapi_namespace: Any) -> list[Section]:
         )
 
     return [Section(name=n, prop_type=t) for n, t in sections.items()]
+
+
+def list_section_names(sap_model: Any, oapi_namespace: Any) -> list[str]:
+    """All frame section names of any type (for uniqueness/existence checks by write
+    primitives). cPropFrame.GetNameList filters by type (§3), so this unions over every
+    eFramePropType — same approach as get_sections."""
+    return [s.name for s in get_sections(sap_model, oapi_namespace)]
+
+
+def get_section_type(sap_model: Any, oapi_namespace: Any, name: str) -> str | None:
+    """Return a section's raw eFramePropType member name, or None if it does not exist.
+
+    GetTypeOAPI returns ret=1 for an unknown name (verified, §24); the enum out-param
+    needs a real member placeholder."""
+    placeholder = oapi_namespace.eFramePropType.Rectangular
+    ret, prop_type = sap_model.PropFrame.GetTypeOAPI(name, placeholder)
+    if ret != 0:
+        return None
+    return str(prop_type)

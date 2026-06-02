@@ -130,6 +130,34 @@ def set_material_properties_isotropic_bridge(
     )
 
 
+def create_rectangular_section_bridge(
+    base_url: str, timeout_seconds: float, name: str, material: str, depth: float,
+    width: float, color, notes: str, dry_run: bool
+) -> dict[str, Any]:
+    body = json.dumps({
+        "name": name, "material": material, "depth": depth, "width": width,
+        "color": color, "notes": notes, "dry_run": dry_run,
+    }).encode("utf-8")
+    return _bridge_json_request(
+        base_url, "/v1/sections", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
+def modify_rectangular_section_bridge(
+    base_url: str, timeout_seconds: float, name: str, material, depth, width, color, notes,
+    dry_run: bool, confirm: bool
+) -> dict[str, Any]:
+    path = f"/v1/sections/{quote(name, safe='')}"
+    body = json.dumps({
+        "material": material, "depth": depth, "width": width, "color": color,
+        "notes": notes, "dry_run": dry_run, "confirm": confirm,
+    }).encode("utf-8")
+    return _bridge_json_request(
+        base_url, path, timeout_seconds, method="PATCH", body=body, content_type="application/json",
+    )
+
+
 def create_savepoint_bridge(
     base_url: str, timeout_seconds: float, name: str, dry_run: bool
 ) -> dict[str, Any]:

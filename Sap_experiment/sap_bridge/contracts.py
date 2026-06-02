@@ -711,3 +711,78 @@ class SetMaterialPropertiesIsotropicResponse(BaseModel):
     validation_passed: bool = True
     would_apply: IsotropicPropertiesChange | None = None
     applied: IsotropicPropertiesChange | None = None
+
+
+# --- Write-side: rectangular sections (Fase 1g.5) ----------------------------
+# Second object type under the create+modify template. Material is always required.
+# SetRectangle overwrites a same-named section silently (like SetMaterial) — the
+# name_already_exists guard is essential.
+
+
+class CreateRectangularSectionRequest(BaseModel):
+    """Body for POST /v1/sections. ``name`` must carry the bridge prefix; ``material`` must
+    be an existing material; ``depth`` (T3) and ``width`` (T2) must be > 0. No confirm
+    (new prefixed object). ``dry_run`` previews."""
+
+    name: str = Field(..., description="New section name; must start with the bridge prefix")
+    material: str = Field(..., description="Existing material name to assign")
+    depth: float = Field(..., description="Section depth T3 (>0), present length units")
+    width: float = Field(..., description="Section width T2 (>0), present length units")
+    color: int | None = Field(None, description="SAP color index; default if omitted")
+    notes: str = Field("", description="Free-text notes")
+    dry_run: bool = Field(False, description="If true, preview without creating")
+
+
+class RectangularSection(BaseModel):
+    """A rectangular section's defining facts: name, material, dimensions, color, notes.
+    ``prop_type`` is always 'Rectangular' here; the section_type is echoed for clarity."""
+
+    name: str
+    material: str
+    depth: float = Field(..., description="T3, present length units")
+    width: float = Field(..., description="T2, present length units")
+    color: int
+    notes: str
+    section_type: str = Field("Rectangular", description="Raw eFramePropType member name")
+
+
+class CreateRectangularSectionResponse(BaseModel):
+    """Result of create_rectangular_section. Dry-run: ``would_apply``; real run:
+    ``applied`` (read back from SAP so any normalization is reported)."""
+
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: RectangularSection | None = None
+    applied: RectangularSection | None = None
+
+
+class ModifyRectangularSectionRequest(BaseModel):
+    """Body for PATCH /v1/sections/{name}. Every field is optional — only the provided ones
+    change (all None → nothing_to_modify). ``confirm`` is required only for a non-bridge
+    (pre-existing) section (§5.1). ``dry_run`` previews."""
+
+    material: str | None = Field(None, description="New material (must exist), if changing")
+    depth: float | None = Field(None, description="New depth T3 (>0), if changing")
+    width: float | None = Field(None, description="New width T2 (>0), if changing")
+    color: int | None = Field(None, description="New color, if changing")
+    notes: str | None = Field(None, description="New notes, if changing")
+    dry_run: bool = Field(False, description="If true, preview without applying")
+    confirm: bool = Field(False, description="Required to modify a non-bridge (pre-existing) section")
+
+
+class RectangularSectionChange(BaseModel):
+    """A section modification as facts: full before/after and a readable per-field diff."""
+
+    previous: RectangularSection | None = Field(None, description="State before (real run)")
+    current: RectangularSection | None = Field(None, description="State after / proposed")
+    changes: list[str] = Field(..., description="Per-field diffs, e.g. ['depth: 0.045 → 0.050']")
+
+
+class ModifyRectangularSectionResponse(BaseModel):
+    """Result of modify_rectangular_section. Dry-run: ``would_apply`` (current=proposed);
+    real run: ``applied`` (previous + current read back from SAP)."""
+
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: RectangularSectionChange | None = None
+    applied: RectangularSectionChange | None = None

@@ -23,6 +23,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from Sap_experiment.sap_developer_server.tools import (
     create_material,
+    create_rectangular_section,
     create_savepoint,
     get_analysis_status,
     get_combinations,
@@ -41,6 +42,7 @@ from Sap_experiment.sap_developer_server.tools import (
     get_section_properties,
     get_sections,
     list_savepoints,
+    modify_rectangular_section,
     restore_savepoint,
     run_analysis,
     set_active_dof,
@@ -282,6 +284,33 @@ def set_material_properties_isotropic_tool(
     what those are (get_model_settings); the bridge converts nothing. SAP derives G from E and
     poisson_ratio."""
     return set_material_properties_isotropic(name, E, poisson_ratio, thermal_coef, dry_run, confirm)
+
+
+@mcp.tool(name="create_rectangular_section")
+def create_rectangular_section_tool(
+    name: str, material: str, depth: float, width: float,
+    color: Optional[int] = None, notes: str = "", dry_run: bool = False
+) -> dict[str, Any]:
+    """WRITE (new object): create a rectangular frame section. name MUST start with the bridge
+    prefix (default 'AI_') else prefix_required. material must exist (object_not_found). depth
+    (T3) and width (T2) > 0 (invalid_dimensions), in present length units. Existing name →
+    name_already_exists (SAP would overwrite silently). No confirm. dry_run previews. Applied
+    values read back from SAP."""
+    return create_rectangular_section(name, material, depth, width, color, notes, dry_run)
+
+
+@mcp.tool(name="modify_rectangular_section")
+def modify_rectangular_section_tool(
+    name: str, material: Optional[str] = None, depth: Optional[float] = None,
+    width: Optional[float] = None, color: Optional[int] = None, notes: Optional[str] = None,
+    dry_run: bool = False, confirm: bool = False
+) -> dict[str, Any]:
+    """WRITE: modify an existing rectangular section. Must exist and be Rectangular
+    (object_not_found / section_type_mismatch). Pass only fields to change — none →
+    nothing_to_modify. confirm=true required only for a NON-bridge (pre-existing) section like
+    'MGP10_33x73' (§5.1); a bridge-owned 'AI_' section needs none. dry_run previews with a
+    per-field diff. Dimensions in present units."""
+    return modify_rectangular_section(name, material, depth, width, color, notes, dry_run, confirm)
 
 
 if __name__ == "__main__":

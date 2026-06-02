@@ -80,6 +80,18 @@ UNKNOWN_MATERIAL_TYPE = "unknown_material_type"
 eMatType enum (e.g. 'Wood', which SAP26 does not have). The message lists the supported
 names. Client-fixable."""
 
+INVALID_DIMENSIONS = "invalid_dimensions"
+"""A create/modify was given a non-positive dimension (depth/width <= 0). Shape
+validation by the bridge, not domain judgement. Client-fixable."""
+
+SECTION_TYPE_MISMATCH = "section_type_mismatch"
+"""A modify targets a section that exists but is not of the expected shape type (e.g.
+modify_rectangular_section on a non-Rectangular section). The message reports the actual
+type. Client-fixable."""
+
+NOTHING_TO_MODIFY = "nothing_to_modify"
+"""A modify was called with no field to change (all optional kwargs are None)."""
+
 # Bridge internals
 PYTHONNET_UNAVAILABLE = "pythonnet_unavailable"
 """pythonnet / the SAP2000v1 assembly could not be loaded. The bridge cannot talk

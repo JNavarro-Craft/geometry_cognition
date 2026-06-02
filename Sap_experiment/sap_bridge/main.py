@@ -41,6 +41,10 @@ from .contracts import (
     SavepointRestoreResponse,
     CreateMaterialRequest,
     CreateMaterialResponse,
+    CreateRectangularSectionRequest,
+    CreateRectangularSectionResponse,
+    ModifyRectangularSectionRequest,
+    ModifyRectangularSectionResponse,
     SectionPropertiesResponse,
     SectionsResponse,
     SetActiveDOFRequest,
@@ -71,6 +75,7 @@ from .primitives import present_units as present_units_primitive
 from .primitives import savepoints as savepoints_primitive
 from .primitives import section_properties as section_properties_primitive
 from .primitives import sections as sections_primitive
+from .primitives import sections_write as sections_write_primitive
 from .primitives import units as units_primitive
 from .sap_session import SapSessionError, get_session
 
@@ -114,6 +119,9 @@ async def _session_error_handler(_request, exc: SapSessionError) -> JSONResponse
         error_codes.SAVEPOINT_ALREADY_EXISTS,
         error_codes.UNKNOWN_UNIT_SYSTEM,
         error_codes.UNKNOWN_MATERIAL_TYPE,
+        error_codes.INVALID_DIMENSIONS,
+        error_codes.SECTION_TYPE_MISMATCH,
+        error_codes.NOTHING_TO_MODIFY,
     }
     status = 409 if exc.code in precondition else 502
     logger.warning("session error [%s]: %s", exc.code, exc.message)
@@ -270,6 +278,41 @@ def get_section_properties(name: str) -> SectionPropertiesResponse:
             model, session.oapi_namespace(), name
         )
         return SectionPropertiesResponse(units=present_units, section=section)
+
+
+@app.post("/v1/sections", response_model=CreateRectangularSectionResponse)
+def create_rectangular_section(
+    request: CreateRectangularSectionRequest,
+) -> CreateRectangularSectionResponse:
+    """Create a rectangular section (write — new object). ``name`` must carry the bridge
+    prefix (else prefix_required); ``material`` must exist (else object_not_found);
+    ``depth``/``width`` must be > 0 (else invalid_dimensions). An existing name →
+    name_already_exists (SAP would otherwise overwrite silently). No confirm. ``dry_run``
+    previews. Values read back from SAP after creation."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return sections_write_primitive.create_rectangular_section(
+            model, session.oapi_namespace(), request.name, request.material, request.depth,
+            request.width, request.color, request.notes, request.dry_run,
+        )
+
+
+@app.patch("/v1/sections/{name}", response_model=ModifyRectangularSectionResponse)
+def modify_rectangular_section(
+    name: str, request: ModifyRectangularSectionRequest
+) -> ModifyRectangularSectionResponse:
+    """Modify a rectangular section (write). The section must exist and be Rectangular
+    (else object_not_found / section_type_mismatch). Only provided fields change (none →
+    nothing_to_modify). ``confirm`` required only for a non-bridge (pre-existing) section
+    (§5.1). ``dry_run`` previews with a per-field diff."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return sections_write_primitive.modify_rectangular_section(
+            model, session.oapi_namespace(), name, request.material, request.depth,
+            request.width, request.color, request.notes, request.dry_run, request.confirm,
+        )
 
 
 @app.get("/v1/materials", response_model=MaterialsResponse)
