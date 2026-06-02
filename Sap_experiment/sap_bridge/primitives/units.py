@@ -39,3 +39,23 @@ def get_database_units(sap_model: Any) -> UnitsResponse:
     return the full eUnits member, temperature included, so no ``_2`` is needed.
     """
     return _units_response(sap_model.GetDatabaseUnits())
+
+
+def unit_system_names(oapi_namespace: Any) -> list[str]:
+    """The full set of eUnits member names this assembly supports (e.g. 'kgf_m_C',
+    'N_m_C', …). Read straight off the enum so it matches the read-side exactly — no
+    hardcoded table to drift out of sync."""
+    import clr  # type: ignore
+    import System  # type: ignore
+
+    return list(System.Enum.GetNames(clr.GetClrType(oapi_namespace.eUnits)))
+
+
+def resolve_unit_system(oapi_namespace: Any, name: str) -> Any | None:
+    """Resolve a unit-system NAME to its eUnits enum member, or None if unknown.
+
+    The inverse of what ``_units_response`` exposes (which gives name via ``str(enum)``).
+    Resolved via ``getattr`` on the live enum, so the accepted set is exactly the read-
+    side's set — the same enum, no duplicated table (brechas §22). The bridge needs the
+    enum MEMBER, not the int: ``SetPresentUnits`` rejects a bare int (TypeError)."""
+    return getattr(oapi_namespace.eUnits, name, None)
