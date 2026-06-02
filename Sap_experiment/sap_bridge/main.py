@@ -41,6 +41,9 @@ from .contracts import (
     SavepointRestoreResponse,
     CreateMaterialRequest,
     CreateMaterialResponse,
+    AssignBatchRequest,
+    AssignmentResponse,
+    AssignToFramesRequest,
     CreateRectangularSectionRequest,
     CreateRectangularSectionResponse,
     ModifyRectangularSectionRequest,
@@ -73,6 +76,7 @@ from .primitives import materials_write as materials_write_primitive
 from .primitives import model_settings as model_settings_primitive
 from .primitives import present_units as present_units_primitive
 from .primitives import savepoints as savepoints_primitive
+from .primitives import section_assignment as section_assignment_primitive
 from .primitives import section_properties as section_properties_primitive
 from .primitives import sections as sections_primitive
 from .primitives import sections_write as sections_write_primitive
@@ -122,6 +126,7 @@ async def _session_error_handler(_request, exc: SapSessionError) -> JSONResponse
         error_codes.INVALID_DIMENSIONS,
         error_codes.SECTION_TYPE_MISMATCH,
         error_codes.NOTHING_TO_MODIFY,
+        error_codes.EMPTY_BATCH,
     }
     status = 409 if exc.code in precondition else 502
     logger.warning("session error [%s]: %s", exc.code, exc.message)
@@ -312,6 +317,38 @@ def modify_rectangular_section(
         return sections_write_primitive.modify_rectangular_section(
             model, session.oapi_namespace(), name, request.material, request.depth,
             request.width, request.color, request.notes, request.dry_run, request.confirm,
+        )
+
+
+@app.post("/v1/sections/{name}/assign-to-frames", response_model=AssignmentResponse)
+def assign_section_to_frames(name: str, request: AssignToFramesRequest) -> AssignmentResponse:
+    """Assign ONE section to many frames (homogeneous batch — write). The section and every
+    frame must exist (strict pre-validation → object_not_found). Empty list → empty_batch.
+    ``confirm`` mandatory (touches pre-existing frames). ``dry_run`` previews with per-frame
+    changes. A >10-frame result carries a ``hint``. failed_at is null in normal flow (only
+    set on an unexpected mid-loop OAPI failure, with not_attempted)."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return section_assignment_primitive.assign_section_to_frames(
+            model, session.oapi_namespace(), name, request.frame_names,
+            request.dry_run, request.confirm,
+        )
+
+
+@app.post("/v1/sections/assign-batch", response_model=AssignmentResponse)
+def assign_sections_to_frames(request: AssignBatchRequest) -> AssignmentResponse:
+    """Assign sections to frames per a heterogeneous frame→section mapping (write). Every
+    referenced section and frame must exist (strict pre-validation). Empty → empty_batch.
+    ``confirm`` mandatory; ``dry_run`` previews. Same applied/failed_at/not_attempted shape
+    as the homogeneous endpoint. The OAPI has no native heterogeneous batch; the bridge
+    composes a loop — the client does not see that detail."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return section_assignment_primitive.assign_sections_to_frames(
+            model, session.oapi_namespace(),
+            [a.model_dump() for a in request.assignments], request.dry_run, request.confirm,
         )
 
 

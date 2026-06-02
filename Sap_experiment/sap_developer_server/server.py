@@ -22,6 +22,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from Sap_experiment.sap_developer_server.tools import (
+    assign_section_to_frames,
+    assign_sections_to_frames,
     create_material,
     create_rectangular_section,
     create_savepoint,
@@ -311,6 +313,30 @@ def modify_rectangular_section_tool(
     'MGP10_33x73' (§5.1); a bridge-owned 'AI_' section needs none. dry_run previews with a
     per-field diff. Dimensions in present units."""
     return modify_rectangular_section(name, material, depth, width, color, notes, dry_run, confirm)
+
+
+@mcp.tool(name="assign_section_to_frames")
+def assign_section_to_frames_tool(
+    section_name: str, frame_names: list[str], dry_run: bool = False, confirm: bool = False
+) -> dict[str, Any]:
+    """WRITE (batch): assign ONE section to many frames. The section and EVERY frame must
+    exist (strict pre-validation → object_not_found listing the missing). Empty list →
+    empty_batch. confirm=true mandatory (touches pre-existing frames). dry_run previews
+    per-frame changes. Returns applied (previous→current, read back), failed_at (null in
+    normal flow), not_attempted; a >10-frame result adds a hint. Use create_savepoint first."""
+    return assign_section_to_frames(section_name, frame_names, dry_run, confirm)
+
+
+@mcp.tool(name="assign_sections_to_frames")
+def assign_sections_to_frames_tool(
+    assignments: list[dict], dry_run: bool = False, confirm: bool = False
+) -> dict[str, Any]:
+    """WRITE (batch): assign sections to frames per a heterogeneous mapping. assignments is a
+    list of {"frame_name": ..., "section_name": ...}. Every referenced section and frame must
+    exist. Empty → empty_batch. confirm=true mandatory; dry_run previews. Same applied/
+    failed_at/not_attempted shape as assign_section_to_frames. The bridge loops internally
+    (no native heterogeneous batch in the OAPI)."""
+    return assign_sections_to_frames(assignments, dry_run, confirm)
 
 
 if __name__ == "__main__":

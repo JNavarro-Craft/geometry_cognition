@@ -62,3 +62,24 @@ def get_frames(sap_model: Any) -> list[Frame]:
             )
         )
     return frames
+
+
+def list_frame_names(sap_model: Any) -> list[str]:
+    """Just the frame names (for existence checks by write primitives)."""
+    ret, number, names = sap_model.FrameObj.GetNameList(0, None)
+    if ret != 0:
+        raise SapSessionError(
+            error_codes.OAPI_CALL_FAILED, f"FrameObj.GetNameList returned {ret}"
+        )
+    return [str(names[i]) for i in range(number)] if number else []
+
+
+def get_frame_section(sap_model: Any, frame_name: str) -> str:
+    """The section property name currently assigned to ``frame_name`` (raw)."""
+    ret, prop_name, _auto = sap_model.FrameObj.GetSection(frame_name, "", "")
+    if ret != 0:
+        raise SapSessionError(
+            error_codes.OAPI_CALL_FAILED,
+            f"FrameObj.GetSection('{frame_name}') returned {ret}",
+        )
+    return str(prop_name)

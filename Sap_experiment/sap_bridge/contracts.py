@@ -786,3 +786,86 @@ class ModifyRectangularSectionResponse(BaseModel):
     validation_passed: bool = True
     would_apply: RectangularSectionChange | None = None
     applied: RectangularSectionChange | None = None
+
+
+# --- Write-side: section assignment to frames (batch, Fase 1g.7) -------------
+# First BATCH write over pre-existing objects. The OAPI has no native heterogeneous
+# batch (brechas §25), so the bridge composes a loop over SetSection. The external API
+# is the same in both cases. Strict pre-validation means failed_at is reserved for an
+# unexpected OAPI failure mid-loop (decisión #4, stop-on-first-failure).
+
+
+class FrameAssignmentPreview(BaseModel):
+    """One frame's current → proposed section (dry-run preview)."""
+
+    frame: str
+    current_section: str
+    new_section: str
+
+
+class FrameAssignmentApplied(BaseModel):
+    """One frame's section change as applied (read back from SAP)."""
+
+    frame: str
+    previous_section: str
+    current_section: str
+
+
+class BatchFailure(BaseModel):
+    """The frame at which a batch stopped, and why (only set if a mid-loop OAPI failure
+    occurred — strict pre-validation makes this rare)."""
+
+    frame: str
+    reason: str
+
+
+class AssignToFramesRequest(BaseModel):
+    """Body for POST /v1/sections/{name}/assign-to-frames (homogeneous). Assigns one
+    section to every frame in ``frame_names``. ``confirm`` mandatory (touches pre-existing
+    frames, §5.1); ``dry_run`` previews."""
+
+    frame_names: list[str] = Field(..., description="Frames to assign the section to")
+    dry_run: bool = Field(False, description="If true, preview without applying")
+    confirm: bool = Field(False, description="Mandatory: the operation touches pre-existing frames")
+
+
+class FrameSectionAssignment(BaseModel):
+    """One frame→section pair for a heterogeneous batch."""
+
+    frame_name: str
+    section_name: str
+
+
+class AssignBatchRequest(BaseModel):
+    """Body for POST /v1/sections/assign-batch (heterogeneous). Each item maps one frame
+    to one section. ``confirm`` mandatory; ``dry_run`` previews."""
+
+    assignments: list[FrameSectionAssignment] = Field(..., description="frame→section pairs")
+    dry_run: bool = Field(False, description="If true, preview without applying")
+    confirm: bool = Field(False, description="Mandatory: the operation touches pre-existing frames")
+
+
+class AssignmentPreview(BaseModel):
+    """Dry-run preview of a (homogeneous or heterogeneous) assignment batch."""
+
+    frame_count: int
+    current_assignments: list[FrameAssignmentPreview]
+    changes: list[str] = Field(..., description="Per-frame diffs, e.g. ['4060: MGP10_33x73 → AI_45x95']")
+
+
+class AssignmentResponse(BaseModel):
+    """Result of an assignment batch (both homogeneous and heterogeneous use this).
+
+    Dry-run: ``would_apply`` holds the preview, ``hint`` set if >10 frames. Real run:
+    ``applied`` lists each frame changed (read back); ``failed_at`` is null in normal flow
+    (strict pre-validation), set only on an unexpected mid-loop OAPI failure, with
+    ``not_attempted`` the frames after it (decisión #4, stop-on-first-failure)."""
+
+    dry_run: bool
+    operation: str
+    validation_passed: bool = True
+    would_apply: AssignmentPreview | None = None
+    applied: list[FrameAssignmentApplied] | None = None
+    failed_at: BatchFailure | None = None
+    not_attempted: list[str] | None = None
+    hint: str | None = Field(None, description="Suggestion to use dry_run for large batches (>10)")

@@ -92,6 +92,9 @@ type. Client-fixable."""
 NOTHING_TO_MODIFY = "nothing_to_modify"
 """A modify was called with no field to change (all optional kwargs are None)."""
 
+EMPTY_BATCH = "empty_batch"
+"""A batch write was called with an empty list of items (no frames / no assignments)."""
+
 # Bridge internals
 PYTHONNET_UNAVAILABLE = "pythonnet_unavailable"
 """pythonnet / the SAP2000v1 assembly could not be loaded. The bridge cannot talk

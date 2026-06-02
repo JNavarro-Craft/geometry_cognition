@@ -10,6 +10,8 @@ from __future__ import annotations
 from typing import Any
 
 from .bridge_backend import (
+    assign_section_to_frames_bridge,
+    assign_sections_to_frames_bridge,
     bridge_settings,
     create_material_bridge,
     create_rectangular_section_bridge,
@@ -503,5 +505,45 @@ def modify_rectangular_section(
         return modify_rectangular_section_bridge(
             base_url, timeout, name, material, depth, width, color, notes, dry_run, confirm
         )
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def assign_section_to_frames(
+    section_name: str, frame_names: list, dry_run: bool = False, confirm: bool = False
+) -> dict[str, Any]:
+    """Assign ONE section to many frames (WRITE — batch over pre-existing frames). The
+    section and EVERY frame must exist (strict pre-validation → ``object_not_found`` listing
+    the missing ones). Empty ``frame_names`` → ``empty_batch``. ``confirm=true`` is mandatory
+    (touches pre-existing frames, §5.1). ``dry_run=true`` previews with per-frame changes
+    without applying.
+
+    Returns ``applied`` (each frame's previous→current section, read back), ``failed_at``
+    (null in normal flow — pre-validation prevents it; set only on an unexpected mid-loop
+    OAPI failure) and ``not_attempted``. A >10-frame result includes a ``hint`` suggesting
+    dry_run. Recommended: create_savepoint → dry_run → review → confirm → restore if unwanted.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return assign_section_to_frames_bridge(
+            base_url, timeout, section_name, frame_names, dry_run, confirm
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def assign_sections_to_frames(
+    assignments: list, dry_run: bool = False, confirm: bool = False
+) -> dict[str, Any]:
+    """Assign sections to frames per a heterogeneous mapping (WRITE — batch). ``assignments``
+    is a list of ``{"frame_name": ..., "section_name": ...}``. Every referenced section and
+    frame must exist (strict pre-validation). Empty → ``empty_batch``. ``confirm=true``
+    mandatory; ``dry_run=true`` previews. Same applied/failed_at/not_attempted shape as the
+    homogeneous tool. The bridge composes a loop internally (the OAPI has no native
+    heterogeneous batch) — you don't see that detail.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return assign_sections_to_frames_bridge(base_url, timeout, assignments, dry_run, confirm)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)

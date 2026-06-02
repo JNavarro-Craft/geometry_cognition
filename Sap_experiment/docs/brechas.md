@@ -433,6 +433,35 @@ así que cambiar solo `depth` preserva width/material/color/notes (validado).
 
 ---
 
+## 🔶 Hallazgos OAPI Fase 1g.7 — assign sections to frames (batch, resueltos)
+
+### 25. NO hay batch heterogéneo nativo; `SetSection` es per-objeto
+- `cFrameObj.SetSection(Name, PropName, eItemType, SVarRelStartLoc, SVarTotalLength)` → 5
+  params (los 2 últimos son para secciones variables/tapered, van 0 en asignación normal).
+  `eItemType` = {Objects:0, Group:1, SelectedObjects:2}; se usa **Objects** (un frame). Ret 0.
+- **OAPI soporta heterogéneo nativo (frame→section mapping en un call): NO.** `FrameObj` solo
+  tiene `SetSection` (single) y `SetGroupAssign` (a un grupo, homogéneo, requeriría crear
+  grupos SAP). `cSapModel.AssignSections` no existe. → **La composición batch es del lado
+  bridge** (loop sobre SetSection), que es la asunción default del diseño. La API externa del
+  bridge (homogénea + heterogénea) es la misma; el cliente no ve el loop interno.
+- **Frame inexistente → ret=1; sección inexistente → ret=1** (no aplica). Idempotente:
+  asignar la sección actual → ret=0 (no-op válido). Silent-overwrite aplica (M1): reasignar
+  sobrescribe sin error.
+
+### Arquitectura batch (decisión #4, primera aplicación real)
+- **Pre-validación estricta ANTES del loop** (client_patterns #1, hecho enforcement en el
+  bridge): se valida que la sección y TODOS los frames existan antes de tocar nada. Si la
+  pre-validación pasa, se entra al loop. **En flujo normal NUNCA hay `failed_at`** porque la
+  pre-validación lo previene; `failed_at`/`not_attempted` quedan reservados para un fallo
+  inesperado del OAPI a mitad del loop (race/bug) — ahí sí stop-on-first-failure (decisión #4).
+- **Idempotencia reportada como aplicada** (caso B del prompt): si un frame ya tiene la
+  sección destino, se reporta en `applied` con previous==current (coherente con la
+  idempotencia de set_present_units §1g.3), no se salta.
+- **Hint >10** (decisión #2): respuestas que afectan >10 frames añaden un campo `hint`
+  sugiriendo dry_run. Sugerencia, no enforcement.
+
+---
+
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
 
 Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fase.
