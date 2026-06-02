@@ -84,6 +84,8 @@ Match on either; the bridge does not interpret the system.
 | `GET /v1/model/settings` | `get_model_settings` | active DOFs, lock state, present + database units |
 | **`POST`** `/v1/model/settings/active_dof` | `set_active_dof` | **write**: set active DOFs (global setting) |
 | **`POST`** `/v1/model/settings/present_units` | `set_present_units` | **write**: set present units (global setting) |
+| **`POST`** `/v1/model/locked` | `set_model_locked` | **write**: lock/unlock the model (global state) |
+| **`POST`** `/v1/model/open` | `open_model` | **write**: open/replace the loaded model |
 | `GET /v1/joints` | `get_joints` | points: name, coords, 6-DOF restraints |
 | `GET /v1/frames` | `get_frames` | frames: name, i/j connectivity, section |
 | `GET /v1/sections` | `get_sections` | section catalogue: name + type |
@@ -711,6 +713,35 @@ existing [`units` object](#the-units-object) shape.
 > metres) while forces rescale (frame 4133 distributed load 19.4 → 190.249, a factor of
 > 9.80665 = kgf→N). `database_units` is **not** touched (that would convert stored data —
 > out of scope). `model_is_locked` is unaffected.
+
+### `POST /v1/model/locked`  ·  `POST /v1/model/open`  *(write — model state)*
+
+State-level operations that make the iterative write→analyze→write loop work. `run_analysis`
+**locks** the model and SAP then rejects edits to the model definition (create/assign/modify)
+with `oapi_call_failed` — so to keep modifying, **unlock first**:
+
+```json
+// POST /v1/model/locked
+{ "locked": false, "dry_run": false, "confirm": true }
+
+// POST /v1/model/open
+{ "path": "I:\\…\\test_models\\TEST_01.sdb", "dry_run": false, "confirm": true }
+```
+
+- `set_model_locked`: `confirm` mandatory (global state); `dry_run` previews; idempotent
+  (setting the current value is a valid no-op). The bridge does **not** auto-unlock on other
+  writes — every primitive stays predictable; the client unlocks explicitly.
+- `open_model`: replaces the loaded model. `path` must be **absolute**, end in `.sdb`, and
+  **exist on disk** → else `invalid_path` / `file_not_found` (checked before `OpenFile`, since
+  SAP would otherwise leave the session on a phantom path). `confirm` mandatory (discards
+  unsaved changes). Main use: recover the base model after a restore (savepoints leave the
+  session on the savepoint file).
+
+> ⚠️ **Known limitation (brechas §28).** The user's model and the bridge's workspace are the
+> **same file**. `restore_savepoint` restores in-memory state, not the base file on disk, and
+> `create_savepoint`'s Save can leave modifications associated with the base `.sdb`. Iterating
+> (open base → modify → analyze → restore) **can contaminate** the base file. Until a base-
+> immutable workspace exists, keep an untouched savepoint of the clean baseline to recover.
 
 ### `POST /v1/materials`  *(write — new object)*
 

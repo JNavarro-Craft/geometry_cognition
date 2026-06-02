@@ -96,28 +96,36 @@ Notas:
 
 ## Patrón 7: Loop completo de verificación (crear → asignar → analizar → leer → restaurar)
 
-Desde Fase 1g.7 este flujo end-to-end es **ejecutable** con primitivas del bridge — el caso de uso central de un cliente que prueba una hipótesis de diseño sin tocar el modelo permanentemente:
+Desde Fase 1g.8 este flujo end-to-end es **ejecutable y robusto para iteración** — el caso de uso central de un cliente que prueba hipótesis de diseño. El orden importa: `run_analysis` **lockea** el modelo, y SAP rechaza modificar la definición mientras está locked, así que hay que **desbloquear entre analizar y modificar**:
 ```
-# 1. red de seguridad
+# 0. (recomendado al inicio de cada iteración) asegurar el modelo base limpio
+open_model("<base>/TEST_01.sdb", confirm=True)
+
+# 1. red de seguridad — del modelo LIMPIO, antes de cualquier cambio
 create_savepoint("hypothesis_X")
 
-# 2. crear la pieza nueva (prefijada) y configurarla
-create_rectangular_section("AI_45x95", material="MGP10", depth=0.045, width=0.095)
+# 2. analizar el baseline y leer la referencia
+run_analysis()                             # esto LOCKEA el modelo
+ref = get_joint_displacements("1966", "MUERTA")   # u3 de referencia
 
-# 3. PRE-VALIDAR + dry_run antes del batch (client_patterns #1)
-target_frames = [...]                      # del cliente: get_frames + su lógica de dominio
-assign_section_to_frames("AI_45x95", target_frames, dry_run=True)   # revisar changes/hint
-# 4. aplicar (confirm: toca frames preexistentes)
+# 3. DESBLOQUEAR para poder modificar (bloqueante #1 de §26, resuelto)
+set_model_locked(False, confirm=True)
+
+# 4. crear la pieza nueva (prefijada) y asignarla (dry_run primero, client_patterns #1)
+create_rectangular_section("AI_45x95", material="MGP10", depth=0.045, width=0.095)
+assign_section_to_frames("AI_45x95", target_frames, dry_run=True)    # revisar changes/hint
 assign_section_to_frames("AI_45x95", target_frames, confirm=True)
 
-# 5. analizar con la nueva config
-run_analysis()                             # corre lo pendiente
-# 6. leer resultados y razonar (esto es dominio del cliente, no del bridge)
-for f in target_frames:
-    get_frame_forces(f, "ENVOLVENTE")      # P, V, M en las nuevas secciones
+# 5. re-analizar y leer el efecto
+run_analysis()
+mod = get_joint_displacements("1966", "MUERTA")
+# razonar el delta (dominio del cliente, no del bridge)
 
-# 7. SIEMPRE restaurar: la hipótesis se probó, el modelo del usuario vuelve a baseline
+# 6. restaurar + desbloquear; tras restore la sesión queda en el savepoint
+set_model_locked(False, confirm=True)
 restore_savepoint("hypothesis_X", confirm=True)
-#    (tras restore, reabrir el modelo original — la sesión queda en el archivo del savepoint)
+# para volver al modelo base: open_model("<base>/TEST_01.sdb", confirm=True)
 ```
-El bridge provee los átomos (crear, asignar, analizar, leer, restaurar); el **cliente compone el experimento y razona sobre los resultados**. El bridge no decide si la sección "mejora" la estructura — eso es interpretación de dominio (anti-patrón #4).
+El bridge provee los átomos (crear, asignar, analizar, leer, lock/unlock, restaurar, open); el **cliente compone el experimento y razona sobre los resultados**. El bridge no decide si la sección "mejora" la estructura — eso es dominio del cliente (anti-patrón #4).
+
+> ⚠️ **Limitación conocida (brechas §28).** El modelo del usuario y el workspace del bridge son el **mismo archivo**. `restore_savepoint` restaura la memoria, no el archivo base en disco, y `create_savepoint` puede dejar modificaciones asociadas al base. **Iterar el loop puede contaminar el `.sdb` base.** Hasta que exista un workspace base-inmutable: tomar un savepoint del baseline limpio ANTES de cualquier cambio, y recuperar desde ahí si el base se ensucia. El cliente solo no se recupera de una contaminación del base sin ese savepoint limpio.

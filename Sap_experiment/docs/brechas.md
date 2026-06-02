@@ -510,6 +510,52 @@ roadmap listaba (assign material→sections, deletes) bajan en prioridad por no 
 
 ---
 
+## 🔶 Hallazgos OAPI Fase 1g.8 — lock + open_model + savepoint reflow (resueltos)
+
+### 27. `SetModelIsLocked` idempotente; `OpenFile` deja estado FANTASMA con path inexistente
+- `cSapModel.SetModelIsLocked(Boolean)` → 0 OK, **idempotente** (setear el valor actual →
+  ret=0). `GetModelIsLocked()` → bool directo.
+- ⚠️ **`cFile.OpenFile` con path INEXISTENTE retorna ret=1 PERO deja la sesión apuntando al
+  archivo fantasma** (`GetModelFilename` cambia al path inexistente). Por eso `open_model`
+  valida existencia en el **filesystem ANTES** de llamar OpenFile (`file_not_found`/
+  `invalid_path`) — nunca deja a SAP en ese estado. `OpenFile` **descarta cambios no
+  guardados** sin avisar.
+- Los 2 bloqueantes de §26 resueltos y validados: `set_model_locked(false)` cierra el loop
+  iterativo (unlock tras analyze); el fix de naming (resolver contra base) evita el anidado
+  — validado en vivo: tras restore, crear `checkpoint_2` dio `TEST_01__sp_checkpoint_2.sdb`
+  (no anidó) y `restore("baseline")` lo encontró (ayer fallaba).
+
+### 28. 🚫 TERCER bloqueante descubierto al iterar: el modelo BASE en DISCO se contamina
+La validación iterativa doble (caso real ×2) reveló un bloqueante **más profundo** que el fix
+no cubría — exactamente la clase que el anti-patrón #6 predice:
+
+> **El `restore_savepoint` restaura el estado en MEMORIA, no el archivo base en DISCO.** Y
+> `create_savepoint` hace `Save()` ("Save As") que en ciertos puntos del flujo deja el
+> contenido modificado asociado a `TEST_01.sdb` en disco. Resultado: tras iterar
+> (open_model base → modificar → analizar → restore), **`TEST_01.sdb` quedó con la cuerda en
+> `AI_45x95_iter2` y ambas secciones AI_**. La iteración 2 leyó como "baseline" el estado
+> modificado de iter1 (u3=-0.684 en vez de -0.664), porque `open_model(TEST_01.sdb)` cargó un
+> archivo ya contaminado.
+
+**Causa raíz**: el modelo del usuario y el área de trabajo del bridge son **el mismo archivo**.
+Sin un modelo base inmutable, las iteraciones se pisan. El restore protege la memoria pero no
+el disco base.
+
+**Implicación para el diseño** (no resuelto en 1g.8, requiere decisión arquitectónica): el
+write-side necesita un **modelo base inmutable** o un **workspace separado**. Opciones:
+- (a) `open_model` + savepoint que **nunca** sobrescriba el base: trabajar siempre en una
+  copia; el base queda read-only.
+- (b) Un `reset_to_baseline` que copie un base inmutable de vuelta a la sesión de trabajo.
+- (c) Que `create_savepoint` jamás repunte la sesión al base (el bug sutil de "Save As" que
+  contamina): guardar el savepoint sin tocar el archivo cargado.
+
+Mitigación usada en la validación: recuperar `TEST_01.sdb` desde un savepoint que se creó del
+modelo limpio ANTES de cualquier modificación. Funciona pero es manual — el cliente solo no se
+recupera. **Esto es el siguiente bloqueante real a resolver** (candidato a 1g.9), más urgente
+que deletes o assign-material.
+
+---
+
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
 
 Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fase.

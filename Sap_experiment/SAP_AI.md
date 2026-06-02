@@ -67,6 +67,8 @@ día uno.
 | 🔶 **modify_rectangular_section** | `PATCH /v1/sections/{name}` | `modify_rectangular_section` | ✅ merge selectivo; confirm si preexistente; section_type_mismatch / nothing_to_modify |
 | 🔶 **assign_section_to_frames (BATCH)** | `POST /v1/sections/{name}/assign-to-frames` | `assign_section_to_frames` | ✅ 1 sección→N frames; pre-validación estricta; confirm; hint >10; applied/failed_at/not_attempted |
 | 🔶 **assign_sections_to_frames (BATCH het.)** | `POST /v1/sections/assign-batch` | `assign_sections_to_frames` | ✅ mapping frame→sección; loop interno (sin batch nativo OAPI); mismo shape |
+| 🔶 **set_model_locked (estado global)** | `POST /v1/model/locked` | `set_model_locked` | ✅ unlock tras analyze (cierra loop iterativo); confirm; idempotente; NO auto-unlock |
+| 🔶 **open_model (reemplaza modelo)** | `POST /v1/model/open` | `open_model` | ✅ valida path en fs antes de OpenFile (evita estado fantasma); confirm; recupera base tras restore |
 | Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; `case_not_run`, `unsupported_case_type`, `confirm_required`, `savepoint_not_found`, `savepoint_already_exists` |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
@@ -124,6 +126,18 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 > Hecho, no juicio: un displacement grande es un número, no "falla" (anti-patrón #4); las
 > reacciones equilibran las cargas pero ese cross-check lo compone el cliente, no el bridge.
 > Sigue fuera: stresses (1e.2), envelope (1e.3), modal/spectrum (1f).
+
+> Actualización sesión 14 (Fase 1g.8 — workflow iterativo robusto + tercer bloqueante):
+> resuelve los 2 bloqueantes de §26: `set_model_locked` (unlock tras analyze → cierra el loop
+> modificar→analizar→modificar) + `open_model` (recupera el modelo base tras restore; valida
+> path en fs antes de OpenFile para evitar el estado fantasma de SAP) + fix de naming de
+> savepoints (resolver contra el modelo BASE, no anidar — §26). **30 primitivas.** Validado en
+> vivo: savepoint reflow (checkpoint tras restore no anida, restore lo encuentra), y el caso
+> real ejecutado ITERATIVAMENTE. **PERO la iteración doble reveló un TERCER bloqueante más
+> profundo (§28): el modelo base en DISCO se contamina** — restore protege la memoria, no el
+> archivo base; el modelo del usuario y el workspace del bridge son el mismo archivo. Requiere
+> decisión arquitectónica (modelo base inmutable / workspace separado) — candidato a 1g.9, más
+> urgente que deletes. Anti-patrón #6 confirmado de nuevo: solo la iteración real lo reveló.
 
 > Actualización sesión 13 (Fase 1g.7 — primera operación BATCH sobre preexistentes):
 > `assign_section_to_frames` (homogénea, 1 sección→N frames) + `assign_sections_to_frames`
