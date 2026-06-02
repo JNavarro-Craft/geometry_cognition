@@ -480,3 +480,67 @@ class ModelSettings(BaseModel):
 
 class ModelSettingsResponse(BaseModel):
     settings: ModelSettings
+
+
+# --- Write-side: savepoints (Fase 1g.1) --------------------------------------
+# These are the first write primitives. They write to the FILESYSTEM (separate .sdb
+# files), not to the SAP model in memory — the undo infrastructure the rest of the
+# write-side builds on. See docs/write_side_design.md.
+
+
+class SavepointCreateRequest(BaseModel):
+    """Body for POST /v1/savepoints. ``dry_run`` (write_side_design.md §2) previews the
+    target path + writability without creating the file."""
+
+    name: str = Field(..., description="Savepoint name; the file is <model>__sp_<name>.sdb")
+    dry_run: bool = Field(False, description="If true, preview only — no file written")
+
+
+class SavepointRestoreRequest(BaseModel):
+    """Body for POST /v1/savepoints/{name}/restore. Restore replaces the loaded model, so
+    ``confirm`` is mandatory (write_side_design.md §5); ``dry_run`` previews instead."""
+
+    confirm: bool = Field(False, description="Must be true to actually restore (destructive)")
+    dry_run: bool = Field(False, description="If true, preview only — model not replaced")
+
+
+class SavepointInfo(BaseModel):
+    """One savepoint on disk: name, absolute path, creation timestamp (ISO-8601) and
+    file size in bytes. Pure filesystem facts."""
+
+    name: str
+    path: str = Field(..., description="Absolute path of the savepoint .sdb file")
+    created_at: str = Field(..., description="File creation time, ISO-8601")
+    size_bytes: int = Field(..., description="File size in bytes")
+
+
+class SavepointListResponse(BaseModel):
+    """All savepoints for the current model. Empty list (not an error) if none. Works
+    from a pure filesystem scan — no OAPI/SAP attach required."""
+
+    model_name: str
+    count: int
+    savepoints: list[SavepointInfo]
+
+
+class SavepointCreateResponse(BaseModel):
+    """Result of create_savepoint. In dry-run, ``dry_run`` is true, ``would_apply`` holds
+    the target the write would produce and ``applied`` is null; in a real run it is the
+    reverse (write_side_design.md §2). ``would_apply``/``applied`` are SavepointInfo
+    (``size_bytes`` is an estimate in dry-run, the model's current file size)."""
+
+    dry_run: bool
+    validation_passed: bool = Field(True, description="Dry-run pre-validation result")
+    would_apply: SavepointInfo | None = None
+    applied: SavepointInfo | None = None
+
+
+class SavepointRestoreResponse(BaseModel):
+    """Result of restore_savepoint. ``would_replace_with`` (dry-run) / ``restored_from``
+    (real) is the savepoint that is/would be loaded. ``model_file`` is the model path the
+    session points at after the operation."""
+
+    dry_run: bool
+    would_replace_with: SavepointInfo | None = None
+    restored_from: SavepointInfo | None = None
+    model_file: str | None = Field(None, description="Model path the session points at after restore")

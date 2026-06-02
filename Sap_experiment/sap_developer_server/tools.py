@@ -11,9 +11,12 @@ from typing import Any
 
 from .bridge_backend import (
     bridge_settings,
+    create_savepoint_bridge,
     get_analysis_status_bridge,
     get_combinations_bridge,
     get_model_settings_bridge,
+    list_savepoints_bridge,
+    restore_savepoint_bridge,
     get_distributed_loads_on_frame_bridge,
     get_frame_forces_bridge,
     get_frames_bridge,
@@ -322,5 +325,54 @@ def get_frame_forces(frame_name: str, case_name: str, station: float | None = No
     base_url, timeout = bridge_settings()
     try:
         return get_frame_forces_bridge(base_url, timeout, frame_name, case_name, station)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+# --- Write-side: savepoints (undo infrastructure, Fase 1g.1) -----------------
+
+
+def create_savepoint(name: str, dry_run: bool = False) -> dict[str, Any]:
+    """Save the current model state to a savepoint file (WRITE — to the filesystem, not
+    the SAP model in memory). The file is ``<model>__sp_<name>.sdb`` next to the model.
+    Refuses if a savepoint of that ``name`` already exists (no silent overwrite — use a
+    different name). ``dry_run=true`` previews the target path + estimated size + that the
+    directory is writable, without writing.
+
+    This is undo infrastructure: take a savepoint before a risky write, then
+    restore_savepoint if the result is unwanted (see client_patterns.md Pattern 2).
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return create_savepoint_bridge(base_url, timeout, name, dry_run)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def restore_savepoint(name: str, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
+    """Restore a savepoint, REPLACING the currently loaded model with it (and discarding
+    unsaved changes). Destructive, so ``confirm=true`` is mandatory — without it you get
+    a ``confirm_required`` error. ``dry_run=true`` previews which savepoint would be loaded
+    without replacing anything. A missing savepoint → ``savepoint_not_found``.
+
+    Do NOT pass confirm=true automatically: preview with dry_run, decide, then confirm
+    (client_patterns.md Pattern 3).
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return restore_savepoint_bridge(base_url, timeout, name, confirm, dry_run)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def list_savepoints() -> dict[str, Any]:
+    """List the savepoints that exist for the current model (read-only filesystem scan).
+    Returns each savepoint's ``name``, absolute ``path``, ``created_at`` (ISO-8601) and
+    ``size_bytes``. Empty list if none (not an error). Works even if SAP is busy — it is a
+    directory scan, not an OAPI call.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return list_savepoints_bridge(base_url, timeout)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)

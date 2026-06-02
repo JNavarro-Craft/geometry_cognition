@@ -22,6 +22,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from Sap_experiment.sap_developer_server.tools import (
+    create_savepoint,
     get_analysis_status,
     get_combinations,
     get_distributed_loads_on_frame,
@@ -38,6 +39,8 @@ from Sap_experiment.sap_developer_server.tools import (
     get_point_loads_on_joint,
     get_section_properties,
     get_sections,
+    list_savepoints,
+    restore_savepoint,
     run_analysis,
 )
 
@@ -200,6 +203,33 @@ def get_model_settings_tool() -> dict[str, Any]:
     (present = active view, database = internal storage). Facts only — the MCP never
     labels the DOF pattern 'Plane Frame'/'2D'; you recognise it from the flags."""
     return get_model_settings()
+
+
+@mcp.tool(name="create_savepoint")
+def create_savepoint_tool(name: str, dry_run: bool = False) -> dict[str, Any]:
+    """WRITE (filesystem): save the current model state to a savepoint file
+    <model>__sp_<name>.sdb. Refuses if that name exists (no silent overwrite). dry_run=true
+    previews target path + size + writability without writing. Undo infrastructure: take a
+    savepoint before a risky write, restore it if unwanted. Does NOT change the model in
+    memory."""
+    return create_savepoint(name, dry_run)
+
+
+@mcp.tool(name="restore_savepoint")
+def restore_savepoint_tool(name: str, confirm: bool = False, dry_run: bool = False) -> dict[str, Any]:
+    """WRITE (destructive): restore a savepoint, REPLACING the loaded model with it and
+    discarding unsaved changes. confirm=true is mandatory (else confirm_required);
+    dry_run=true previews without replacing; missing savepoint → savepoint_not_found. Do
+    NOT pass confirm automatically — preview with dry_run, decide, then confirm."""
+    return restore_savepoint(name, confirm, dry_run)
+
+
+@mcp.tool(name="list_savepoints")
+def list_savepoints_tool() -> dict[str, Any]:
+    """Read-only: list the savepoints for the current model (name, path, created_at,
+    size_bytes). Empty list if none (not an error). A filesystem scan, works even when SAP
+    is busy."""
+    return list_savepoints()
 
 
 if __name__ == "__main__":

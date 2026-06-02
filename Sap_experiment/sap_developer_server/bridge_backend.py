@@ -82,6 +82,34 @@ def get_model_settings_bridge(base_url: str, timeout_seconds: float) -> dict[str
     )
 
 
+def create_savepoint_bridge(
+    base_url: str, timeout_seconds: float, name: str, dry_run: bool
+) -> dict[str, Any]:
+    body = json.dumps({"name": name, "dry_run": dry_run}).encode("utf-8")
+    # Save/reopen can take a moment on larger models; allow more than the read timeout.
+    return _bridge_json_request(
+        base_url, "/v1/savepoints", max(timeout_seconds, 120.0),
+        method="POST", body=body, content_type="application/json",
+    )
+
+
+def restore_savepoint_bridge(
+    base_url: str, timeout_seconds: float, name: str, confirm: bool, dry_run: bool
+) -> dict[str, Any]:
+    path = f"/v1/savepoints/{quote(name, safe='')}/restore"
+    body = json.dumps({"confirm": confirm, "dry_run": dry_run}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, path, max(timeout_seconds, 120.0),
+        method="POST", body=body, content_type="application/json",
+    )
+
+
+def list_savepoints_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
+    return _bridge_json_request(
+        base_url, "/v1/savepoints", timeout_seconds, method="GET", body=None, content_type=None
+    )
+
+
 def get_joints_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
     return _bridge_json_request(
         base_url, "/v1/joints", timeout_seconds, method="GET", body=None, content_type=None

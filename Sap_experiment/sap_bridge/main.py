@@ -34,6 +34,11 @@ from .contracts import (
     MaterialsResponse,
     ModelSettingsResponse,
     PointLoadsResponse,
+    SavepointCreateRequest,
+    SavepointCreateResponse,
+    SavepointListResponse,
+    SavepointRestoreRequest,
+    SavepointRestoreResponse,
     SectionPropertiesResponse,
     SectionsResponse,
     UnitsResponse,
@@ -52,6 +57,7 @@ from .primitives import load_cases as load_cases_primitive
 from .primitives import load_patterns as load_patterns_primitive
 from .primitives import materials as materials_primitive
 from .primitives import model_settings as model_settings_primitive
+from .primitives import savepoints as savepoints_primitive
 from .primitives import section_properties as section_properties_primitive
 from .primitives import sections as sections_primitive
 from .primitives import units as units_primitive
@@ -381,3 +387,42 @@ def get_frame_forces(
         return FrameForcesResponse(
             units=present_units, frame=name, case_name=case_name, count=len(rows), stations=rows
         )
+
+
+# --- Write-side: savepoints (undo infrastructure, Fase 1g.1) -----------------
+# The first write primitives. They write the FILESYSTEM (separate .sdb files), not the
+# model in memory — the rollback net the rest of the write-side builds on. POST mutates;
+# GET (list) is a pure filesystem scan. See docs/write_side_design.md.
+
+
+@app.post("/v1/savepoints", response_model=SavepointCreateResponse)
+def create_savepoint(request: SavepointCreateRequest) -> SavepointCreateResponse:
+    """Save the current model state to a savepoint .sdb file (<model>__sp_<name>.sdb).
+    Refuses if a savepoint of that name already exists (no silent overwrite). ``dry_run``
+    previews the target path + writability without writing. Internally: Save then reopen
+    the original, so the session keeps pointing at the user's model."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return savepoints_primitive.create_savepoint(model, request.name, request.dry_run)
+
+
+@app.post("/v1/savepoints/{name}/restore", response_model=SavepointRestoreResponse)
+def restore_savepoint(name: str, request: SavepointRestoreRequest | None = None) -> SavepointRestoreResponse:
+    """Restore a savepoint, replacing the loaded model with it. Destructive →
+    ``confirm=true`` is mandatory (else confirm_required) unless ``dry_run``. Missing
+    savepoint → savepoint_not_found. The SAP handle stays valid after the reopen."""
+    req = request or SavepointRestoreRequest()
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return savepoints_primitive.restore_savepoint(model, name, req.confirm, req.dry_run)
+
+
+@app.get("/v1/savepoints", response_model=SavepointListResponse)
+def list_savepoints() -> SavepointListResponse:
+    """List the savepoints for the current model (filesystem scan; empty list if none)."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return savepoints_primitive.list_savepoints(model)
