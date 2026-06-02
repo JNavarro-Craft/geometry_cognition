@@ -41,6 +41,8 @@ día uno.
 | Composición de UN load case | `GET /v1/load_cases/{name}/details` | `get_load_case_details` | ✅ LinearStatic → loads con SF; MODAL → unsupported_case_type=true; cierra asimetría con combos |
 | Distributed loads en UN frame | `GET /v1/frames/{name}/loads/distributed` | `get_distributed_loads_on_frame` | ✅ 78/180 frames; Dir int→nombre (Gravity/Local 2); refs a patterns OK; camino vacío OK |
 | Point loads en UN joint | `GET /v1/joints/{name}/loads/point` | `get_point_loads_on_joint` | ✅ camino vacío (0/112 en TEST_01); shape F1-3/M1-3 vs firma OAPI |
+| Estado de análisis por case | `GET /v1/analysis/status` | `get_analysis_status` | ✅ 7 cases; status int→nombre; has_run; model_is_locked |
+| 🔶 **Correr análisis (MUTA)** | `POST /v1/analysis/run` | `run_analysis` | ✅ 7 cases en 5.8s → Finished, modelo locked; subset con restauración de flags; idempotente; case inexistente → error |
 | Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; sección no soportada → `oapi_unexpected_shape` con el tipo |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
@@ -54,8 +56,9 @@ modelo define 6, usa 2 — el bridge expone ambos hechos, el cliente saca la dif
 
 No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la sesión).
 
-- ◾ **Escritura al modelo** (create_joint/frame, set_section…). Solo lectura.
-- ◾ **Análisis, resultados, modal.**
+- ◾ **Escritura al MODELO** (create_joint/frame, set_section…). Read-only excepto correr
+  análisis — ver nota del cruce abajo. La escritura al modelo es Fase 1g (tras design doc).
+- ◾ **Resultados** (displacements, reactions, forces, stresses) — Fase 1e.
 - ◾ **Snapshots / diff.** (Cuando los read-only maduren.)
 - ◾ **Plugins de Rhino sobre el bridge** (Objetivo 2) y **wrappers MCP de plugins**
   (Objetivo 3).
@@ -78,6 +81,15 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 > análisis. Sigue fuera: point loads en frames, temperature/displacement loads (1c.3),
 > detalles de cases no-LinearStatic. Hecho, no interpretación: `VIENTO` con dirección
 > `Gravity` se reporta tal cual (anti-patrón #4); el nombre del pattern no implica función.
+
+> Actualización sesión 5 (Fase 1d — CRUCE ARQUITECTÓNICO): primera operación que **MUTA**
+> estado. `run_analysis` (`POST /v1/analysis/run`) corre el análisis — cambia el estado de
+> *cómputo* (produce resultados, puede lockear el modelo), **no** la definición del modelo.
+> `get_analysis_status` (`GET`) lee. El método HTTP señala intent: POST muta, GET lee. NO
+> confirm (no destructivo, re-correr es idempotente); el confirm se exigirá en Fase 1g
+> (escritura al modelo). Errores de análisis (singular matrix…) se relayan como
+> `oapi_call_failed` con el código — el bridge nunca dice "tu modelo está mal". Resultados
+> (Fase 1e) siguen fuera: esto corre el análisis, no lee solicitaciones.
 
 ## 🚫 Fuera por principio (leaks — nunca van en el bridge ni el MCP)
 

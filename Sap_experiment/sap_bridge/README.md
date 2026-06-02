@@ -69,7 +69,7 @@ Match on either; the bridge does not interpret the system.
 
 ## Primitives at a glance
 
-| Endpoint | MCP tool | Fact returned |
+| Method + Endpoint | MCP tool | Fact returned |
 |---|---|---|
 | `GET /v1/units` | (internal) | active SAP unit system |
 | `GET /v1/joints` | `get_joints` | points: name, coords, 6-DOF restraints |
@@ -83,9 +83,12 @@ Match on either; the bridge does not interpret the system.
 | `GET /v1/combinations` | `get_combinations` | combos: type + consolidated component items |
 | `GET /v1/frames/{name}/loads/distributed` | `get_distributed_loads_on_frame` | distributed loads on one frame |
 | `GET /v1/joints/{name}/loads/point` | `get_point_loads_on_joint` | point loads on one joint |
+| `GET /v1/analysis/status` | `get_analysis_status` | per-case run status + model lock |
+| **`POST`** `/v1/analysis/run` | `run_analysis` | **mutates**: runs analysis, returns status |
 
-All read-only. Point loads on frames, temperature/displacement loads, analysis, results
-and writes are future phases (see [`../docs/brechas.md`](../docs/brechas.md)).
+All read (`GET`) except the one mutating op (`POST /v1/analysis/run`). Results
+(displacements, reactions, forces), point loads on frames, temperature/displacement loads,
+and model writes are future phases (see [`../docs/brechas.md`](../docs/brechas.md)).
 
 ---
 
@@ -411,6 +414,78 @@ all load patterns. **Empty `loads` means the joint has none — not an error.**
 
 ---
 
+## Mutating operations
+
+The bridge is read-only **except** for running analysis. Running analysis changes the
+model's **computation** state — it produces results and may lock the model — but does
+**not** modify the model definition (creating/assigning/deleting objects is Fase 1g, gated
+behind a design doc). The HTTP method signals intent: `GET` is safe-read, `POST` mutates.
+
+### `GET /v1/analysis/status`
+
+Current analysis status per load case, plus whether the model is locked. Read-safe.
+
+```json
+{
+  "model_is_locked": true,
+  "count": 7,
+  "status": [
+    { "case_name": "DEAD", "status": "Finished", "status_code": 4, "has_run": true },
+    { "case_name": "VIVA", "status": "Not Run", "status_code": 1, "has_run": false }
+  ]
+}
+```
+
+- `status_code`: raw int from `GetCaseStatus` — `1`=Not Run, `2`=Could Not Start,
+  `3`=Not Finished, `4`=Finished; `status` is its name (`"Unknown"` if unmapped).
+- `has_run`: `true` only when Finished (results exist). A case that could not start /
+  did not finish is reported as the fact it is — **the bridge never judges the model**.
+- `model_is_locked`: a locked model holds results that editing the model would
+  invalidate. A fact, not a judgement.
+
+### `POST /v1/analysis/run`  *(mutating)*
+
+Runs the analysis. **BLOCKING** — `RunAnalysis` is synchronous; large models can take a
+while (`runtime_seconds` reports the wall-clock cost). **No confirmation required**: it is
+not destructive and re-running is idempotent (SAP skips cases with current results).
+
+Request body (optional):
+
+```json
+{ "cases_to_run": ["DEAD", "MUERTA"] }
+```
+
+- Omit the body (or send `{}`) to run **all pending cases** (default `RunAnalysis`).
+- `cases_to_run`: run only these by name. Each name is validated against existing cases
+  **before touching SAP** (an unknown name → `oapi_unexpected_shape`, refused up front).
+  The bridge flags the subset, runs, then **restores the original run-case flags** — the
+  request leaves no side effect on which cases are flagged. (OAPI has no "run these cases"
+  call; it is flag-then-run. See §13.)
+
+Response:
+
+```json
+{
+  "ran_count": 7,
+  "cases_run": ["DEAD", "MODAL", "PESO PROPIO", "MUERTA", "VIVA", "VIENTO", "NIEVE"],
+  "runtime_seconds": 5.797,
+  "model_is_locked": true,
+  "status": [ { "case_name": "DEAD", "status": "Finished", "status_code": 4, "has_run": true } ]
+}
+```
+
+- `cases_run`/`ran_count`: the cases that hold results after the run (status Finished).
+- `runtime_seconds`: wall-clock time of the blocking call (a re-run of an up-to-date
+  model is ~0.0s — SAP skipped everything; idempotent).
+- A non-zero `RunAnalysis` return → `oapi_call_failed` carrying the code: a **model-side**
+  failure (singular matrix, missing supports, …). The bridge relays it; it does not
+  interpret why the model did not solve.
+
+> Validated on TEST_01: a full run took ~5.8s, all 7 cases reached Finished, the model
+> locked. A subset run with flag-restore and an unknown-case rejection were both exercised.
+
+---
+
 ## Session model
 
 Attach-only this phase: the bridge connects (COM `GetObject`) to a SAP2000 the user
@@ -422,11 +497,12 @@ process-wide lock (COM is single-threaded).
 ## What this contract does NOT yet cover
 
 Honest scope (see [`../docs/brechas.md`](../docs/brechas.md)): no pagination/filters
-(all rows in one payload — fine at 112/180, revisit before large models), no write
-endpoints, no analysis/results. Load definitions (Phase 1c) and applied loads (Phase
-1c.2: distributed on frames, point on joints, LinearStatic case composition) are covered;
-**not yet** covered are point loads on frames, temperature/displacement/area loads, and
-the composition of non-LinearStatic cases (1c.3, additive). Section dimensions (Phase 1b)
+(all rows in one payload — fine at 112/180, revisit before large models), and no model
+**writes** (creating/assigning/deleting objects — Fase 1g, gated behind a design doc).
+Running analysis is covered (Phase 1d, the one mutating op) but **results** (displacements,
+reactions, forces, stresses) are not yet — that is Phase 1e. Load definitions (1c) and
+applied loads (1c.2) are covered; not yet point loads on frames, temperature/displacement/
+area loads, or non-LinearStatic case composition (1c.3, additive). Section dimensions (1b)
 cover `Rectangular`; other shapes return `oapi_unexpected_shape` until their extractor is
-added (additive). These remaining gaps are future phases and should extend this contract
+added. These remaining gaps are future phases and should extend this contract
 **additively**.

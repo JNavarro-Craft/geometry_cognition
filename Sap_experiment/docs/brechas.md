@@ -150,6 +150,41 @@ cargas puntuales en nudos.
 
 ---
 
+## 🔶 Hallazgos OAPI Fase 1d — análisis (run + status) (resueltos)
+
+### 13. `RunAnalysis()` NO toma cases; el modelo es flag-then-run
+`cAnalyze.RunAnalysis()` **no tiene argumentos** — no existe overload "corre estos cases".
+El prompt asumía `RunAnalysis(cases_to_run)`; la realidad es un modelo de **dos pasos**:
+`SetRunCaseFlag(Name, Run, All)` marca qué cases correr, luego `RunAnalysis()` corre todo
+lo marcado. Para `cases_to_run` el bridge: lee los flags actuales, marca solo el subset,
+corre, y **restaura los flags originales** (sin efecto colateral en qué está marcado).
+
+### 14. `GetCaseStatus`/`GetRunCaseFlag` son globales (arrays paralelos), status = int
+- `GetCaseStatus(ref NumberItems, ref CaseName[], ref Status[])` **no toma nombre** — da
+  TODOS los cases con su Status. `GetRunCaseFlag(ref NumberItems, ref CaseName[],
+  ref Run[])` igual: **4 valores** `(ret, n, names, flags)`.
+- `Status` es **int crudo** (no enum): 1=Not Run, 2=Could Not Start, 3=Not Finished,
+  4=Finished. El bridge mapea a nombre + `has_run`=(code==4). Un case que no convergió
+  (2 ó 3) se reporta como hecho — el bridge nunca dice "tu modelo está mal".
+- `GetModelIsLocked()`→bool; tras un run exitoso pasa a **true** (resultados vigentes).
+
+### 🐛 Bug cazado en validación (no silencioso): unpack de GetRunCaseFlag
+La primera versión desempaquetó `GetRunCaseFlag` como 3 valores; devuelve **4**
+(`ret, n, names, flags`) → `ValueError: too many values to unpack` → HTTP 500. Se cazó
+**en la validación del camino de error** (run con case inexistente), no en producción
+silenciosa. Corregido a 4-tuple. Lección: la "falla ruidosa" funcionó — un 500 visible en
+vez de un dato plausible-pero-falso.
+
+### Decisión arquitectónica: POST muta, GET lee
+Primera operación **mutante** del bridge: `POST /v1/analysis/run` (cambia estado de
+cómputo, puede lockear) vs `GET /v1/analysis/status` (read-safe). El método HTTP señala
+intent al consumidor. NO confirm (no destructivo, re-correr es idempotente — SAP saltea
+cases con resultados vigentes: 2º run = 0.0s). El confirm explícito se exigirá en Fase 1g
+(modificar el modelo). Errores de análisis (singular matrix, etc.): si `RunAnalysis` da
+ret≠0 → `oapi_call_failed` con el código; el cliente lo interpreta, el bridge no.
+
+---
+
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
 
 Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fase.
@@ -165,7 +200,10 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
   validada en vivo (78/180 frames con distributed; point loads camino vacío; MODAL
   unsupported; integridad referencial OK). Falta: point loads en frames, temperature/
   displacement loads (1c.3, aditivos); detalles de cases no-LinearStatic.
-- ◾ **Fase 1d** — `run_analysis`, `get_analysis_status`.
+- ✅ **Fase 1d** — `run_analysis`, `get_analysis_status` (PRIMER cruce mutante).
+  **Hecha** (sesión 5); validada en vivo (run 7 cases en 5.8s → todos Finished, modelo
+  locked; subset con restauración de flags; idempotencia 0.0s; error path estructurado;
+  integridad referencial OK). POST muta / GET lee. Falta cancel (OAPI no lo expone fiable).
 - ◾ **Fase 1e** — `get_displacements`, `get_reactions`, `get_forces`, `get_stresses`.
 - ◾ **Fase 1f** — `get_modal_results`, `get_response_spectrum`.
 - ◾ **Fase 1g** — escritura (`create_joint/frame`, `set_section`…) con dry-run + undo,
