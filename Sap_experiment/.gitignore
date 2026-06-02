@@ -13,3 +13,9 @@ venv/
 *.sdb.lock
 *.$2k
 *.LOG
+
+# test_models/ is ignored repo-wide (root .gitignore); keep the README only,
+# never the .sdb/.ico/.$2k binaries.
+!test_models/
+test_models/*
+!test_models/README.md
