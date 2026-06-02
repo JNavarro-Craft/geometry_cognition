@@ -544,3 +544,47 @@ class SavepointRestoreResponse(BaseModel):
     would_replace_with: SavepointInfo | None = None
     restored_from: SavepointInfo | None = None
     model_file: str | None = Field(None, description="Model path the session points at after restore")
+
+
+# --- Write-side: set_active_dof (Fase 1g.2) ----------------------------------
+# The first primitive that mutates the SAP model in memory. A global model setting, so
+# confirm is mandatory (write_side_design.md §5.3); dry_run previews the change.
+
+
+class SetActiveDOFRequest(BaseModel):
+    """Body for POST /v1/model/settings/active_dof. ``active_dof`` must be exactly 6
+    booleans [U1,U2,U3,R1,R2,R3]. ``confirm`` is mandatory (global setting); ``dry_run``
+    previews. The bridge validates shape only — it does NOT judge whether a DOF pattern is
+    structurally sensible (anti-pattern #4; SAP itself accepts even all-false)."""
+
+    active_dof: list[bool] = Field(..., description="Exactly 6 DOF flags [U1,U2,U3,R1,R2,R3]")
+    dry_run: bool = Field(False, description="If true, preview the change without applying")
+    confirm: bool = Field(False, description="Must be true to apply (global setting)")
+
+
+class ActiveDOFChange(BaseModel):
+    """The active-DOF change as facts: the vectors and a human-readable per-DOF diff."""
+
+    current_active_dof: list[bool] | None = Field(
+        None, description="Current vector (dry-run preview)"
+    )
+    previous_active_dof: list[bool] | None = Field(
+        None, description="Vector before applying (real run)"
+    )
+    new_active_dof: list[bool] | None = Field(None, description="Target vector (dry-run preview)")
+    changes: list[str] = Field(
+        ..., description="Per-DOF diffs, e.g. ['U2: false → true', 'R1: false → true']"
+    )
+
+
+class SetActiveDOFResponse(BaseModel):
+    """Result of set_active_dof. Dry-run: ``dry_run`` true, ``would_apply`` holds the
+    preview (current/new/changes), ``validation_passed`` true, ``applied`` null. Real run:
+    the reverse — ``applied`` holds previous/current/changes. ``model_is_locked`` is the
+    post-operation lock state (relayed, never auto-changed by the bridge)."""
+
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: ActiveDOFChange | None = None
+    applied: ActiveDOFChange | None = None
+    model_is_locked: bool | None = Field(None, description="Lock state after the operation")

@@ -82,6 +82,18 @@ def get_model_settings_bridge(base_url: str, timeout_seconds: float) -> dict[str
     )
 
 
+def set_active_dof_bridge(
+    base_url: str, timeout_seconds: float, active_dof: list, dry_run: bool, confirm: bool
+) -> dict[str, Any]:
+    body = json.dumps(
+        {"active_dof": active_dof, "dry_run": dry_run, "confirm": confirm}
+    ).encode("utf-8")
+    return _bridge_json_request(
+        base_url, "/v1/model/settings/active_dof", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
 def create_savepoint_bridge(
     base_url: str, timeout_seconds: float, name: str, dry_run: bool
 ) -> dict[str, Any]:

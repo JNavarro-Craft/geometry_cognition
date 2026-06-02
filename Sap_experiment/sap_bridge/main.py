@@ -41,9 +41,12 @@ from .contracts import (
     SavepointRestoreResponse,
     SectionPropertiesResponse,
     SectionsResponse,
+    SetActiveDOFRequest,
+    SetActiveDOFResponse,
     UnitsResponse,
 )
 from .path_resolver import resolve_oapi_dll
+from .primitives import active_dof as active_dof_primitive
 from .primitives import analysis as analysis_primitive
 from .primitives import combinations as combinations_primitive
 from .primitives import frame_loads as frame_loads_primitive
@@ -138,6 +141,21 @@ def get_model_settings() -> ModelSettingsResponse:
     with session.lock():
         model = session.sap_model()
         return ModelSettingsResponse(settings=model_settings_primitive.get_model_settings(model))
+
+
+@app.post("/v1/model/settings/active_dof", response_model=SetActiveDOFResponse)
+def set_active_dof(request: SetActiveDOFRequest) -> SetActiveDOFResponse:
+    """Set the model's active DOFs (write — global setting). ``active_dof`` must be exactly
+    6 booleans [U1,U2,U3,R1,R2,R3]. ``confirm`` is mandatory (else confirm_required);
+    ``dry_run`` previews the change with a per-DOF diff without applying. The bridge
+    validates shape only and relays SAP — it does not judge the pattern or auto-unlock a
+    locked model (a locked model rejects the change → oapi_call_failed)."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return active_dof_primitive.set_active_dof(
+            model, session.oapi_namespace(), request.active_dof, request.dry_run, request.confirm
+        )
 
 
 @app.get("/v1/joints", response_model=JointsResponse)

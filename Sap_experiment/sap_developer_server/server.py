@@ -42,6 +42,7 @@ from Sap_experiment.sap_developer_server.tools import (
     list_savepoints,
     restore_savepoint,
     run_analysis,
+    set_active_dof,
 )
 
 mcp = FastMCP("sap_developer_server")
@@ -230,6 +231,17 @@ def list_savepoints_tool() -> dict[str, Any]:
     size_bytes). Empty list if none (not an error). A filesystem scan, works even when SAP
     is busy."""
     return list_savepoints()
+
+
+@mcp.tool(name="set_active_dof")
+def set_active_dof_tool(active_dof: list[bool], dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """WRITE (mutates the model; global setting): set the active DOFs. active_dof must be
+    exactly 6 booleans [U1,U2,U3,R1,R2,R3]. confirm=true is mandatory (else
+    confirm_required); dry_run=true previews with a per-DOF diff without applying. Facts
+    only — validates shape, relays SAP, does NOT judge the pattern (SAP accepts all-false)
+    or auto-unlock a locked model. Recommended: create_savepoint → dry_run → review →
+    confirm → verify → restore_savepoint if unwanted."""
+    return set_active_dof(active_dof, dry_run, confirm)
 
 
 if __name__ == "__main__":

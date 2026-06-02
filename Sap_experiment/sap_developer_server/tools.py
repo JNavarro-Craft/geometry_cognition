@@ -17,6 +17,7 @@ from .bridge_backend import (
     get_model_settings_bridge,
     list_savepoints_bridge,
     restore_savepoint_bridge,
+    set_active_dof_bridge,
     get_distributed_loads_on_frame_bridge,
     get_frame_forces_bridge,
     get_frames_bridge,
@@ -374,5 +375,25 @@ def list_savepoints() -> dict[str, Any]:
     base_url, timeout = bridge_settings()
     try:
         return list_savepoints_bridge(base_url, timeout)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def set_active_dof(active_dof: list[bool], dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """Set the model's active DOFs (WRITE — mutates the model; a global setting). ``active_dof``
+    must be exactly 6 booleans [U1,U2,U3,R1,R2,R3]. Because it is a global setting,
+    ``confirm=true`` is mandatory — without it you get ``confirm_required``. ``dry_run=true``
+    previews the change (with a readable per-DOF diff like 'U2: false → true') without
+    applying.
+
+    Facts only — the bridge validates shape (6 booleans) and relays SAP; it does NOT judge
+    whether a DOF pattern is structurally valid (SAP accepts even all-false) and does NOT
+    unlock a locked model (a locked model rejects the change → oapi_call_failed). Recommended
+    flow (client_patterns.md): create_savepoint → set_active_dof(dry_run) → review →
+    set_active_dof(confirm=true) → verify → restore_savepoint if unwanted.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return set_active_dof_bridge(base_url, timeout, active_dof, dry_run, confirm)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)
