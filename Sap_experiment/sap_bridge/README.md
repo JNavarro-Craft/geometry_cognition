@@ -79,10 +79,13 @@ Match on either; the bridge does not interpret the system.
 | `GET /v1/materials` | `get_materials` | material catalogue: type + mechanical facts |
 | `GET /v1/load_patterns` | `get_load_patterns` | load patterns: type + self-weight multiplier |
 | `GET /v1/load_cases` | `get_load_cases` | analysis cases: name + type |
+| `GET /v1/load_cases/{name}/details` | `get_load_case_details` | one case's composition (LinearStatic) |
 | `GET /v1/combinations` | `get_combinations` | combos: type + consolidated component items |
+| `GET /v1/frames/{name}/loads/distributed` | `get_distributed_loads_on_frame` | distributed loads on one frame |
+| `GET /v1/joints/{name}/loads/point` | `get_point_loads_on_joint` | point loads on one joint |
 
-All read-only. Loads applied to objects, analysis, results and writes are future phases
-(see [`../docs/brechas.md`](../docs/brechas.md)).
+All read-only. Point loads on frames, temperature/displacement loads, analysis, results
+and writes are future phases (see [`../docs/brechas.md`](../docs/brechas.md)).
 
 ---
 
@@ -328,6 +331,84 @@ combo_type `Envelope`, never a domain label.
 > combos — cross-checked on TEST_01: zero dangling references. A broken reference would be
 > a fact of the **model**, reported, not patched by the bridge.
 
+### `GET /v1/load_cases/{name}/details`
+
+Composition of **one** load case (by exact name, as in `/v1/load_cases`). Closes the
+asymmetry `/v1/combinations` left — combos already exposed their composition, cases did
+not. For a `LinearStatic` case, `loads` lists the applied patterns + scale factors. For
+any other type, `unsupported_case_type` is `true` and `loads` is empty: the case and its
+type are reported, internals deferred — **information, not an error**.
+
+```json
+{
+  "units": { "present_units": "kgf_m_C", "present_units_code": 8 },
+  "case": {
+    "case_name": "PESO PROPIO", "case_type": "LinearStatic",
+    "unsupported_case_type": false,
+    "loads": [ { "load_type": "Load", "load_pattern": "PESO PROPIO", "scale_factor": 1.0 } ]
+  }
+}
+```
+
+- `load_pattern` references a name from `/v1/load_patterns`. An unknown case name →
+  `oapi_call_failed` (502). A `Modal` case → `unsupported_case_type: true`, `loads: []`.
+
+### `GET /v1/frames/{name}/loads/distributed`
+
+Distributed loads on **one** frame (by exact name, as in `/v1/frames`), across all load
+patterns. **Empty `loads` means the frame has none — not an error.**
+
+```json
+{
+  "units": { "present_units": "kgf_m_C", "present_units_code": 8 },
+  "frame": "4133", "count": 1,
+  "loads": [
+    {
+      "load_pattern": "MUERTA", "load_type": "Force",
+      "direction": "Gravity", "direction_code": 10, "coord_system": "GLOBAL",
+      "rel_dist_start": 0.0, "rel_dist_end": 1.0,
+      "value_start": 19.4, "value_end": 19.4
+    }
+  ]
+}
+```
+
+- `load_type`: raw type — `Force` or `Displacement` (SAP `MyType` 1/2).
+- `direction_code`: raw integer SAP direction (this assembly exposes no direction enum).
+  `direction`: documented name for the code — `1-3`=Local 1/2/3, `4-6`=Global X/Y/Z,
+  `7-9`=Projected, `10`=Gravity, `11`=Projected Gravity; `"Unknown"` if out of range.
+  Relayed raw — `Gravity` stays `Gravity`, never `"down"`.
+- `coord_system`: raw CSys name (`GLOBAL`, `Local`, a custom name).
+- `rel_dist_start`/`end`: 0..1 relative positions; `value_start`/`end`: present units.
+- `load_pattern` references `/v1/load_patterns`. **Anti-pattern #4: a pattern's name does
+  not imply its function** — on TEST_01 `VIENTO` carries `Gravity`-direction loads. The
+  bridge reports the fact, not "wind".
+
+### `GET /v1/joints/{name}/loads/point`
+
+Point loads (force + moment) on **one** joint (by exact name, as in `/v1/joints`), across
+all load patterns. **Empty `loads` means the joint has none — not an error.**
+
+```json
+{
+  "units": { "present_units": "kgf_m_C", "present_units_code": 8 },
+  "joint": "27", "count": 1,
+  "loads": [
+    {
+      "load_pattern": "VIENTO", "coord_system": "GLOBAL",
+      "f1": 0.0, "f2": 0.0, "f3": -500.0, "m1": 0.0, "m2": 0.0, "m3": 0.0
+    }
+  ]
+}
+```
+
+- `f1/f2/f3` (force) and `m1/m2/m3` (moment) are the six components in `coord_system`,
+  present units. `load_pattern` references `/v1/load_patterns`.
+
+> On TEST_01 no joint carries a point load (0/112), so this endpoint was validated on the
+> empty path (returns `count: 0`, `loads: []`); the example above is illustrative of the
+> non-empty shape. Non-empty coverage waits for a model with joint loads (see §11).
+
 ---
 
 ## Session model
@@ -342,9 +423,10 @@ process-wide lock (COM is single-threaded).
 
 Honest scope (see [`../docs/brechas.md`](../docs/brechas.md)): no pagination/filters
 (all rows in one payload — fine at 112/180, revisit before large models), no write
-endpoints, no analysis/results. Load **definitions** are covered now (Phase 1c: patterns,
-cases, combinations) but **loads applied to objects** (distributed/point loads on frames
-and joints) are not yet — that is Phase 1c.2. Section dimensions (Phase 1b) cover
-`Rectangular`; other shapes return `oapi_unexpected_shape` until their extractor is added
-(additive). These remaining gaps are future phases and should extend this contract
+endpoints, no analysis/results. Load definitions (Phase 1c) and applied loads (Phase
+1c.2: distributed on frames, point on joints, LinearStatic case composition) are covered;
+**not yet** covered are point loads on frames, temperature/displacement/area loads, and
+the composition of non-LinearStatic cases (1c.3, additive). Section dimensions (Phase 1b)
+cover `Rectangular`; other shapes return `oapi_unexpected_shape` until their extractor is
+added (additive). These remaining gaps are future phases and should extend this contract
 **additively**.

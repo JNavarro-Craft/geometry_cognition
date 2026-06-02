@@ -38,6 +38,9 @@ día uno.
 | Catálogo de load patterns | `GET /v1/load_patterns` | `get_load_patterns` | ✅ 6 patterns (DEAD/PESO PROPIO/MUERTA/VIVA/VIENTO/NIEVE); types + SW multiplier vs UI |
 | Catálogo de load cases | `GET /v1/load_cases` | `get_load_cases` | ✅ 7 cases (incl. MODAL); overload sin filtro vs UI |
 | Catálogo de combos + composición | `GET /v1/combinations` | `get_combinations` | ✅ 8 combos; arrays paralelos consolidados; ENVOLVENTE=Envelope; combo-of-combo; integridad referencial OK |
+| Composición de UN load case | `GET /v1/load_cases/{name}/details` | `get_load_case_details` | ✅ LinearStatic → loads con SF; MODAL → unsupported_case_type=true; cierra asimetría con combos |
+| Distributed loads en UN frame | `GET /v1/frames/{name}/loads/distributed` | `get_distributed_loads_on_frame` | ✅ 78/180 frames; Dir int→nombre (Gravity/Local 2); refs a patterns OK; camino vacío OK |
+| Point loads en UN joint | `GET /v1/joints/{name}/loads/point` | `get_point_loads_on_joint` | ✅ camino vacío (0/112 en TEST_01); shape F1-3/M1-3 vs firma OAPI |
 | Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; sección no soportada → `oapi_unexpected_shape` con el tipo |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
@@ -52,7 +55,7 @@ modelo define 6, usa 2 — el bridge expone ambos hechos, el cliente saca la dif
 No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la sesión).
 
 - ◾ **Escritura al modelo** (create_joint/frame, set_section…). Solo lectura.
-- ◾ **Cargas APLICADAS a objetos** (point/distributed loads), **análisis, resultados, modal.**
+- ◾ **Análisis, resultados, modal.**
 - ◾ **Snapshots / diff.** (Cuando los read-only maduren.)
 - ◾ **Plugins de Rhino sobre el bridge** (Objetivo 2) y **wrappers MCP de plugins**
   (Objetivo 3).
@@ -65,9 +68,16 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 
 > Actualización sesión 3 (Fase 1c): las **DEFINICIONES de carga** ya **no** están fuera —
 > `get_load_patterns`, `get_load_cases`, `get_combinations` exponen patterns (tipo + SW),
-> cases (tipo) y combos (tipo + items consolidados). Sigue fuera lo **aplicado** a objetos
-> (Fase 1c.2) y los detalles internos de un case. Como hechos: 'ENVOLVENTE' se reporta
+> cases (tipo) y combos (tipo + items consolidados). Como hechos: 'ENVOLVENTE' se reporta
 > combo_type 'Envelope', nunca una etiqueta sísmica; nombres en español relayados verbatim.
+
+> Actualización sesión 4 (Fase 1c.2): las **cargas APLICADAS** y la **composición de case**
+> ya **no** están fuera — `get_distributed_loads_on_frame`, `get_point_loads_on_joint`,
+> `get_load_case_details` (LinearStatic; otros tipos → `unsupported_case_type`). Cierra el
+> lado de inputs: con 11 primitivas se responde "qué define este modelo" sin correr
+> análisis. Sigue fuera: point loads en frames, temperature/displacement loads (1c.3),
+> detalles de cases no-LinearStatic. Hecho, no interpretación: `VIENTO` con dirección
+> `Gravity` se reporta tal cual (anti-patrón #4); el nombre del pattern no implica función.
 
 ## 🚫 Fuera por principio (leaks — nunca van en el bridge ni el MCP)
 

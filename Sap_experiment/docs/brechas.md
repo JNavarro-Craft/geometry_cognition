@@ -113,6 +113,43 @@ colgantes (todo `LoadCase`→caso existente, todo `LoadCombo`→combo existente)
 
 ---
 
+## 🔶 Hallazgos OAPI Fase 1c.2 — cargas aplicadas + composición de case (resueltos)
+
+### 11. `GetLoadDistributed`/`GetLoadForce`: arrays paralelos + `eItemType.Objects`
+- `cFrameObj.GetLoadDistributed(Name, ref NumberItems, ref FrameName[], ref LoadPat[],
+  ref MyType[], ref CSys[], ref Dir[], ref RD1[], ref RD2[], ref Dist1[], ref Dist2[],
+  ref Val1[], ref Val2[], eItemType)` → 11 arrays paralelos tras el count. `eItemType`
+  ∈ {Objects=0, Group, SelectedObjects}; se pasa **Objects** para acotar a UN frame.
+- **`Dir` es un int crudo** (no hay enum de dirección en el assembly, igual que combo_type
+  §10). Mapeo OAPI documentado: 1-3=Local 1/2/3, 4-6=Global X/Y/Z, 7-9=Projected,
+  10=Gravity, 11=Projected Gravity. El bridge expone `direction_code` (int) +
+  `direction` (nombre; 'Unknown' fuera de rango). `MyType`: 1=Force, 2=Displacement.
+  Verificado en TEST_01: códigos presentes 10 (Gravity, 116×) y 2 (Local 2, 38×).
+- `cPointObj.GetLoadForce(Name, ref NumberItems, ref PointName[], ref LoadPat[],
+  ref LcStep[], ref CSys[], ref F1[], ref F2[], ref F3[], ref M1[], ref M2[], ref M3[],
+  eItemType)` → las 6 componentes son **6 arrays planos separados** (F1..M3), NO un array
+  2D. Cuidado con la aridad: 12 args (un placeholder None por cada array).
+
+### 12. Composición de case: `cLoadCases.StaticLinear.GetLoads`, guard por tipo
+`StaticLinear.GetLoads(Name, ref NumberLoads, ref LoadType[], ref LoadName[], ref SF[])`
+da la composición de un caso LinearStatic (3 arrays paralelos). Para otros tipos
+(Modal, etc.) la llamada falla (ret≠0), así que el **gate es el tipo** (`GetTypeOAPI`),
+no el código de retorno: si no es LinearStatic, el bridge devuelve `case_type` correcto +
+`unsupported_case_type=true` + `loads=[]` (información, no error). Verificado: los 6 cases
+LinearStatic de TEST_01 aplican 1 pattern del mismo nombre, SF=1.0, LoadType='Load';
+MODAL → unsupported.
+
+### ◾ Observación del modelo (no bug; anti-patrón #4)
+TEST_01: **78/180 frames** con distributed loads (154 cargas), patterns referenciados
+`MUERTA`/`VIENTO`/`VIVA` — todos existentes (cero refs colgantes). **El nombre del pattern
+no implica su función**: `VIENTO` tiene cargas con dirección **Gravity**, no de viento
+horizontal — el bridge reporta el hecho del OAPI, no interpreta. **0/112 joints** con point
+loads: la primitiva `get_point_loads_on_joint` se validó en el **camino vacío** (retorna
+`[]` correctamente); la cobertura del camino no-vacío queda pendiente de un modelo con
+cargas puntuales en nudos.
+
+---
+
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
 
 Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fase.
@@ -122,8 +159,12 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
   en vivo. Sección no-rectangular sigue pendiente (dispatch aditivo, ver hallazgo 8).
 - ✅ **Fase 1c** — `get_load_patterns`, `get_load_cases`, `get_combinations`
   (DEFINICIONES de carga). **Hecha** (sesión 3); validada en vivo (6 patterns, 7 cases,
-  8 combos; integridad referencial OK). Falta `get_loads` = cargas APLICADAS a objetos
-  (Fase 1c.2), y los detalles internos de un case (patterns/factores que usa).
+  8 combos; integridad referencial OK).
+- ✅ **Fase 1c.2** — `get_distributed_loads_on_frame`, `get_point_loads_on_joint`,
+  `get_load_case_details` (cargas APLICADAS + composición de case). **Hecha** (sesión 4);
+  validada en vivo (78/180 frames con distributed; point loads camino vacío; MODAL
+  unsupported; integridad referencial OK). Falta: point loads en frames, temperature/
+  displacement loads (1c.3, aditivos); detalles de cases no-LinearStatic.
 - ◾ **Fase 1d** — `run_analysis`, `get_analysis_status`.
 - ◾ **Fase 1e** — `get_displacements`, `get_reactions`, `get_forces`, `get_stresses`.
 - ◾ **Fase 1f** — `get_modal_results`, `get_response_spectrum`.
