@@ -1,0 +1,15 @@
+# C# build artifacts (legacy RhinoSAP/ kept as reference, not rebuilt here)
+**/obj/
+**/bin/
+*.user
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# SAP2000 model autosave / lock artifacts
+*.sdb.lock
+*.$2k
+*.LOG

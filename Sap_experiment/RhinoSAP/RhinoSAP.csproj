@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- TargetFramework: net48 es la opción más segura para interoperabilidad COM (SAP2000) en Windows -->
+    <!-- Rhino 8 soporta plugins net48 perfectamente -->
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>10.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>RhinoSAP</AssemblyName>
+    <RootNamespace>RhinoSAP</RootNamespace>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <Platforms>AnyCPU;x64</Platforms>
+    
+    <!-- Deshabilitar la inclusión automática para tener control manual (opcional, pero útil si mantenemos los Compile Include) -->
+    <!-- O mejor aún: dejar que .NET SDK maneje los archivos automáticamente y quitar los Compile Include abajo -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <!-- Configuración para Release -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+  </PropertyGroup>
+
+  <!-- Configuración para Debug -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- REFERENCIAS A RHINO 8 -->
+    <!-- Ajusta estas rutas si tu Rhino está en otra ubicación -->
+    <Reference Include="RhinoCommon">
+      <HintPath>C:\Program Files\Rhino 8\System\RhinoCommon.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Grasshopper">
+      <HintPath>C:\Program Files\Rhino 8\Plug-ins\Grasshopper\Grasshopper.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="GH_IO">
+      <HintPath>C:\Program Files\Rhino 8\Plug-ins\Grasshopper\GH_IO.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    
+    <!-- REFERENCIA A SAP2000 -->
+    <!-- Se asume versión 26. Cambia el número '26' en la ruta si usas otra versión -->
+    <Reference Include="SAP2000v1">
+      <HintPath>C:\Program Files\Computers and Structures\SAP2000 26\SAP2000v1.dll</HintPath>
+      <Private>False</Private>
+      <EmbedInteropTypes>False</EmbedInteropTypes>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Archivos del proyecto -->
+    <Compile Include="src\Core\*.cs" />
+    <Compile Include="src\SAP\*.cs" />
+    <Compile Include="src\Grasshopper\*.cs" />
+    <Compile Include="src\Utils\*.cs" />
+  </ItemGroup>
+
+</Project>
