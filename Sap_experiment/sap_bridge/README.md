@@ -67,6 +67,25 @@ Match on either; the bridge does not interpret the system.
 
 ---
 
+## Primitives at a glance
+
+| Endpoint | MCP tool | Fact returned |
+|---|---|---|
+| `GET /v1/units` | (internal) | active SAP unit system |
+| `GET /v1/joints` | `get_joints` | points: name, coords, 6-DOF restraints |
+| `GET /v1/frames` | `get_frames` | frames: name, i/j connectivity, section |
+| `GET /v1/sections` | `get_sections` | section catalogue: name + type |
+| `GET /v1/sections/{name}/properties` | `get_section_properties` | dimensions + universal section props |
+| `GET /v1/materials` | `get_materials` | material catalogue: type + mechanical facts |
+| `GET /v1/load_patterns` | `get_load_patterns` | load patterns: type + self-weight multiplier |
+| `GET /v1/load_cases` | `get_load_cases` | analysis cases: name + type |
+| `GET /v1/combinations` | `get_combinations` | combos: type + consolidated component items |
+
+All read-only. Loads applied to objects, analysis, results and writes are future phases
+(see [`../docs/brechas.md`](../docs/brechas.md)).
+
+---
+
 ## Endpoints
 
 ### `GET /health`
@@ -231,6 +250,84 @@ reported with whatever SAP type it carries (`NoDesign`), never relabelled `timbe
 > as pythonnet placeholder (an int is rejected). Material type comes from `GetMaterial`,
 > not `GetTypeOAPI` (two out-params). See [`../docs/brechas.md`](../docs/brechas.md) §5–8.
 
+### `GET /v1/load_patterns`
+
+The load pattern **catalogue**: each pattern's name, raw SAP type and self-weight
+multiplier. Names are model-supplied labels relayed verbatim — `PESO PROPIO` stays as-is,
+never translated to `Dead`; the bridge never assumes which patterns a model should have.
+
+```json
+{
+  "units": { "present_units": "kgf_m_C", "present_units_code": 8 },
+  "count": 6,
+  "load_patterns": [
+    { "name": "PESO PROPIO", "load_type": "Dead", "self_weight_multiplier": 1.0 },
+    { "name": "VIENTO", "load_type": "Wind", "self_weight_multiplier": 0.0 }
+  ]
+}
+```
+
+- `load_type`: raw `eLoadPatternType` member name (`Dead`, `Live`, `Wind`, `Snow`, …).
+- `self_weight_multiplier`: factor SAP applies to self weight (typically 1.0 for a
+  self-weight pattern, 0.0 otherwise).
+
+### `GET /v1/load_cases`
+
+The analysis load case **catalogue**: name + raw SAP case type. The case's internal
+definition (which patterns/factors it applies) is a later primitive.
+
+```json
+{
+  "units": { "present_units": "kgf_m_C", "present_units_code": 8 },
+  "count": 7,
+  "load_cases": [
+    { "name": "PESO PROPIO", "case_type": "LinearStatic" },
+    { "name": "MODAL", "case_type": "Modal" }
+  ]
+}
+```
+
+- `case_type`: raw `eLoadCaseType` member name (`LinearStatic`, `Modal`, …).
+
+> Implementation note: `cLoadCases.GetNameList` has a type-filtered overload; the bridge
+> uses the unfiltered 2-arg form so every type is listed (filtering to `LinearStatic`
+> returned 6, the unfiltered call 7 — the extra being `MODAL`). See §9.
+
+### `GET /v1/combinations`
+
+The load combination **catalogue**: each combo's name, type and consolidated component
+items. SAP returns combination contents as parallel arrays; the bridge recomposes them so
+the client never juggles indices. It interprets nothing — `ENVOLVENTE` is reported with
+combo_type `Envelope`, never a domain label.
+
+```json
+{
+  "units": { "present_units": "kgf_m_C", "present_units_code": 8 },
+  "count": 8,
+  "combinations": [
+    {
+      "name": "D+L", "combo_type": "Linear Additive", "combo_type_code": 0,
+      "items": [
+        { "case_name": "D", "case_type": "LoadCombo", "scale_factor": 1.0 },
+        { "case_name": "VIVA", "case_type": "LoadCase", "scale_factor": 1.0 }
+      ]
+    }
+  ]
+}
+```
+
+- `combo_type_code`: raw integer from `GetTypeOAPI` (this assembly exposes no enum).
+- `combo_type`: SAP's documented name for that code (`0`=Linear Additive, `1`=Envelope,
+  `2`=Absolute Additive, `3`=SRSS, `4`=Range Additive); `"Unknown"` for an unmapped code,
+  reported never guessed.
+- `items[].case_type`: raw `eCNameType` — `"LoadCase"` (references a name from
+  `/v1/load_cases`) or `"LoadCombo"` (references another combination; combo-of-combo is
+  real). `scale_factor` is the component's factor.
+
+> A combo's `LoadCase` items reference existing load cases and `LoadCombo` items existing
+> combos — cross-checked on TEST_01: zero dangling references. A broken reference would be
+> a fact of the **model**, reported, not patched by the bridge.
+
 ---
 
 ## Session model
@@ -245,7 +342,9 @@ process-wide lock (COM is single-threaded).
 
 Honest scope (see [`../docs/brechas.md`](../docs/brechas.md)): no pagination/filters
 (all rows in one payload — fine at 112/180, revisit before large models), no write
-endpoints, no loads/analysis/results. Section dimensions are covered now (Phase 1b) for
+endpoints, no analysis/results. Load **definitions** are covered now (Phase 1c: patterns,
+cases, combinations) but **loads applied to objects** (distributed/point loads on frames
+and joints) are not yet — that is Phase 1c.2. Section dimensions (Phase 1b) cover
 `Rectangular`; other shapes return `oapi_unexpected_shape` until their extractor is added
 (additive). These remaining gaps are future phases and should extend this contract
 **additively**.

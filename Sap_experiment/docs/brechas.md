@@ -77,6 +77,42 @@ recibido, nunca una respuesta parcial. Verificado MGP10_33x73: Area=0.002409 =
 
 ---
 
+## 🔶 Hallazgos OAPI Fase 1c — definiciones de carga (resueltos)
+
+### 9. Tres colecciones, tres patrones de firma distintos
+- `cLoadPatterns.GetLoadType(name, ref eLoadPatternType)` + `GetSelfWTMultiplier(name,
+  ref Double)` (ojo: **WT** mayúscula). El enum out exige placeholder de miembro (§5).
+- `cLoadCases.GetNameList` **filtra por `eLoadCaseType`** (como `cPropFrame` en §3) pero
+  **tiene overload de 2 args sin filtro** que devuelve TODO. Verificado: filtrando a
+  `LinearStatic` → 6 casos; sin filtro → 7 (el extra es `MODAL`). El bridge usa el de 2
+  args para el catálogo completo. `GetTypeOAPI(name, ref eLoadCaseType, ref Int32
+  SubType)` → 2 out-params; se expone el tipo, el SubType no esta fase.
+
+### 10. 🔶 Combinaciones: interfaz `cCombo`, ComboType es **int** crudo, arrays paralelos
+- La interfaz es **`cCombo`** (no `cRespCombo`), vía `model.RespCombo`.
+- `GetTypeOAPI(name, ref Int32 ComboType)` devuelve un **entero**, no un enum — este
+  assembly **no expone `eComboType`**. Mapeo OAPI documentado: 0=Linear Additive,
+  1=Envelope, 2=Absolute Add, 3=SRSS, 4=Range Add. El bridge expone **ambos**:
+  `combo_type_code` (el int, hecho puro) y `combo_type` (nombre mapeado; 'Unknown' si el
+  código cae fuera del set conocido, reportado nunca adivinado). Verificado ENVOLVENTE→1.
+- `GetCaseList(name, ref NumberItems, ref eCNameType[] CNameType, ref String[] CName,
+  ref Double[] SF)` → 3 **arrays paralelos** tras el count. A diferencia de los enum
+  escalares, el array enum out **acepta `None`** como placeholder. El bridge consolida en
+  `items=[{case_name, case_type, scale_factor}]` para que el cliente no recomponga
+  índices, y **valida que las longitudes coincidan** (mismatch → `oapi_unexpected_shape`,
+  nunca zip a la más corta). `eCNameType` ∈ {`LoadCase`, `LoadCombo`}: el combo-of-combo
+  es real (p.ej. `D+L` referencia el combo `D`).
+
+### ◾ Observación del modelo (no bug del bridge)
+El modelo TEST_01 tiene **tres** patterns tipo Dead: `DEAD` y `PESO PROPIO` con
+self-weight=1.0, y `MUERTA` con 0.0. Dos patterns con SW=1.0 contarían el peso propio dos
+veces si ambos entraran al mismo combo; el combo `D` usa `PESO PROPIO`+`MUERTA`, así que no
+ocurre. Es característica del modelo del usuario — el bridge lo **expone como hecho**, no lo
+interpreta ni lo corrige. Integridad referencial de combos verificada: cero referencias
+colgantes (todo `LoadCase`→caso existente, todo `LoadCombo`→combo existente).
+
+---
+
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
 
 Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fase.
@@ -84,7 +120,10 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
 - ✅ **Fase 1b** — `get_materials`, `get_section_properties` (dimensiones reales:
   depth/width + propiedades universales área/inercias). **Hecha** (sesión 2); validada
   en vivo. Sección no-rectangular sigue pendiente (dispatch aditivo, ver hallazgo 8).
-- ◾ **Fase 1c** — `get_load_cases`, `get_loads`, `get_combinations`.
+- ✅ **Fase 1c** — `get_load_patterns`, `get_load_cases`, `get_combinations`
+  (DEFINICIONES de carga). **Hecha** (sesión 3); validada en vivo (6 patterns, 7 cases,
+  8 combos; integridad referencial OK). Falta `get_loads` = cargas APLICADAS a objetos
+  (Fase 1c.2), y los detalles internos de un case (patterns/factores que usa).
 - ◾ **Fase 1d** — `run_analysis`, `get_analysis_status`.
 - ◾ **Fase 1e** — `get_displacements`, `get_reactions`, `get_forces`, `get_stresses`.
 - ◾ **Fase 1f** — `get_modal_results`, `get_response_spectrum`.

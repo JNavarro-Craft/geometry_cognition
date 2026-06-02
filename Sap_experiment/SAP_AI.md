@@ -35,6 +35,9 @@ día uno.
 | Catálogo de secciones: nombre + tipo SAP | `GET /v1/sections` | `get_sections` | ✅ 6 secciones Rectangular, Count()==6, vs UI |
 | Catálogo de materiales: nombre, tipo, mecánicas | `GET /v1/materials` | `get_materials` | ✅ 5 materiales; MGP10=NoDesign E=1e9 W=480; Rebar/Tendon mecánicas null (no fabricadas) |
 | Dimensiones + props de UNA sección | `GET /v1/sections/{name}/properties` | `get_section_properties` | ✅ MGP10_33x73 depth=0.073 width=0.033 area=0.002409 (=0.073×0.033) vs cálculo manual |
+| Catálogo de load patterns | `GET /v1/load_patterns` | `get_load_patterns` | ✅ 6 patterns (DEAD/PESO PROPIO/MUERTA/VIVA/VIENTO/NIEVE); types + SW multiplier vs UI |
+| Catálogo de load cases | `GET /v1/load_cases` | `get_load_cases` | ✅ 7 cases (incl. MODAL); overload sin filtro vs UI |
+| Catálogo de combos + composición | `GET /v1/combinations` | `get_combinations` | ✅ 8 combos; arrays paralelos consolidados; ENVOLVENTE=Envelope; combo-of-combo; integridad referencial OK |
 | Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; sección no soportada → `oapi_unexpected_shape` con el tipo |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
@@ -49,7 +52,7 @@ modelo define 6, usa 2 — el bridge expone ambos hechos, el cliente saca la dif
 No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la sesión).
 
 - ◾ **Escritura al modelo** (create_joint/frame, set_section…). Solo lectura.
-- ◾ **Cargas, casos, combinaciones, análisis, resultados, modal.**
+- ◾ **Cargas APLICADAS a objetos** (point/distributed loads), **análisis, resultados, modal.**
 - ◾ **Snapshots / diff.** (Cuando los read-only maduren.)
 - ◾ **Plugins de Rhino sobre el bridge** (Objetivo 2) y **wrappers MCP de plugins**
   (Objetivo 3).
@@ -59,6 +62,12 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 > (área, inercias, etc.) para `Rectangular`. Otras formas devuelven `oapi_unexpected_shape`
 > hasta añadir su extractor (aditivo). Y **materiales** (`get_materials`) exponen tipo +
 > mecánicas básicas. Ambas como hechos: MGP10 se reporta `NoDesign`, no 'timber'.
+
+> Actualización sesión 3 (Fase 1c): las **DEFINICIONES de carga** ya **no** están fuera —
+> `get_load_patterns`, `get_load_cases`, `get_combinations` exponen patterns (tipo + SW),
+> cases (tipo) y combos (tipo + items consolidados). Sigue fuera lo **aplicado** a objetos
+> (Fase 1c.2) y los detalles internos de un case. Como hechos: 'ENVOLVENTE' se reporta
+> combo_type 'Envelope', nunca una etiqueta sísmica; nombres en español relayados verbatim.
 
 ## 🚫 Fuera por principio (leaks — nunca van en el bridge ni el MCP)
 
