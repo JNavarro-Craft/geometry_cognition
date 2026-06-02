@@ -72,6 +72,7 @@ Match on either; the bridge does not interpret the system.
 | Method + Endpoint | MCP tool | Fact returned |
 |---|---|---|
 | `GET /v1/units` | (internal) | active SAP unit system |
+| `GET /v1/model/settings` | `get_model_settings` | active DOFs, lock state, present + database units |
 | `GET /v1/joints` | `get_joints` | points: name, coords, 6-DOF restraints |
 | `GET /v1/frames` | `get_frames` | frames: name, i/j connectivity, section |
 | `GET /v1/sections` | `get_sections` | section catalogue: name + type |
@@ -115,6 +116,35 @@ found.
 
 The active SAP2000 unit system, as a fact. Returns the [`units` object](#the-units-object)
 directly. Triggers an attach if none exists.
+
+### `GET /v1/model/settings`
+
+Model configuration facts: the structural envelope (active DOFs + lock state) and units
+(present + database). No parameters — the model is one.
+
+```json
+{
+  "settings": {
+    "active_dof": [true, false, true, false, true, false],
+    "model_is_locked": false,
+    "present_units": { "present_units": "kgf_m_C", "present_units_code": 8 },
+    "database_units": { "present_units": "kgf_m_C", "present_units_code": 8 }
+  }
+}
+```
+
+- `active_dof`: the raw 6-tuple from `GetActiveDOF`, order `[U1, U2, U3, R1, R2, R3]` —
+  the same index convention as joint restraints/reactions/displacements. The bridge does
+  **not** name a pattern: `[true,false,true,false,true,false]` is reported as-is, never
+  labelled "Plane Frame XZ" or "2D" (the client recognises that from the vector).
+- `model_is_locked`: `true` if analysis results are current (editing would invalidate
+  them).
+- `present_units`: the active "view". `database_units`: the system the model stores data
+  in internally. They may differ; both are reported. Each is a [`units` object](#the-units-object)
+  (so the inner field is named `present_units` for both — the existing units shape, reused).
+- Other settings categories (solver options, mass source, custom coordinate systems,
+  project info, damping) are **not** here — each will be its own primitive when a use case
+  appears. This is a conscious gap, not an omission.
 
 ### `GET /v1/joints`
 

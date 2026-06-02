@@ -29,6 +29,7 @@ día uno.
 |---|---|---|---|
 | Sesión OAPI attach-only vía pythonnet | — | — | ✅ attach a instancia abierta |
 | Unidades activas como hecho | `GET /v1/units` | (interno) | ✅ `kgf_m_C` (code 8) |
+| Config del modelo (DOFs + units) | `GET /v1/model/settings` | `get_model_settings` | ✅ active_dof [T,F,T,F,T,F]; locked; present+database units; sin nombrar el patrón (cliente reconoce Plane Frame) |
 | Salud del bridge (sin attach) | `GET /health` | — | ✅ `sap_attached` + dll resuelta |
 | Puntos: nombre, coords globales, restraints 6-DOF | `GET /v1/joints` | `get_joints` | ✅ 112 joints, 30 con restraint, vs UI |
 | Frames: nombre, conectividad i/j, sección | `GET /v1/frames` | `get_frames` | ✅ 180 frames, conectividad 180/180 vs UI |
@@ -103,6 +104,16 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 > Hecho, no juicio: un displacement grande es un número, no "falla" (anti-patrón #4); las
 > reacciones equilibran las cargas pero ese cross-check lo compone el cliente, no el bridge.
 > Sigue fuera: stresses (1e.2), envelope (1e.3), modal/spectrum (1f).
+
+> Actualización sesión 7 (Fase 1e.5 — último gap de read): `get_model_settings`
+> (`GET /v1/model/settings`) expone el envelope estructural (active_dof + locked) y unidades
+> (present + database). **17 primitivas**; cierra el lado de read antes del diseño del
+> write-side. `active_dof` se relaya como vector crudo [U1..R3] (misma convención que joint
+> restraints) — el bridge **no** lo nombra "Plane Frame"/"2D" (leak interpretativo; el
+> cliente lo deriva). **Gap consciente, no olvido**: otras categorías de settings (solver,
+> mass source, coord systems custom, project info, damping, design prefs) serán primitivas
+> independientes cuando aparezca su caso de uso — no se agruparon en un "settings" genérico
+> para no comprometer un shape antes de tiempo.
 
 ## 🚫 Fuera por principio (leaks — nunca van en el bridge ni el MCP)
 

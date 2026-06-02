@@ -216,6 +216,29 @@ ret≠0 → `oapi_call_failed` con el código; el cliente lo interpreta, el brid
 
 ---
 
+## 🔶 Hallazgos OAPI Fase 1e.5 — model settings (resueltos)
+
+### 17. `GetActiveDOF`, units: las variantes `_2` no existen en SAP26
+- `cAnalyze.GetActiveDOF(ref Boolean[] DOF)` → `(ret, dof[6])` en orden
+  **[U1, U2, U3, R1, R2, R3]** — misma convención de índices que joint restraints/
+  reactions/displacements (consistencia transversal). TEST_01: `[T,F,T,F,T,F]` (U1/U3/R2
+  activos) — el patrón Plane Frame XZ, **reportado como hecho, no nombrado** (el cliente lo
+  reconoce; "Plane Frame" no es vocabulario del bridge).
+- **Las variantes `_2` de units NO existen en este assembly**: solo `GetPresentUnits()` y
+  `GetDatabaseUnits()`, cada una devuelve el `eUnits` completo (que **ya incluye la
+  temperatura** — `kgf_m_C` lleva la C de Celsius), así que no hace falta una lectura de
+  temperatura aparte. El prompt asumía usar `_2`; el plano basta. TEST_01: present ==
+  database == `kgf_m_C` (en este modelo coinciden; el contrato expone ambos por si difieren).
+- `GetModelIsLocked()` callable en cualquier estado. El helper de units se refactorizó a
+  `_units_response(enum)` reutilizable por present y database (sin duplicar code→nombre).
+
+> Nota de shape: `present_units`/`database_units` reutilizan el modelo `UnitsResponse`
+> existente, cuyo campo interno se llama `present_units` — de ahí el anidado
+> `present_units: {present_units: "kgf_m_C", ...}`. Se prefirió reutilizar el contrato a
+> introducir un shape nuevo de units.
+
+---
+
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
 
 Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fase.
