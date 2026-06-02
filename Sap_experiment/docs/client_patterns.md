@@ -93,3 +93,31 @@ Notas:
 - **El prefijo es obligatorio al crear.** El bridge solo crea en su namespace; modificar un objeto preexistente del usuario (sin prefijo) exige `confirm=true`, modificar uno propio no.
 - **Las unidades son responsabilidad del cliente.** `E`, etc. van en las present units del modelo (consultar `get_model_settings`); el bridge no convierte. En `kgf_m_C`, `E` va en kgf/m².
 - **Atómicas, no compuestas.** Si `set_properties` falla tras un `create` exitoso, el material queda creado con defaults — el cliente decide si reintentar, dejarlo, o restaurar.
+
+## Patrón 7: Loop completo de verificación (crear → asignar → analizar → leer → restaurar)
+
+Desde Fase 1g.7 este flujo end-to-end es **ejecutable** con primitivas del bridge — el caso de uso central de un cliente que prueba una hipótesis de diseño sin tocar el modelo permanentemente:
+```
+# 1. red de seguridad
+create_savepoint("hypothesis_X")
+
+# 2. crear la pieza nueva (prefijada) y configurarla
+create_rectangular_section("AI_45x95", material="MGP10", depth=0.045, width=0.095)
+
+# 3. PRE-VALIDAR + dry_run antes del batch (client_patterns #1)
+target_frames = [...]                      # del cliente: get_frames + su lógica de dominio
+assign_section_to_frames("AI_45x95", target_frames, dry_run=True)   # revisar changes/hint
+# 4. aplicar (confirm: toca frames preexistentes)
+assign_section_to_frames("AI_45x95", target_frames, confirm=True)
+
+# 5. analizar con la nueva config
+run_analysis()                             # corre lo pendiente
+# 6. leer resultados y razonar (esto es dominio del cliente, no del bridge)
+for f in target_frames:
+    get_frame_forces(f, "ENVOLVENTE")      # P, V, M en las nuevas secciones
+
+# 7. SIEMPRE restaurar: la hipótesis se probó, el modelo del usuario vuelve a baseline
+restore_savepoint("hypothesis_X", confirm=True)
+#    (tras restore, reabrir el modelo original — la sesión queda en el archivo del savepoint)
+```
+El bridge provee los átomos (crear, asignar, analizar, leer, restaurar); el **cliente compone el experimento y razona sobre los resultados**. El bridge no decide si la sección "mejora" la estructura — eso es interpretación de dominio (anti-patrón #4).

@@ -65,6 +65,8 @@ día uno.
 | 🔶 **set_material_properties_isotropic** | `POST /v1/materials/{name}/properties/isotropic` | `set_material_properties_isotropic` | ✅ confirm solo si preexistente (§5.1); dry_run con diff; G derivado por SAP; present units |
 | 🔶 **create_rectangular_section (CREA)** | `POST /v1/sections` | `create_rectangular_section` | ✅ prefijo + material existe + dims>0; rechaza duplicado (overwrite silencioso); lee color real de SAP |
 | 🔶 **modify_rectangular_section** | `PATCH /v1/sections/{name}` | `modify_rectangular_section` | ✅ merge selectivo; confirm si preexistente; section_type_mismatch / nothing_to_modify |
+| 🔶 **assign_section_to_frames (BATCH)** | `POST /v1/sections/{name}/assign-to-frames` | `assign_section_to_frames` | ✅ 1 sección→N frames; pre-validación estricta; confirm; hint >10; applied/failed_at/not_attempted |
+| 🔶 **assign_sections_to_frames (BATCH het.)** | `POST /v1/sections/assign-batch` | `assign_sections_to_frames` | ✅ mapping frame→sección; loop interno (sin batch nativo OAPI); mismo shape |
 | Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; `case_not_run`, `unsupported_case_type`, `confirm_required`, `savepoint_not_found`, `savepoint_already_exists` |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
@@ -122,6 +124,17 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 > Hecho, no juicio: un displacement grande es un número, no "falla" (anti-patrón #4); las
 > reacciones equilibran las cargas pero ese cross-check lo compone el cliente, no el bridge.
 > Sigue fuera: stresses (1e.2), envelope (1e.3), modal/spectrum (1f).
+
+> Actualización sesión 13 (Fase 1g.7 — primera operación BATCH sobre preexistentes):
+> `assign_section_to_frames` (homogénea, 1 sección→N frames) + `assign_sections_to_frames`
+> (heterogénea, mapping). **28 primitivas**. La OAPI no tiene batch heterogéneo nativo →
+> el bridge compone un loop sobre `SetSection` (§25); la API externa es la misma. Ejercita
+> la decisión #4 (applied/failed_at/not_attempted, stop-on-first-failure): **pre-validación
+> estricta** antes del loop → en flujo normal nunca hay failed_at (reservado para fallo OAPI
+> a mitad de loop). confirm obligatorio; hint >10; idempotencia reportada como aplicada;
+> lee de vuelta cada frame (M2). **Cierra el loop práctico de verificación** (crear sección →
+> asignar → analizar → leer → restaurar), ahora ejecutable — ver client_patterns Patrón 7.
+> Meta-principios M1/M2 formalizados en brechas.
 
 > Actualización sesión 12 (Fase 1g.5 — el patrón create+modify generaliza): segundo object
 > type, secciones rectangulares. `create_rectangular_section` (prefijo + material existente +

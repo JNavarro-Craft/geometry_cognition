@@ -90,6 +90,8 @@ Match on either; the bridge does not interpret the system.
 | `GET /v1/sections/{name}/properties` | `get_section_properties` | dimensions + universal section props |
 | **`POST`** `/v1/sections` | `create_rectangular_section` | **write**: create a rectangular section |
 | **`PATCH`** `/v1/sections/{name}` | `modify_rectangular_section` | **write**: modify a rectangular section |
+| **`POST`** `/v1/sections/{name}/assign-to-frames` | `assign_section_to_frames` | **write (batch)**: one section → many frames |
+| **`POST`** `/v1/sections/assign-batch` | `assign_sections_to_frames` | **write (batch)**: frame→section mapping |
 | `GET /v1/materials` | `get_materials` | material catalogue: type + mechanical facts |
 | **`POST`** `/v1/materials` | `create_material` | **write**: create a material (prefixed) |
 | **`POST`** `/v1/materials/{name}/properties/isotropic` | `set_material_properties_isotropic` | **write**: set isotropic properties |
@@ -783,6 +785,42 @@ Modify a rectangular section — only the fields you pass change (merged with cu
 > confirm (bridge-owned), only `depth` changed (width/material preserved by the merge);
 > `MGP10_33x73` depth change rejected without confirm, applied with confirm; a savepoint
 > reverted both the new section and the `MGP10_33x73` change.
+
+### `POST /v1/sections/{name}/assign-to-frames`  ·  `POST /v1/sections/assign-batch`  *(write — batch)*
+
+The first **batch** writes over pre-existing objects: assign one section to many frames
+(homogeneous), or assign per a frame→section mapping (heterogeneous). The OAPI has no native
+heterogeneous batch (§25), so the bridge composes a loop over `SetSection` — the external
+API is the same in both cases.
+
+```json
+// POST /v1/sections/AI_45x95/assign-to-frames
+{ "frame_names": ["4060", "4061", "4062"], "dry_run": false, "confirm": true }
+
+// POST /v1/sections/assign-batch
+{ "assignments": [
+    { "frame_name": "4070", "section_name": "AI_45x95" },
+    { "frame_name": "4071", "section_name": "MGP10_33x95" }
+  ], "dry_run": false, "confirm": true }
+```
+
+- **Strict pre-validation**: the section(s) and **every** frame must exist before anything
+  is written → else `object_not_found` (listing the missing ones). Empty → `empty_batch`.
+- `confirm` is **mandatory** (the operation modifies pre-existing frames, §5.1). `dry_run`
+  previews per-frame changes; a result affecting **>10** frames carries a `hint` suggesting
+  dry_run (a suggestion, not enforcement).
+- Real run returns `applied` (each frame's `previous_section` → `current_section`, read back
+  from SAP), `failed_at` and `not_attempted`. **In normal flow `failed_at` is `null`** —
+  pre-validation prevents it; it is set only on an unexpected OAPI failure mid-loop, where
+  `applied` holds the frames done and `not_attempted` the rest (stop-on-first-failure,
+  decisión #4). An assignment to a frame that already has the target section is reported as
+  applied (`previous == current`), not skipped.
+
+> Validated on TEST_01: created `AI_test_assign`, assigned it to 5 frames (homogeneous) and
+> a mixed mapping (heterogeneous); a list with a non-existent frame was rejected up front
+> (nothing applied); the >10 hint fired; a savepoint reverted all 8 frame assignments and
+> the test section. This closes the practical verification loop — see client_patterns.md
+> Pattern 7 (create section → assign → analyze → read → restore).
 
 ### `GET /v1/savepoints`
 
