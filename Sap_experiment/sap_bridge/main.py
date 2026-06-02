@@ -43,6 +43,8 @@ from .contracts import (
     SectionsResponse,
     SetActiveDOFRequest,
     SetActiveDOFResponse,
+    SetPresentUnitsRequest,
+    SetPresentUnitsResponse,
     UnitsResponse,
 )
 from .path_resolver import resolve_oapi_dll
@@ -60,6 +62,7 @@ from .primitives import load_cases as load_cases_primitive
 from .primitives import load_patterns as load_patterns_primitive
 from .primitives import materials as materials_primitive
 from .primitives import model_settings as model_settings_primitive
+from .primitives import present_units as present_units_primitive
 from .primitives import savepoints as savepoints_primitive
 from .primitives import section_properties as section_properties_primitive
 from .primitives import sections as sections_primitive
@@ -104,6 +107,7 @@ async def _session_error_handler(_request, exc: SapSessionError) -> JSONResponse
         error_codes.DRY_RUN_VALIDATION_FAILED,
         error_codes.SAVEPOINT_NOT_FOUND,
         error_codes.SAVEPOINT_ALREADY_EXISTS,
+        error_codes.UNKNOWN_UNIT_SYSTEM,
     }
     status = 409 if exc.code in precondition else 502
     logger.warning("session error [%s]: %s", exc.code, exc.message)
@@ -155,6 +159,21 @@ def set_active_dof(request: SetActiveDOFRequest) -> SetActiveDOFResponse:
         model = session.sap_model()
         return active_dof_primitive.set_active_dof(
             model, session.oapi_namespace(), request.active_dof, request.dry_run, request.confirm
+        )
+
+
+@app.post("/v1/model/settings/present_units", response_model=SetPresentUnitsResponse)
+def set_present_units(request: SetPresentUnitsRequest) -> SetPresentUnitsResponse:
+    """Set the model's present (display) units by name (write — global setting). ``units``
+    is an eUnits member name (e.g. 'N_m_C'); an unknown name → unknown_unit_system.
+    ``confirm`` is mandatory (else confirm_required); ``dry_run`` previews. Changing present
+    units reformats how the read-side reports values (a display preference, not a data
+    conversion); database_units is not touched. model_is_locked is unaffected."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return present_units_primitive.set_present_units(
+            model, session.oapi_namespace(), request.units, request.dry_run, request.confirm
         )
 
 

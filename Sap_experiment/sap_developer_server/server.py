@@ -43,6 +43,7 @@ from Sap_experiment.sap_developer_server.tools import (
     restore_savepoint,
     run_analysis,
     set_active_dof,
+    set_present_units,
 )
 
 mcp = FastMCP("sap_developer_server")
@@ -242,6 +243,18 @@ def set_active_dof_tool(active_dof: list[bool], dry_run: bool = False, confirm: 
     or auto-unlock a locked model. Recommended: create_savepoint → dry_run → review →
     confirm → verify → restore_savepoint if unwanted."""
     return set_active_dof(active_dof, dry_run, confirm)
+
+
+@mcp.tool(name="set_present_units")
+def set_present_units_tool(units: str, dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """WRITE (mutates the model; global setting): set the present (display) units by NAME,
+    e.g. 'N_m_C', 'kgf_m_C', 'lb_ft_F'. Unknown name → unknown_unit_system (supported names
+    listed). confirm=true mandatory (else confirm_required); dry_run=true previews with a
+    change_summary 'kgf_m_C → N_m_C'. A display preference — the read-side then reports in
+    the new units (distances stay metres; forces/moments rescale, kgf→N ≈ ×9.81); the bridge
+    converts nothing itself. database_units untouched. Recommended: create_savepoint →
+    dry_run → review → confirm → verify → restore_savepoint if unwanted."""
+    return set_present_units(units, dry_run, confirm)
 
 
 if __name__ == "__main__":

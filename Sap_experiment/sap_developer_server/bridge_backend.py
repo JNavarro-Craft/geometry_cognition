@@ -94,6 +94,16 @@ def set_active_dof_bridge(
     )
 
 
+def set_present_units_bridge(
+    base_url: str, timeout_seconds: float, units: str, dry_run: bool, confirm: bool
+) -> dict[str, Any]:
+    body = json.dumps({"units": units, "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, "/v1/model/settings/present_units", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
 def create_savepoint_bridge(
     base_url: str, timeout_seconds: float, name: str, dry_run: bool
 ) -> dict[str, Any]:

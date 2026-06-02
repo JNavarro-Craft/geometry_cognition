@@ -71,6 +71,10 @@ SAVEPOINT_ALREADY_EXISTS = "savepoint_already_exists"
 """A create_savepoint targets a name whose file already exists. Refused rather than
 overwritten, to avoid silently losing a prior savepoint."""
 
+UNKNOWN_UNIT_SYSTEM = "unknown_unit_system"
+"""set_present_units was given a unit-system name that is not a member of the SAP eUnits
+enum. The message lists the supported names. Client-fixable (fix the name and retry)."""
+
 # Bridge internals
 PYTHONNET_UNAVAILABLE = "pythonnet_unavailable"
 """pythonnet / the SAP2000v1 assembly could not be loaded. The bridge cannot talk

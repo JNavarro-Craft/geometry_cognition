@@ -18,6 +18,7 @@ from .bridge_backend import (
     list_savepoints_bridge,
     restore_savepoint_bridge,
     set_active_dof_bridge,
+    set_present_units_bridge,
     get_distributed_loads_on_frame_bridge,
     get_frame_forces_bridge,
     get_frames_bridge,
@@ -395,5 +396,25 @@ def set_active_dof(active_dof: list[bool], dry_run: bool = False, confirm: bool 
     base_url, timeout = bridge_settings()
     try:
         return set_active_dof_bridge(base_url, timeout, active_dof, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def set_present_units(units: str, dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """Set the model's present (display) units by NAME (WRITE — mutates the model; a global
+    setting). ``units`` is an eUnits member name, e.g. 'N_m_C', 'kgf_m_C', 'lb_ft_F' — an
+    unknown name returns ``unknown_unit_system`` (with the supported names listed).
+    ``confirm=true`` is mandatory (else ``confirm_required``); ``dry_run=true`` previews with a
+    ``change_summary`` like 'kgf_m_C → N_m_C' without applying.
+
+    Changing present units is a DISPLAY preference: it reformats how the read primitives
+    report values (distances stay metres; forces/moments rescale, e.g. kgf → N ≈ ×9.81).
+    The bridge converts nothing itself; it sets the system and the read-side reports in it.
+    database_units is not touched. Recommended flow (client_patterns.md): create_savepoint →
+    dry_run → review → confirm → verify → restore_savepoint if unwanted.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return set_present_units_bridge(base_url, timeout, units, dry_run, confirm)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)

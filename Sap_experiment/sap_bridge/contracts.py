@@ -588,3 +588,45 @@ class SetActiveDOFResponse(BaseModel):
     would_apply: ActiveDOFChange | None = None
     applied: ActiveDOFChange | None = None
     model_is_locked: bool | None = Field(None, description="Lock state after the operation")
+
+
+# --- Write-side: set_present_units (Fase 1g.3) -------------------------------
+# Second global-setting write — same template as set_active_dof. Changing present units is
+# a DISPLAY preference (it reformats how values are reported), not a data conversion; the
+# read-side then reports in the new system. database_units is NOT touched (that would
+# convert stored data — out of scope).
+
+
+class SetPresentUnitsRequest(BaseModel):
+    """Body for POST /v1/model/settings/present_units. ``units`` is the eUnits member NAME
+    (e.g. 'N_m_C', 'kgf_m_C') — the bridge resolves name → enum. ``confirm`` mandatory
+    (global setting); ``dry_run`` previews."""
+
+    units: str = Field(..., description="Unit-system name (eUnits member, e.g. 'N_m_C')")
+    dry_run: bool = Field(False, description="If true, preview the change without applying")
+    confirm: bool = Field(False, description="Must be true to apply (global setting)")
+
+
+class UnitsChange(BaseModel):
+    """A present-units change as facts: the units before/after (name + code) and a summary.
+
+    Each units value reuses the existing UnitsResponse shape (name in ``present_units``,
+    int in ``present_units_code``) so the units contract stays consistent across endpoints.
+    """
+
+    current_units: UnitsResponse | None = Field(None, description="Current units (dry-run)")
+    new_units: UnitsResponse | None = Field(None, description="Target units (dry-run)")
+    previous_units: UnitsResponse | None = Field(None, description="Units before applying (real)")
+    change_summary: str = Field(..., description="e.g. 'kgf_m_C → N_m_C'")
+
+
+class SetPresentUnitsResponse(BaseModel):
+    """Result of set_present_units. Dry-run: ``would_apply`` (current/new/summary),
+    ``applied`` null. Real run: ``applied`` (previous/current/summary). ``model_is_locked``
+    echoed as a fact (changing present units does not change the lock state)."""
+
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: UnitsChange | None = None
+    applied: UnitsChange | None = None
+    model_is_locked: bool | None = Field(None, description="Lock state after the operation")
