@@ -43,10 +43,28 @@ logger = logging.getLogger("sap_bridge.primitives.savepoints")
 _SP_INFIX = "__sp_"
 
 
-def _model_paths(sap_model: Any) -> tuple[str, str, str]:
-    """Return (original_model_path, model_dir, model_name) for the loaded model.
+def _base_model_name(stem: str) -> str:
+    """Strip any ``__sp_*`` suffix chain from a filename stem to recover the BASE model name.
 
-    Raises NO_MODEL_OPEN if the model has no on-disk path (a never-saved new model).
+    After a restore, the session is loaded on ``<base>__sp_<name>.sdb``; without this, a
+    subsequent create/restore would nest names recursively (``__sp_X__sp_Y`` — the §26 bug).
+    Cutting at the FIRST ``__sp_`` recovers the base in every case, including deep nesting:
+    ``TEST_01``→``TEST_01``; ``TEST_01__sp_v1``→``TEST_01``;
+    ``TEST_01__sp_v1__sp_v2``→``TEST_01``. ``__sp_`` is a bridge-reserved suffix
+    (write_side_design.md; a model legitimately named with ``__sp_`` would be misread —
+    known limitation).
+    """
+    idx = stem.find(_SP_INFIX)
+    return stem[:idx] if idx != -1 else stem
+
+
+def _model_paths(sap_model: Any) -> tuple[str, str, str]:
+    """Return (loaded_path, model_dir, base_model_name) for the loaded model.
+
+    ``loaded_path`` is the file the session is actually on (may be a ``__sp_*`` savepoint
+    after a restore); ``base_model_name`` strips any ``__sp_*`` chain so savepoint names
+    are always built against the BASE model and never nest (§26 fix). Raises NO_MODEL_OPEN
+    if the model has no on-disk path (a never-saved new model).
     """
     path = sap_model.GetModelFilename(True)
     if not path or not os.path.isabs(path):
@@ -55,7 +73,7 @@ def _model_paths(sap_model: Any) -> tuple[str, str, str]:
             "the open model has no saved path; save it in SAP before using savepoints",
         )
     model_dir = os.path.dirname(path)
-    model_name = os.path.splitext(os.path.basename(path))[0]
+    model_name = _base_model_name(os.path.splitext(os.path.basename(path))[0])
     return path, model_dir, model_name
 
 
@@ -92,7 +110,10 @@ def create_savepoint(sap_model: Any, name: str, dry_run: bool) -> SavepointCreat
     Audited (write_side_design.md logging).
     """
     with audited("create_savepoint", {"name": name, "dry_run": dry_run}) as ctx:
-        original, model_dir, model_name = _model_paths(sap_model)
+        # ``loaded`` = the file the session is on now (preserved by reopening it after Save);
+        # ``model_name`` is the BASE name (stripped of any __sp_*), so the savepoint name
+        # never nests (§26 fix).
+        loaded, model_dir, model_name = _model_paths(sap_model)
         sp_path = _savepoint_path(model_dir, model_name, name)
 
         if os.path.exists(sp_path):
@@ -109,7 +130,7 @@ def create_savepoint(sap_model: Any, name: str, dry_run: bool) -> SavepointCreat
                     f"savepoint directory is not writable: {model_dir}",
                 )
             # Estimate size from the current model file (the savepoint is a copy of it).
-            est = os.path.getsize(original) if os.path.exists(original) else 0
+            est = os.path.getsize(loaded) if os.path.exists(loaded) else 0
             ctx["result"] = "preview_only"
             ctx["result_details"] = {"target_path": sp_path, "estimated_size_bytes": est}
             return SavepointCreateResponse(
@@ -119,19 +140,19 @@ def create_savepoint(sap_model: Any, name: str, dry_run: bool) -> SavepointCreat
             )
 
         # Real write. Save acts like Save As (it repoints the in-memory model), so save to
-        # the savepoint and then reopen the original to leave the session on the user's model.
+        # the savepoint and then reopen the file the session was on, preserving its state.
         sret = sap_model.File.Save(sp_path)
         if sret != 0:
             raise SapSessionError(
                 error_codes.OAPI_CALL_FAILED,
                 f"cFile.Save('{sp_path}') returned {sret}",
             )
-        oret = sap_model.File.OpenFile(original)
+        oret = sap_model.File.OpenFile(loaded)
         if oret != 0:
             raise SapSessionError(
                 error_codes.OAPI_CALL_FAILED,
-                f"savepoint written but reopening the original returned {oret}; the session "
-                f"may be pointing at the savepoint ({sp_path}) — reopen {original} in SAP",
+                f"savepoint written but reopening the loaded model returned {oret}; the "
+                f"session may be pointing at the savepoint ({sp_path}) — reopen {loaded} in SAP",
             )
         if not os.path.exists(sp_path):
             raise SapSessionError(
