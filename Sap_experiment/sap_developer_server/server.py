@@ -45,10 +45,12 @@ from Sap_experiment.sap_developer_server.tools import (
     get_sections,
     list_savepoints,
     modify_rectangular_section,
+    open_model,
     restore_savepoint,
     run_analysis,
     set_active_dof,
     set_material_properties_isotropic,
+    set_model_locked,
     set_present_units,
 )
 
@@ -337,6 +339,24 @@ def assign_sections_to_frames_tool(
     failed_at/not_attempted shape as assign_section_to_frames. The bridge loops internally
     (no native heterogeneous batch in the OAPI)."""
     return assign_sections_to_frames(assignments, dry_run, confirm)
+
+
+@mcp.tool(name="set_model_locked")
+def set_model_locked_tool(locked: bool, dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """WRITE (global state): set the model lock. run_analysis LOCKS the model and SAP then
+    rejects model edits (create/assign/modify) → oapi_call_failed. Call set_model_locked(false,
+    confirm=true) to UNLOCK and keep modifying — this closes an iterative write→analyze→write
+    loop. confirm=true mandatory; dry_run previews; idempotent. The bridge does NOT auto-unlock."""
+    return set_model_locked(locked, dry_run, confirm)
+
+
+@mcp.tool(name="open_model")
+def open_model_tool(path: str, dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """WRITE: open a model, REPLACING the loaded one. path must be an ABSOLUTE .sdb that exists
+    (else invalid_path / file_not_found — checked before opening). confirm=true mandatory
+    (discards unsaved changes); dry_run previews. Main use: after restore_savepoint the session
+    is on the savepoint file — call open_model(<base model path>) to return to the original."""
+    return open_model(path, dry_run, confirm)
 
 
 if __name__ == "__main__":

@@ -95,6 +95,13 @@ NOTHING_TO_MODIFY = "nothing_to_modify"
 EMPTY_BATCH = "empty_batch"
 """A batch write was called with an empty list of items (no frames / no assignments)."""
 
+FILE_NOT_FOUND = "file_not_found"
+"""open_model was given a path that does not exist on disk. Checked by the bridge before
+calling OpenFile (SAP would otherwise leave the session pointing at a phantom file)."""
+
+INVALID_PATH = "invalid_path"
+"""open_model was given a path that is not absolute or does not end in .sdb."""
+
 # Bridge internals
 PYTHONNET_UNAVAILABLE = "pythonnet_unavailable"
 """pythonnet / the SAP2000v1 assembly could not be loaded. The bridge cannot talk

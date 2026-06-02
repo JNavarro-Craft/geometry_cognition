@@ -33,7 +33,11 @@ from .contracts import (
     LoadPatternsResponse,
     MaterialsResponse,
     ModelSettingsResponse,
+    OpenModelRequest,
+    OpenModelResponse,
     PointLoadsResponse,
+    SetModelLockedRequest,
+    SetModelLockedResponse,
     SavepointCreateRequest,
     SavepointCreateResponse,
     SavepointListResponse,
@@ -74,6 +78,7 @@ from .primitives import load_patterns as load_patterns_primitive
 from .primitives import materials as materials_primitive
 from .primitives import materials_write as materials_write_primitive
 from .primitives import model_settings as model_settings_primitive
+from .primitives import model_state as model_state_primitive
 from .primitives import present_units as present_units_primitive
 from .primitives import savepoints as savepoints_primitive
 from .primitives import section_assignment as section_assignment_primitive
@@ -127,6 +132,8 @@ async def _session_error_handler(_request, exc: SapSessionError) -> JSONResponse
         error_codes.SECTION_TYPE_MISMATCH,
         error_codes.NOTHING_TO_MODIFY,
         error_codes.EMPTY_BATCH,
+        error_codes.FILE_NOT_FOUND,
+        error_codes.INVALID_PATH,
     }
     status = 409 if exc.code in precondition else 502
     logger.warning("session error [%s]: %s", exc.code, exc.message)
@@ -193,6 +200,35 @@ def set_present_units(request: SetPresentUnitsRequest) -> SetPresentUnitsRespons
         model = session.sap_model()
         return present_units_primitive.set_present_units(
             model, session.oapi_namespace(), request.units, request.dry_run, request.confirm
+        )
+
+
+@app.post("/v1/model/locked", response_model=SetModelLockedResponse)
+def set_model_locked(request: SetModelLockedRequest) -> SetModelLockedResponse:
+    """Set the model lock state (write — global state). ``confirm`` mandatory (else
+    confirm_required); ``dry_run`` previews; idempotent. run_analysis locks the model and SAP
+    rejects edits while locked — call this with locked=false to keep modifying. The bridge
+    does NOT auto-unlock on other writes."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return model_state_primitive.set_model_locked(
+            model, request.locked, request.dry_run, request.confirm
+        )
+
+
+@app.post("/v1/model/open", response_model=OpenModelResponse)
+def open_model(request: OpenModelRequest) -> OpenModelResponse:
+    """Open a model, replacing the loaded one (write). ``path`` must be an absolute .sdb that
+    exists (else invalid_path / file_not_found — checked before OpenFile so SAP never lands on
+    a phantom path). ``confirm`` mandatory (discards unsaved changes); ``dry_run`` previews.
+    Useful to recover the base model after a restore (savepoints leave the session on the
+    savepoint file)."""
+    session = get_session()
+    with session.lock():
+        session.sap_model()  # ensure attached
+        return model_state_primitive.open_model(
+            session.sap_model, request.path, request.dry_run, request.confirm
         )
 
 

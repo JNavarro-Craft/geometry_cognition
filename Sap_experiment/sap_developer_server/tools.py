@@ -21,7 +21,9 @@ from .bridge_backend import (
     get_model_settings_bridge,
     list_savepoints_bridge,
     modify_rectangular_section_bridge,
+    open_model_bridge,
     restore_savepoint_bridge,
+    set_model_locked_bridge,
     set_active_dof_bridge,
     set_material_properties_isotropic_bridge,
     set_present_units_bridge,
@@ -422,6 +424,38 @@ def set_present_units(units: str, dry_run: bool = False, confirm: bool = False) 
     base_url, timeout = bridge_settings()
     try:
         return set_present_units_bridge(base_url, timeout, units, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def set_model_locked(locked: bool, dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """Set the model lock state (WRITE — global state). ``run_analysis`` LOCKS the model and
+    SAP then rejects edits to the model definition (create/assign/modify) with oapi_call_failed.
+    Call this with ``locked=false`` (and ``confirm=true``) to UNLOCK and keep modifying — this is
+    how you close an iterative write→analyze→write loop. ``confirm=true`` is mandatory (global
+    state); ``dry_run=true`` previews; idempotent (setting the current value is a valid no-op).
+    The bridge does NOT auto-unlock for you — that keeps every primitive predictable.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return set_model_locked_bridge(base_url, timeout, locked, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def open_model(path: str, dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """Open a model, REPLACING the currently loaded one (WRITE). ``path`` must be an ABSOLUTE
+    .sdb path that exists on disk (else ``invalid_path`` / ``file_not_found`` — the bridge checks
+    before opening so SAP never ends up on a phantom file). ``confirm=true`` is mandatory (it
+    discards unsaved changes); ``dry_run=true`` previews.
+
+    Main use: after restore_savepoint the session is loaded on the savepoint file; call
+    open_model(<base model path>) to return to the original model. Also for switching models or
+    recovering from an unexpected state.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return open_model_bridge(base_url, timeout, path, dry_run, confirm)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)
 

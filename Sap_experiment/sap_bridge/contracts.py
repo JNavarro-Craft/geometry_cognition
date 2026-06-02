@@ -869,3 +869,57 @@ class AssignmentResponse(BaseModel):
     failed_at: BatchFailure | None = None
     not_attempted: list[str] | None = None
     hint: str | None = Field(None, description="Suggestion to use dry_run for large batches (>10)")
+
+
+# --- Write-side: model state — lock + open_model (Fase 1g.8) ------------------
+# State-level primitives (distinct from model_settings, which reads/sets configurable
+# settings). They make the iterative write→analyze→write loop robust (§26 blockers).
+
+
+class SetModelLockedRequest(BaseModel):
+    """Body for POST /v1/model/locked. ``confirm`` mandatory (global state toggle, §5.3);
+    ``dry_run`` previews. Idempotent — applying the current value is a valid no-op."""
+
+    locked: bool = Field(..., description="Target lock state")
+    dry_run: bool = Field(False, description="If true, preview without applying")
+    confirm: bool = Field(False, description="Mandatory to apply (global state)")
+
+
+class ModelLockChange(BaseModel):
+    """The lock change as facts: state before/after. ``current_locked`` is read back."""
+
+    previous_locked: bool | None = Field(None, description="Lock state before (real run)")
+    current_locked: bool | None = Field(None, description="Current lock state (dry-run shows it)")
+    new_locked: bool | None = Field(None, description="Target lock state (dry-run preview)")
+
+
+class SetModelLockedResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: ModelLockChange | None = None
+    applied: ModelLockChange | None = None
+
+
+class OpenModelRequest(BaseModel):
+    """Body for POST /v1/model/open. ``path`` must be an absolute .sdb path that exists.
+    ``confirm`` mandatory (replaces the loaded model, discarding unsaved changes);
+    ``dry_run`` previews."""
+
+    path: str = Field(..., description="Absolute path to the .sdb to open")
+    dry_run: bool = Field(False, description="If true, preview without opening")
+    confirm: bool = Field(False, description="Mandatory: replaces the loaded model")
+
+
+class ModelOpenChange(BaseModel):
+    """The model-open change as facts: paths before/after (read back from SAP)."""
+
+    previous_model_path: str | None = Field(None, description="Path loaded before (real run)")
+    current_model_path: str | None = Field(None, description="Path loaded after / current")
+    new_model_path: str | None = Field(None, description="Path to open (dry-run preview)")
+
+
+class OpenModelResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: ModelOpenChange | None = None
+    applied: ModelOpenChange | None = None
