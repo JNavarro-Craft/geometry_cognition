@@ -22,6 +22,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from Sap_experiment.sap_developer_server.tools import (
+    create_material,
     create_savepoint,
     get_analysis_status,
     get_combinations,
@@ -43,6 +44,7 @@ from Sap_experiment.sap_developer_server.tools import (
     restore_savepoint,
     run_analysis,
     set_active_dof,
+    set_material_properties_isotropic,
     set_present_units,
 )
 
@@ -255,6 +257,31 @@ def set_present_units_tool(units: str, dry_run: bool = False, confirm: bool = Fa
     converts nothing itself. database_units untouched. Recommended: create_savepoint →
     dry_run → review → confirm → verify → restore_savepoint if unwanted."""
     return set_present_units(units, dry_run, confirm)
+
+
+@mcp.tool(name="create_material")
+def create_material_tool(name: str, material_type: str, dry_run: bool = False) -> dict[str, Any]:
+    """WRITE (new object): create a material. name MUST start with the bridge prefix (default
+    'AI_') else prefix_required. material_type is an eMatType name: Steel, Concrete, NoDesign,
+    Aluminum, ColdFormed, Rebar, Tendon, Masonry — NO 'Wood' in SAP (use 'NoDesign' for
+    timber); unknown → unknown_material_type. Existing name → name_already_exists (SAP would
+    overwrite silently). No confirm. dry_run previews. New material has only defaults — call
+    set_material_properties_isotropic next."""
+    return create_material(name, material_type, dry_run)
+
+
+@mcp.tool(name="set_material_properties_isotropic")
+def set_material_properties_isotropic_tool(
+    name: str, E: float, poisson_ratio: float, thermal_coef: float,
+    dry_run: bool = False, confirm: bool = False
+) -> dict[str, Any]:
+    """WRITE: set a material's isotropic properties (E, poisson_ratio, thermal_coef). Material
+    must exist (else object_not_found). confirm=true required only for a NON-bridge
+    (pre-existing) material like 'MGP10' (§5.1); a bridge-owned 'AI_' material needs none.
+    dry_run previews with a per-field diff. Values are in the model's PRESENT UNITS — know
+    what those are (get_model_settings); the bridge converts nothing. SAP derives G from E and
+    poisson_ratio."""
+    return set_material_properties_isotropic(name, E, poisson_ratio, thermal_coef, dry_run, confirm)
 
 
 if __name__ == "__main__":

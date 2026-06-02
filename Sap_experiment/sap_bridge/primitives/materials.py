@@ -104,3 +104,31 @@ def get_materials(sap_model: Any, oapi_namespace: Any) -> list[Material]:
             )
         )
     return materials
+
+
+def list_material_names(sap_model: Any) -> list[str]:
+    """Just the material names (for uniqueness / existence checks by write primitives)."""
+    ret, number, names = sap_model.PropMaterial.GetNameList(0, None)
+    if ret != 0:
+        raise SapSessionError(
+            error_codes.OAPI_CALL_FAILED, f"PropMaterial.GetNameList returned {ret}"
+        )
+    return [str(names[i]) for i in range(number)] if number else []
+
+
+def material_type_names(oapi_namespace: Any) -> list[str]:
+    """The eMatType member names this assembly supports (Steel, Concrete, NoDesign, …).
+    Read off the live enum so it matches exactly what the read-side reports — no table.
+    NOTE: there is NO 'Wood' member in SAP26 (brechas §23); timber is modelled as
+    'NoDesign' (that is what MGP10 uses)."""
+    import clr  # type: ignore
+    import System  # type: ignore
+
+    return list(System.Enum.GetNames(clr.GetClrType(oapi_namespace.eMatType)))
+
+
+def resolve_material_type(oapi_namespace: Any, type_name: str) -> Any | None:
+    """Resolve an eMatType NAME to its enum member, or None if unknown. Inverse of what
+    the read-side exposes (mat_type via str(enum)); via getattr on the live enum, so the
+    accepted set is exactly SAP's. SetMaterial needs the MEMBER, not an int."""
+    return getattr(oapi_namespace.eMatType, type_name, None)

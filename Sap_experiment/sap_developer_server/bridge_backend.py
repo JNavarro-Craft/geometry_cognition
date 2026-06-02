@@ -104,6 +104,32 @@ def set_present_units_bridge(
     )
 
 
+def create_material_bridge(
+    base_url: str, timeout_seconds: float, name: str, material_type: str, dry_run: bool
+) -> dict[str, Any]:
+    body = json.dumps(
+        {"name": name, "material_type": material_type, "dry_run": dry_run}
+    ).encode("utf-8")
+    return _bridge_json_request(
+        base_url, "/v1/materials", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
+def set_material_properties_isotropic_bridge(
+    base_url: str, timeout_seconds: float, name: str, E: float, poisson_ratio: float,
+    thermal_coef: float, dry_run: bool, confirm: bool
+) -> dict[str, Any]:
+    path = f"/v1/materials/{quote(name, safe='')}/properties/isotropic"
+    body = json.dumps({
+        "E": E, "poisson_ratio": poisson_ratio, "thermal_coef": thermal_coef,
+        "dry_run": dry_run, "confirm": confirm,
+    }).encode("utf-8")
+    return _bridge_json_request(
+        base_url, path, timeout_seconds, method="POST", body=body, content_type="application/json",
+    )
+
+
 def create_savepoint_bridge(
     base_url: str, timeout_seconds: float, name: str, dry_run: bool
 ) -> dict[str, Any]:

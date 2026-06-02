@@ -630,3 +630,84 @@ class SetPresentUnitsResponse(BaseModel):
     would_apply: UnitsChange | None = None
     applied: UnitsChange | None = None
     model_is_locked: bool | None = Field(None, description="Lock state after the operation")
+
+
+# --- Write-side: create_material + isotropic properties (Fase 1g.4) ----------
+# First write over individual OBJECTS. create_material enforces the namespace prefix
+# (write_side_design.md §1) — the bridge only creates in its own namespace. Creating an
+# object and setting its properties are SEPARATE atomic primitives (no composite).
+
+
+class CreateMaterialRequest(BaseModel):
+    """Body for POST /v1/materials. ``name`` must carry the bridge prefix (else
+    prefix_required). ``material_type`` is an eMatType member NAME (e.g. 'Steel',
+    'Concrete', 'NoDesign' — note SAP26 has no 'Wood'). No confirm needed (creating a new
+    prefixed object). ``dry_run`` previews."""
+
+    name: str = Field(..., description="New material name; must start with the bridge prefix")
+    material_type: str = Field(..., description="eMatType member name (e.g. 'NoDesign')")
+    dry_run: bool = Field(False, description="If true, preview without creating")
+
+
+class MaterialCreation(BaseModel):
+    """The created (or to-be-created) material as facts: name, type name and raw type code.
+
+    A freshly created material has only default/empty mechanical properties — call
+    set_material_properties_isotropic next to make it usable (atomic separation).
+    """
+
+    name: str
+    material_type: str = Field(..., description="eMatType member name")
+    type_code: int = Field(..., description="Raw eMatType integer value")
+
+
+class CreateMaterialResponse(BaseModel):
+    """Result of create_material. Dry-run: ``would_apply``, ``applied`` null; real run the
+    reverse. No confirm (create of a prefixed object is non-destructive)."""
+
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: MaterialCreation | None = None
+    applied: MaterialCreation | None = None
+
+
+class IsotropicProperties(BaseModel):
+    """Isotropic mechanical properties, in the model's present units. ``shear_modulus`` is
+    derived by SAP from E and nu (G = E / (2(1+nu))); reported as a fact, not an input."""
+
+    e: float = Field(..., description="Modulus of elasticity E, present units")
+    poisson_ratio: float = Field(..., description="Poisson's ratio U (dimensionless)")
+    thermal_coef: float = Field(..., description="Thermal expansion coefficient A")
+    shear_modulus: float | None = Field(None, description="Shear modulus G (derived by SAP)")
+
+
+class SetMaterialPropertiesIsotropicRequest(BaseModel):
+    """Body for POST /v1/materials/{name}/properties/isotropic. ``confirm`` is required only
+    when ``name`` has no bridge prefix (modifying a pre-existing material, §5.1); for a
+    bridge-owned material it is not. ``dry_run`` previews. Values are in the present units —
+    the client is responsible for knowing what those are (the bridge converts nothing)."""
+
+    E: float = Field(..., description="Modulus of elasticity, present units")
+    poisson_ratio: float = Field(..., description="Poisson's ratio")
+    thermal_coef: float = Field(..., description="Thermal expansion coefficient")
+    dry_run: bool = Field(False, description="If true, preview without applying")
+    confirm: bool = Field(False, description="Required to modify a non-bridge (pre-existing) material")
+
+
+class IsotropicPropertiesChange(BaseModel):
+    """The properties change as facts: before/after sets and a readable per-field diff."""
+
+    current_properties: IsotropicProperties | None = Field(None, description="Current (dry-run)")
+    new_properties: IsotropicProperties | None = Field(None, description="Proposed (dry-run)")
+    previous_properties: IsotropicProperties | None = Field(None, description="Before (real run)")
+    changes: list[str] = Field(..., description="Per-field diffs, e.g. ['E: 8.5e9 → 9.0e9']")
+
+
+class SetMaterialPropertiesIsotropicResponse(BaseModel):
+    """Result of set_material_properties_isotropic. Dry-run: ``would_apply``
+    (current/new/changes); real run: ``applied`` (previous/current/changes)."""
+
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: IsotropicPropertiesChange | None = None
+    applied: IsotropicPropertiesChange | None = None

@@ -11,6 +11,7 @@ from typing import Any
 
 from .bridge_backend import (
     bridge_settings,
+    create_material_bridge,
     create_savepoint_bridge,
     get_analysis_status_bridge,
     get_combinations_bridge,
@@ -18,6 +19,7 @@ from .bridge_backend import (
     list_savepoints_bridge,
     restore_savepoint_bridge,
     set_active_dof_bridge,
+    set_material_properties_isotropic_bridge,
     set_present_units_bridge,
     get_distributed_loads_on_frame_bridge,
     get_frame_forces_bridge,
@@ -416,5 +418,47 @@ def set_present_units(units: str, dry_run: bool = False, confirm: bool = False) 
     base_url, timeout = bridge_settings()
     try:
         return set_present_units_bridge(base_url, timeout, units, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def create_material(name: str, material_type: str, dry_run: bool = False) -> dict[str, Any]:
+    """Create a material (WRITE — new object). ``name`` MUST start with the bridge namespace
+    prefix (default 'AI_') — otherwise ``prefix_required``. ``material_type`` is an eMatType
+    member name: 'Steel', 'Concrete', 'NoDesign', 'Aluminum', 'ColdFormed', 'Rebar',
+    'Tendon', 'Masonry' — there is NO 'Wood' in SAP (use 'NoDesign' for timber); an unknown
+    type → ``unknown_material_type`` (lists the valid names). An existing name →
+    ``name_already_exists`` (SAP would otherwise overwrite it silently). No confirm needed
+    (creating a new prefixed object). ``dry_run=true`` previews.
+
+    A freshly created material has only default properties — call
+    set_material_properties_isotropic next to make it usable (create + set is the client's
+    composition; see client_patterns.md Pattern 4).
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return create_material_bridge(base_url, timeout, name, material_type, dry_run)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def set_material_properties_isotropic(
+    name: str, E: float, poisson_ratio: float, thermal_coef: float,
+    dry_run: bool = False, confirm: bool = False
+) -> dict[str, Any]:
+    """Set a material's isotropic mechanical properties (WRITE). The material must exist
+    (else ``object_not_found``). ``confirm=true`` is required only when modifying a
+    NON-bridge (pre-existing) material like 'MGP10' (§5.1); a bridge-owned material (prefix
+    'AI_') needs none. ``dry_run=true`` previews with a per-field diff.
+
+    ``E`` (modulus), ``poisson_ratio`` and ``thermal_coef`` are in the model's PRESENT
+    UNITS — you must know what those are (check get_model_settings); the bridge converts
+    nothing. SAP derives the shear modulus G from E and poisson_ratio.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return set_material_properties_isotropic_bridge(
+            base_url, timeout, name, E, poisson_ratio, thermal_coef, dry_run, confirm
+        )
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)

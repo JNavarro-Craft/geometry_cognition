@@ -39,10 +39,14 @@ from .contracts import (
     SavepointListResponse,
     SavepointRestoreRequest,
     SavepointRestoreResponse,
+    CreateMaterialRequest,
+    CreateMaterialResponse,
     SectionPropertiesResponse,
     SectionsResponse,
     SetActiveDOFRequest,
     SetActiveDOFResponse,
+    SetMaterialPropertiesIsotropicRequest,
+    SetMaterialPropertiesIsotropicResponse,
     SetPresentUnitsRequest,
     SetPresentUnitsResponse,
     UnitsResponse,
@@ -61,6 +65,7 @@ from .primitives import load_case_details as load_case_details_primitive
 from .primitives import load_cases as load_cases_primitive
 from .primitives import load_patterns as load_patterns_primitive
 from .primitives import materials as materials_primitive
+from .primitives import materials_write as materials_write_primitive
 from .primitives import model_settings as model_settings_primitive
 from .primitives import present_units as present_units_primitive
 from .primitives import savepoints as savepoints_primitive
@@ -108,6 +113,7 @@ async def _session_error_handler(_request, exc: SapSessionError) -> JSONResponse
         error_codes.SAVEPOINT_NOT_FOUND,
         error_codes.SAVEPOINT_ALREADY_EXISTS,
         error_codes.UNKNOWN_UNIT_SYSTEM,
+        error_codes.UNKNOWN_MATERIAL_TYPE,
     }
     status = 409 if exc.code in precondition else 502
     logger.warning("session error [%s]: %s", exc.code, exc.message)
@@ -278,6 +284,41 @@ def get_materials() -> MaterialsResponse:
         present_units = units_primitive.get_present_units(model)
         rows = materials_primitive.get_materials(model, session.oapi_namespace())
         return MaterialsResponse(units=present_units, count=len(rows), materials=rows)
+
+
+@app.post("/v1/materials", response_model=CreateMaterialResponse)
+def create_material(request: CreateMaterialRequest) -> CreateMaterialResponse:
+    """Create a material (write — new object). ``name`` must carry the bridge namespace
+    prefix (else prefix_required); ``material_type`` is an eMatType member name (unknown →
+    unknown_material_type; SAP26 has no 'Wood'). An existing name → name_already_exists (SAP
+    would otherwise overwrite silently). No confirm (new prefixed object). ``dry_run``
+    previews. A new material has only defaults — set its properties next."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return materials_write_primitive.create_material(
+            model, session.oapi_namespace(), request.name, request.material_type, request.dry_run
+        )
+
+
+@app.post(
+    "/v1/materials/{name}/properties/isotropic",
+    response_model=SetMaterialPropertiesIsotropicResponse,
+)
+def set_material_properties_isotropic(
+    name: str, request: SetMaterialPropertiesIsotropicRequest
+) -> SetMaterialPropertiesIsotropicResponse:
+    """Set a material's isotropic properties (write). The material must exist (else
+    object_not_found). ``confirm`` is required only for a NON-bridge (pre-existing) material
+    (§5.1); a bridge-owned one needs none. ``dry_run`` previews. E/poisson/thermal are in
+    the present units — the client must know what those are; the bridge converts nothing."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return materials_write_primitive.set_material_properties_isotropic(
+            model, name, request.E, request.poisson_ratio, request.thermal_coef,
+            request.dry_run, request.confirm,
+        )
 
 
 @app.get("/v1/load_patterns", response_model=LoadPatternsResponse)
