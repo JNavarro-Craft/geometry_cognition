@@ -157,6 +157,14 @@ class SapSession:
         """Process-wide lock guarding OAPI calls (COM is single-threaded)."""
         return self._lock
 
+    def oapi_namespace(self) -> Any:
+        """The loaded SAP2000v1 module (for enum access, e.g. eFramePropType).
+        Loads it on demand if not yet attached."""
+        with self._lock:
+            if self._oapi is None:
+                self._oapi = _load_oapi_namespace()
+            return self._oapi
+
     def detach(self) -> None:
         """Release the session WITHOUT closing SAP2000. The user owns the process;
         attach-only means we never call ApplicationExit."""

@@ -19,7 +19,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from Sap_experiment.sap_developer_server.tools import get_frames, get_joints
+from Sap_experiment.sap_developer_server.tools import get_frames, get_joints, get_sections
 
 mcp = FastMCP("sap_developer_server")
 
@@ -39,6 +39,14 @@ def get_frames_tool() -> dict[str, Any]:
     matching get_joints names — join on them for coordinates) and the assigned
     section property. Facts only — no chord/strut/diagonal classification."""
     return get_frames()
+
+
+@mcp.tool(name="get_sections")
+def get_sections_tool() -> dict[str, Any]:
+    """The frame section property catalogue defined in the model: each section's name
+    and SAP prop_type. Names are model-supplied labels relayed verbatim — no
+    interpretation, no dimensions. Cross-reference get_frames for which are used."""
+    return get_sections()
 
 
 if __name__ == "__main__":

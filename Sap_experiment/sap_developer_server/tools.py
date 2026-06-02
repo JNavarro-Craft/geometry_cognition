@@ -13,6 +13,7 @@ from .bridge_backend import (
     bridge_settings,
     get_frames_bridge,
     get_joints_bridge,
+    get_sections_bridge,
 )
 
 
@@ -52,5 +53,21 @@ def get_frames() -> dict[str, Any]:
     base_url, timeout = bridge_settings()
     try:
         return get_frames_bridge(base_url, timeout)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def get_sections() -> dict[str, Any]:
+    """The frame section property catalogue defined in the open SAP model: each
+    section's ``name`` and its SAP ``prop_type`` (e.g. 'Rectangular').
+
+    Facts only. Section names are model-supplied labels relayed verbatim — the MCP
+    does not interpret them or resolve their geometric dimensions. To know which
+    sections are actually *used*, cross-reference with get_frames (the ``section``
+    field there); this tool lists what is *defined*.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return get_sections_bridge(base_url, timeout)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)

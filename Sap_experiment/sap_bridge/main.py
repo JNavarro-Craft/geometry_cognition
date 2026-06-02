@@ -18,11 +18,13 @@ from .contracts import (
     FramesResponse,
     HealthResponse,
     JointsResponse,
+    SectionsResponse,
     UnitsResponse,
 )
 from .path_resolver import resolve_oapi_dll
 from .primitives import frames as frames_primitive
 from .primitives import joints as joints_primitive
+from .primitives import sections as sections_primitive
 from .primitives import units as units_primitive
 from .sap_session import SapSessionError, get_session
 
@@ -106,3 +108,16 @@ def get_frames() -> FramesResponse:
         present_units = units_primitive.get_present_units(model)
         rows = frames_primitive.get_frames(model)
         return FramesResponse(units=present_units, count=len(rows), frames=rows)
+
+
+@app.get("/v1/sections", response_model=SectionsResponse)
+def get_sections() -> SectionsResponse:
+    """The frame section property catalogue defined in the model: name + SAP type.
+    Names are model-supplied labels relayed verbatim; the bridge does not interpret
+    them or resolve their dimensions here."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        present_units = units_primitive.get_present_units(model)
+        rows = sections_primitive.get_sections(model, session.oapi_namespace())
+        return SectionsResponse(units=present_units, count=len(rows), sections=rows)
