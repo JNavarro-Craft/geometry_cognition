@@ -6,6 +6,38 @@ alcance están fuera por diseño (ver `../SAP_AI.md`).
 
 ---
 
+## ⭐ Meta-principios del write-side OAPI (consolidación — léelos primero)
+
+Dos reglas operativas destiladas de varias fases del write-side. **No son hallazgos
+nuevos**: son la consolidación de lo aprendido (§23 materiales, §24 secciones), formalizada
+para que cualquier agente futuro las conozca sin re-descubrirlas. Toda primitiva write debe
+respetarlas.
+
+### M1. Silent overwrite generalizado
+> **Asunción operativa**: toda llamada `SetX` de creación o modificación de objetos en la
+> OAPI de SAP **sobrescribe en silencio por nombre** (ret=0, sin error, sin duplicado).
+> Verificado en `SetMaterial` (§23) y `SetRectangle` (§24); se asume universal.
+>
+> Consecuencia obligatoria:
+> - Toda primitiva **create** valida **unicidad** ANTES de llamar al OAPI, vía
+>   `get_<noun>s` → `name_already_exists`. Sin ese guard, un create clobberaría un objeto
+>   del usuario en silencio.
+> - Toda primitiva **modify** valida **existencia** del objeto antes → `object_not_found`.
+>   (Si no existe, `SetX` lo *crearía*, que no es lo que un modify promete.)
+
+### M2. Value-stored ≠ value-passed
+> **Asunción operativa**: para cualquier write OAPI, **NO** asumir que SAP almacena el valor
+> exacto que se pasó. SAP puede normalizar — índice de color (visto: `-1` → `65280`, §24),
+> trim/case de strings, redondeo de floats cerca de la precisión, derivación (G desde E/ν,
+> §23), etc.
+>
+> Consecuencia obligatoria: toda primitiva write **re-lee el objeto después de escribir**
+> (`get_<noun>` / `GetX`) y reporta en `applied` el valor **almacenado real**, no el del
+> input. El `dry_run` puede mostrar el valor propuesto como estimación, pero el `applied`
+> siempre refleja lo que SAP guardó.
+
+---
+
 ## 🔶 Hallazgos técnicos de la OAPI vía pythonnet (resueltos)
 
 ### 1. `Helper` no expone `GetObject` — hay que castear a la interfaz `cHelper`
