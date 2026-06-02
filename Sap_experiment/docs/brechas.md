@@ -39,12 +39,51 @@ en metros eran correctas para el modelo.
 
 ---
 
+---
+
+## 🔶 Hallazgos OAPI Fase 1b — materiales + dimensiones de sección (resueltos)
+
+### 5. Los parámetros `out` de tipo **enum** exigen un miembro del enum como placeholder
+Para los `Double&`/`String&` out basta pasar `0.0`/`""` (como en la sesión 1). Pero un
+parámetro `out` de tipo enum (`eMatType`, `eFramePropType`) **rechaza `0`** —pythonnet
+lanza `TypeError: No method matches given arguments`—. Hay que pasar **un miembro real
+del enum** (cualquiera; se sobrescribe en el retorno): `prop.GetTypeOAPI(name,
+oapi.eFramePropType.Rectangular)`. Por eso los primitives reciben `oapi_namespace`.
+
+### 6. El tipo de material sale de `GetMaterial`, no de `GetTypeOAPI`
+`cPropMaterial.GetTypeOAPI(name, ref eMatType, ref SymType)` tiene **dos** out-params;
+incluso con el placeholder enum correcto su segunda salida complica la llamada. En
+cambio `GetMaterial(name, ref eMatType, ref Color, ref Notes, ref GUID)` devuelve el
+`eMatType` como primer out y es la vía limpia. Verificado: MGP10 → `eMatType.NoDesign`
+(SAP **no** lo clasifica como madera; el nombre 'MGP10' es etiqueta del usuario).
+
+### 7. `GetMPIsotropic`/`GetWeightAndMass` llevan un `Temp` de **entrada** al final
+Firmas reales: `GetMPIsotropic(name, ref E, ref U, ref A, ref G, Temp)` y
+`GetWeightAndMass(name, ref W, ref M, Temp)`. El último `Temp` (Double) es **input**
+(0.0), no out — va después de los `ref`. `GetMPIsotropic` **solo aplica a materiales
+isotrópicos**: para Rebar/Tendon devuelve no-cero o lanza → el bridge reporta los
+campos mecánicos como `null`, nunca un default fabricado (validado en vivo: A615Gr60 y
+A416Gr270 vuelven con E/nu/A/G nulos pero weight/mass presentes).
+
+### 8. 🔶 `cPropFrame.GetSectProps` devuelve 12 propiedades universales (cualquier forma)
+`GetSectProps(name, ref Area, As2, As3, Torsion, I22, I33, S22, S33, Z22, Z33, R22,
+R33)` → 12 floats tras `ret`. Disponible para toda sección, independiente de la forma.
+Las **dimensiones** sí dependen de la forma (`GetRectangle` → T3=depth, T2=width;
+`GetCircle`, `GetISection`… cada una con su firma): el bridge despacha por tipo y
+devuelve un dict con las claves nativas de SAP, sin normalizar entre formas (eso sería
+interpretación). Tipos no implementados esta fase → `OAPI_UNEXPECTED_SHAPE` con el tipo
+recibido, nunca una respuesta parcial. Verificado MGP10_33x73: Area=0.002409 =
+0.073×0.033 (cuadra contra cálculo manual).
+
+---
+
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
 
 Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fase.
 
-- ◾ **Fase 1b** — `get_materials`, `get_section_properties` (dimensiones reales de la
-  sección: alto/ancho/área. Hoy `get_sections` da solo nombre + tipo).
+- ✅ **Fase 1b** — `get_materials`, `get_section_properties` (dimensiones reales:
+  depth/width + propiedades universales área/inercias). **Hecha** (sesión 2); validada
+  en vivo. Sección no-rectangular sigue pendiente (dispatch aditivo, ver hallazgo 8).
 - ◾ **Fase 1c** — `get_load_cases`, `get_loads`, `get_combinations`.
 - ◾ **Fase 1d** — `run_analysis`, `get_analysis_status`.
 - ◾ **Fase 1e** — `get_displacements`, `get_reactions`, `get_forces`, `get_stresses`.

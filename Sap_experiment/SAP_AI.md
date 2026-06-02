@@ -33,7 +33,9 @@ día uno.
 | Puntos: nombre, coords globales, restraints 6-DOF | `GET /v1/joints` | `get_joints` | ✅ 112 joints, 30 con restraint, vs UI |
 | Frames: nombre, conectividad i/j, sección | `GET /v1/frames` | `get_frames` | ✅ 180 frames, conectividad 180/180 vs UI |
 | Catálogo de secciones: nombre + tipo SAP | `GET /v1/sections` | `get_sections` | ✅ 6 secciones Rectangular, Count()==6, vs UI |
-| Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos |
+| Catálogo de materiales: nombre, tipo, mecánicas | `GET /v1/materials` | `get_materials` | ✅ 5 materiales; MGP10=NoDesign E=1e9 W=480; Rebar/Tendon mecánicas null (no fabricadas) |
+| Dimensiones + props de UNA sección | `GET /v1/sections/{name}/properties` | `get_section_properties` | ✅ MGP10_33x73 depth=0.073 width=0.033 area=0.002409 (=0.073×0.033) vs cálculo manual |
+| Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; sección no soportada → `oapi_unexpected_shape` con el tipo |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
 unir frames↔joints por nombre de punto para reconstruir geometría; cruzar
@@ -49,10 +51,14 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 - ◾ **Escritura al modelo** (create_joint/frame, set_section…). Solo lectura.
 - ◾ **Cargas, casos, combinaciones, análisis, resultados, modal.**
 - ◾ **Snapshots / diff.** (Cuando los read-only maduren.)
-- ◾ **Dimensiones geométricas de secciones** (alto/ancho). `get_sections` da nombre +
-  tipo; resolver `GetRectangle` es una primitiva posterior.
 - ◾ **Plugins de Rhino sobre el bridge** (Objetivo 2) y **wrappers MCP de plugins**
   (Objetivo 3).
+
+> Actualización sesión 2 (Fase 1b): **dimensiones geométricas de sección** ya **no** están
+> fuera — `get_section_properties` resuelve `GetRectangle` (depth/width) + `GetSectProps`
+> (área, inercias, etc.) para `Rectangular`. Otras formas devuelven `oapi_unexpected_shape`
+> hasta añadir su extractor (aditivo). Y **materiales** (`get_materials`) exponen tipo +
+> mecánicas básicas. Ambas como hechos: MGP10 se reporta `NoDesign`, no 'timber'.
 
 ## 🚫 Fuera por principio (leaks — nunca van en el bridge ni el MCP)
 

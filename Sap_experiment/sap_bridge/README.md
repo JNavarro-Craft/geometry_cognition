@@ -155,6 +155,82 @@ dimensions.
 > raising `oapi_unexpected_shape` on a mismatch rather than returning a partial catalogue.
 > See [`../docs/brechas.md`](../docs/brechas.md).
 
+### `GET /v1/sections/{name}/properties`
+
+Dimensions + universal section properties of **one** frame section, by its exact `name`
+(as returned by `/v1/sections`). Dimension keys are SAP's own parameter names; the
+bridge does **not** normalize geometry across shapes (that would be interpretation).
+Values are in the present units.
+
+```json
+{
+  "units": { "present_units": "kgf_m_C", "present_units_code": 8 },
+  "section": {
+    "name": "MGP10_33x73",
+    "prop_type": "Rectangular",
+    "material": "MGP10",
+    "dimensions": { "depth": 0.073, "width": 0.033 },
+    "properties": {
+      "area": 0.002409, "as2": 0.0020075, "as3": 0.0020075,
+      "torsion": 6.2629e-07, "i22": 2.1862e-07, "i33": 1.0698e-06,
+      "s22": 1.3250e-05, "s33": 2.9310e-05, "z22": 1.9874e-05, "z33": 4.3964e-05,
+      "r22": 0.0095263, "r33": 0.0210733
+    }
+  }
+}
+```
+
+- `dimensions`: shape-specific geometry. For `Rectangular`: `depth` (SAP `T3`) and
+  `width` (`T2`). Other shapes carry their own keys (diameter, flange/web…). The key set
+  varies by `prop_type` — the bridge does not flatten it.
+- `properties`: the universal section properties (`area`, shear areas `as2/as3`,
+  `torsion` constant J, inertias `i22/i33`, section moduli `s22/s33`, plastic moduli
+  `z22/z33`, radii of gyration `r22/r33`) from `GetSectProps` — available for any shape.
+- `material`: the referenced material property name (join with `/v1/materials`).
+- **Unsupported shape** (not implemented this phase) → `oapi_unexpected_shape` carrying
+  the received type. An **unknown name** → `oapi_call_failed` (the message hints to
+  cross-check `/v1/sections`). Both are `502`.
+
+> Verified against MGP10_33x73: `area = 0.002409 = 0.073 × 0.033`, cross-checked manually.
+> This endpoint resolves **one** section; to get every section's geometry, list with
+> `/v1/sections` and loop client-side (no "all dimensions at once" by design).
+
+### `GET /v1/materials`
+
+The material property **catalogue**: each material's name, raw SAP type and basic
+mechanical facts when SAP provides them. No interpretation — a name like `MGP10` is
+reported with whatever SAP type it carries (`NoDesign`), never relabelled `timber`.
+
+```json
+{
+  "units": { "present_units": "kgf_m_C", "present_units_code": 8 },
+  "count": 5,
+  "materials": [
+    {
+      "name": "MGP10", "mat_type": "NoDesign",
+      "e": 1000000000.0, "nu": 0.3, "thermal_coeff": 1.17e-05,
+      "shear_modulus": 384615384.6, "weight_per_volume": 480.0, "mass_per_volume": 48.95
+    },
+    {
+      "name": "A615Gr60", "mat_type": "Rebar",
+      "e": null, "nu": null, "thermal_coeff": null, "shear_modulus": null,
+      "weight_per_volume": 7849.05, "mass_per_volume": 800.38
+    }
+  ]
+}
+```
+
+- `mat_type`: raw `eMatType` member name (`Steel`, `Concrete`, `NoDesign`, `Rebar`,
+  `Tendon`, `Aluminum`, `ColdFormed`, `Masonry`).
+- `e`, `nu`, `thermal_coeff`, `shear_modulus`: from `GetMPIsotropic`, in present units.
+  **Null when not applicable** — these only exist for isotropic materials; `Rebar`/
+  `Tendon` come back null here, reported honestly, never faked.
+- `weight_per_volume`, `mass_per_volume`: from `GetWeightAndMass`, present units.
+
+> Implementation note: the `eMatType`/`eFramePropType` out-params need a real enum member
+> as pythonnet placeholder (an int is rejected). Material type comes from `GetMaterial`,
+> not `GetTypeOAPI` (two out-params). See [`../docs/brechas.md`](../docs/brechas.md) §5–8.
+
 ---
 
 ## Session model
@@ -169,5 +245,7 @@ process-wide lock (COM is single-threaded).
 
 Honest scope (see [`../docs/brechas.md`](../docs/brechas.md)): no pagination/filters
 (all rows in one payload — fine at 112/180, revisit before large models), no write
-endpoints, no loads/analysis/results, no section dimensions. These are future phases and
-should extend this contract **additively**.
+endpoints, no loads/analysis/results. Section dimensions are covered now (Phase 1b) for
+`Rectangular`; other shapes return `oapi_unexpected_shape` until their extractor is added
+(additive). These remaining gaps are future phases and should extend this contract
+**additively**.
