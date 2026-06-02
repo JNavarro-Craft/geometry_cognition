@@ -98,8 +98,13 @@ Match on either; the bridge does not interpret the system.
 | `GET /v1/joints/{name}/displacements/{case}` | `get_joint_displacements` | 6-DOF joint displacement (LinearStatic) |
 | `GET /v1/joints/{name}/reactions/{case}` | `get_joint_reactions` | 6-DOF joint reaction (LinearStatic) |
 | `GET /v1/frames/{name}/forces/{case}` | `get_frame_forces` | frame internal forces per station |
+| `GET /v1/savepoints` | `list_savepoints` | list savepoints (filesystem scan) |
+| **`POST`** `/v1/savepoints` | `create_savepoint` | **write (fs)**: save model state to a savepoint |
+| **`POST`** `/v1/savepoints/{name}/restore` | `restore_savepoint` | **write (destructive)**: restore a savepoint |
 
-All read (`GET`) except the one mutating op (`POST /v1/analysis/run`). Frame stresses,
+Read (`GET`) except `POST /v1/analysis/run` (runs analysis) and the savepoint writes
+(`POST /v1/savepoints*`, the undo infrastructure — see Write-side conventions below).
+Frame stresses,
 envelope/combination results, non-LinearStatic results, point loads on frames,
 temperature/displacement loads, and model writes are future phases (see
 [`../docs/brechas.md`](../docs/brechas.md)).
@@ -598,6 +603,75 @@ Internal forces at the stations SAP computed along one frame, in one LinearStati
   (shears), `t` (torsion), `m2`/`m3` (moments).
 - `?station=0..1` returns just the nearest station; omit for all. A large moment is a
   number, not "overstress" (anti-pattern #4).
+
+---
+
+## Write-side conventions
+
+The write-side is governed by [`../docs/write_side_design.md`](../docs/write_side_design.md)
+(the authority) with consumer patterns in
+[`../docs/client_patterns.md`](../docs/client_patterns.md). In short: a configurable
+namespace prefix on created objects, an optional `dry_run` flag (preview without applying),
+explicit savepoints for undo, stop-on-first-failure for batches, and a `confirm` flag
+mandatory for destructive operations. New error codes: `confirm_required`,
+`prefix_required`, `name_already_exists`, `object_not_found`, `dry_run_validation_failed`,
+`savepoint_not_found`, `savepoint_already_exists` (all `409`, client-fixable).
+
+The first write primitives (Fase 1g.1) are savepoints — undo infrastructure that writes
+the **filesystem**, not the model in memory.
+
+### `GET /v1/savepoints`
+
+List the savepoints for the current model. A pure filesystem scan (works even with SAP
+busy). Empty list (not an error) if none.
+
+```json
+{
+  "model_name": "TEST_01", "count": 1,
+  "savepoints": [
+    { "name": "baseline_01",
+      "path": "…/test_models/TEST_01__sp_baseline_01.sdb",
+      "created_at": "2026-06-02T19:49:57.482000+00:00", "size_bytes": 56380 }
+  ]
+}
+```
+
+### `POST /v1/savepoints`  *(write — filesystem)*
+
+Save the current model state to `<model_dir>/<model_name>__sp_<name>.sdb`.
+
+```json
+{ "name": "baseline_01", "dry_run": false }
+```
+
+- Refuses with `savepoint_already_exists` if that name's file exists (no silent
+  overwrite; use another name — delete is not implemented this phase).
+- `dry_run: true` → returns `would_apply` (target path + estimated size) and confirms the
+  directory is writable, without writing. Real run → `applied` with the created file's
+  facts.
+- Internally: `cFile.Save` repoints the in-memory model (it behaves as "Save As"), so the
+  bridge saves to the savepoint and then reopens the original — the session keeps pointing
+  at the user's model.
+
+### `POST /v1/savepoints/{name}/restore`  *(write — destructive)*
+
+Restore a savepoint, **replacing the loaded model** with it (and discarding unsaved
+changes).
+
+```json
+{ "confirm": true, "dry_run": false }
+```
+
+- `confirm` is **mandatory**: without it → `confirm_required`. `dry_run: true` →
+  `would_replace_with` (the savepoint that would load), without replacing.
+- Missing savepoint → `savepoint_not_found`.
+- The SAP handle stays valid after the reopen (no re-attach). **Note**: after a restore the
+  session is loaded on the savepoint file, not the original — to return to the original
+  model's workflow, reopen it. (See brechas §19.)
+
+> Validated end-to-end on TEST_01: a full undo cycle (savepoint → change `active_dof` →
+> restore) returned the model to its original state; confirm/dry-run/duplicate/not-found
+> paths all exercised.
 
 ---
 

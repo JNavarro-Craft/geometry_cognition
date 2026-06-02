@@ -239,6 +239,44 @@ ret≠0 → `oapi_call_failed` con el código; el cliente lo interpreta, el brid
 
 ---
 
+## 🔶 Hallazgos OAPI Fase 1g.1 — savepoints (write-side, resueltos)
+
+### 18. `cFile.Save_2` NO existe en SAP26 — solo `Save`; y `Save` actúa como "Save As"
+- El design doc nombró `cFile.Save_2`; **no existe en este assembly**. La firma real es
+  `cFile.Save(String FileName)` → 0 OK. `cFile.OpenFile(String FileName)` → 0 OK. (Anti-
+  patrón #5 cazó esto: probar la firma antes de asumir la convención.)
+- ⚠️ **`Save` reapunta el modelo en memoria al nuevo path** (como "Save As"): tras
+  `Save(sp_path)`, `GetModelFilename` devuelve `sp_path`, no el original. Por eso
+  `create_savepoint` hace **Save al savepoint y LUEGO OpenFile del original**, dejando la
+  sesión sobre el modelo del usuario — si no, el usuario quedaría trabajando en silencio
+  dentro del savepoint.
+- **El cSapModel sobrevive a OpenFile** (mismo proceso SAP, modelo nuevo): `GetModelIsLocked`
+  /`GetModelFilename` responden sin error tras OpenFile, sin re-attach. `restore_savepoint`
+  se apoya en esto; validado en vivo (get_joints=112 y get_model_settings OK tras restore).
+- `GetModelFilename(IncludePath: bool)` → str absoluto con True.
+
+### 19. 🔶 restore deja la sesión en el ARCHIVO del savepoint (no en el original)
+Por diseño, `restore_savepoint` hace `OpenFile(sp_path)` → la sesión queda cargada en el
+`.sdb` del savepoint, no en el modelo original. Consecuencia observable: tras un restore,
+`list_savepoints` busca savepoints de `<model>__sp_<name>` (el nuevo nombre cargado) y da
+vacío; para volver al flujo de TEST_01 el cliente debe reabrir TEST_01. Es coherente con
+"restore reemplaza el modelo cargado", pero es un filo que el cliente debe conocer (queda
+documentado, no parcheado).
+
+### 20. ◾ SAP crea archivos auxiliares junto al `.sdb`
+Al guardar, SAP genera `.$2k`, `.ico`, `.sbk` (y tras análisis `.OUT`, `.LOG`) junto al
+`.sdb`. Un `delete_savepoint` futuro (Fase 1g posterior) deberá limpiar también esos
+auxiliares, no solo el `.sdb`. Esta fase no implementa delete, así que solo se anota.
+
+### Validación end-to-end del ciclo de undo (criterio 5 + cruzado)
+Ciclo completo verificado vía MCP: baseline `active_dof=[T,F,T,F,T,F]` → create_savepoint
+→ cambio real (SetActiveDOF activando R1 → `[T,F,T,T,T,F]`, guardado) → restore_savepoint
+(confirm=true) → `active_dof` **volvió a `[T,F,T,F,T,F]`**. El restore revierte un cambio
+real. confirm_required sin confirm; savepoint_not_found; savepoint_already_exists (rechazo,
+no sobrescritura); dry_run en create y restore (sin escribir/reemplazar) — todos validados.
+
+---
+
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
 
 Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fase.
@@ -264,9 +302,14 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
   stations con M3≠0; equilibrio global F3=1290.86 kgf; case_not_run + unsupported_case_type
   + case inexistente). Falta `get_frame_stresses` (1e.2) y resultados de envelope (1e.3).
 - ◾ **Fase 1f** — `get_modal_results`, `get_response_spectrum`.
-- ◾ **Fase 1g** — escritura (`create_joint/frame`, `set_section`…) con dry-run + undo,
-  y **namespace/registry** para tocar solo lo propio (evitar el delete-all-then-recreate
-  peligroso de `RhinoSAP/SapFrameSynchronizer`).
+- 🟡 **Fase 1g** — escritura, gobernada por [`write_side_design.md`](write_side_design.md)
+  (namespace por prefijo, dry-run, savepoints, stop-on-first-failure, confirm).
+  - ✅ **1g.1** — savepoints (`create_savepoint`, `restore_savepoint`, `list_savepoints`):
+    infraestructura de undo. **Hecha** (sesión 8); ciclo de undo validado en vivo. Las
+    primitivas escriben el filesystem, no el modelo en memoria.
+  - ◾ **1g.2+** — writes "reales" (`set_active_dof`, `set_present_units`, create/modify/
+    delete sections, assign sections…), cada una apoyada en savepoints como red de
+    seguridad. Evitar el delete-all-then-recreate peligroso de `RhinoSAP/SapFrameSynchronizer`.
 - ◾ **Fase 1h** — snapshots + diff.
 - ◾ **Fase 1i** — poblar `docs/domains/structural/` (códigos, materiales, factores,
   recetas, casos) — conocimiento del cliente, no tools.

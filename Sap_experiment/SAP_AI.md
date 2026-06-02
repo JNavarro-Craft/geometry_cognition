@@ -56,7 +56,10 @@ día uno.
 | Desplazamientos de UN nudo | `GET /v1/joints/{name}/displacements/{case}` | `get_joint_displacements` | ✅ joint 9 restringido: u1-u3=0, solo r2≠0; vs UI |
 | Reacciones de UN nudo | `GET /v1/joints/{name}/reactions/{case}` | `get_joint_reactions` | ✅ joint 9: F1/F3≠0 (coherente con restraints); equilibrio global F3=1290.86 kgf |
 | Fuerzas internas de UNA barra | `GET /v1/frames/{name}/forces/{case}` | `get_frame_forces` | ✅ frame 4133: 2 stations, M3≠0, P axial cte; ?station opcional |
-| Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; `case_not_run`, `unsupported_case_type` (MODAL), case inexistente |
+| 🔶 **Savepoint: crear (WRITE fs)** | `POST /v1/savepoints` | `create_savepoint` | ✅ escribe `<model>__sp_<name>.sdb`; dry_run; rechaza duplicado; Save+reabrir original |
+| 🔶 **Savepoint: restaurar (WRITE destr.)** | `POST /v1/savepoints/{name}/restore` | `restore_savepoint` | ✅ confirm obligatorio; dry_run; ciclo undo validado (revierte cambio real de active_dof) |
+| Savepoint: listar | `GET /v1/savepoints` | `list_savepoints` | ✅ scan de filesystem; [] si ninguno; sin OAPI |
+| Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; `case_not_run`, `unsupported_case_type`, `confirm_required`, `savepoint_not_found`, `savepoint_already_exists` |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
 unir frames↔joints por nombre de punto para reconstruir geometría; cruzar
@@ -113,6 +116,15 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 > Hecho, no juicio: un displacement grande es un número, no "falla" (anti-patrón #4); las
 > reacciones equilibran las cargas pero ese cross-check lo compone el cliente, no el bridge.
 > Sigue fuera: stresses (1e.2), envelope (1e.3), modal/spectrum (1f).
+
+> Actualización sesión 8 (Fase 1g.1 — primer write-side): `create_savepoint`,
+> `restore_savepoint`, `list_savepoints` — la **infraestructura de undo**. Escriben el
+> **filesystem** (`<model>__sp_<name>.sdb`), NO el modelo en memoria. **20 primitivas**
+> (17 read + run_analysis + savepoints). Gobernadas por `write_side_design.md`. Hallazgos:
+> `Save_2` no existe (solo `Save`, que actúa como "Save As" → create reabre el original);
+> el handle sobrevive a `OpenFile` (no re-attach); restore deja la sesión en el archivo del
+> savepoint (filo documentado). Ciclo de undo validado: revierte un cambio real de
+> active_dof. confirm obligatorio en restore; rechazo de duplicado; dry_run en ambos.
 
 > Actualización sesión 7 (Fase 1e.5 — último gap de read): `get_model_settings`
 > (`GET /v1/model/settings`) expone el envelope estructural (active_dof + locked) y unidades
