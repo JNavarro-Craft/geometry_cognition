@@ -79,3 +79,9 @@ def get_joints_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
     return _bridge_json_request(
         base_url, "/v1/joints", timeout_seconds, method="GET", body=None, content_type=None
     )
+
+
+def get_frames_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
+    return _bridge_json_request(
+        base_url, "/v1/frames", timeout_seconds, method="GET", body=None, content_type=None
+    )

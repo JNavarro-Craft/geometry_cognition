@@ -11,6 +11,7 @@ from typing import Any
 
 from .bridge_backend import (
     bridge_settings,
+    get_frames_bridge,
     get_joints_bridge,
 )
 
@@ -37,4 +38,19 @@ def get_joints() -> dict[str, Any]:
     try:
         return get_joints_bridge(base_url, timeout)
     except Exception as exc:  # noqa: BLE001 — relay transport failure honestly
+        return _bridge_error(exc)
+
+
+def get_frames() -> dict[str, Any]:
+    """Every frame (line) object in the open SAP model: name, the two end point names
+    (``point_i`` / ``point_j`` — they match the names from get_joints, so you join on
+    them to get coordinates) and the assigned ``section`` property name.
+
+    Facts only. This does not classify frames as chords/struts/diagonals — that role
+    reasoning emerges from connectivity and dimensions in the client, not the MCP.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return get_frames_bridge(base_url, timeout)
+    except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)

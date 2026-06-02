@@ -19,7 +19,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from Sap_experiment.sap_developer_server.tools import get_joints
+from Sap_experiment.sap_developer_server.tools import get_frames, get_joints
 
 mcp = FastMCP("sap_developer_server")
 
@@ -31,6 +31,14 @@ def get_joints_tool() -> dict[str, Any]:
     restraint flags [U1,U2,U3,R1,R2,R3] (True = restrained). Facts only — no
     pinned/fixed/roller classification (that is your domain reasoning)."""
     return get_joints()
+
+
+@mcp.tool(name="get_frames")
+def get_frames_tool() -> dict[str, Any]:
+    """Every frame (line) object: name, the two end point names (point_i/point_j,
+    matching get_joints names — join on them for coordinates) and the assigned
+    section property. Facts only — no chord/strut/diagonal classification."""
+    return get_frames()
 
 
 if __name__ == "__main__":

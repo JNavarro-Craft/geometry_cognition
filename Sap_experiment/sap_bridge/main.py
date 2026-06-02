@@ -15,11 +15,13 @@ from fastapi.responses import JSONResponse
 from . import error_codes
 from .contracts import (
     ErrorResponse,
+    FramesResponse,
     HealthResponse,
     JointsResponse,
     UnitsResponse,
 )
 from .path_resolver import resolve_oapi_dll
+from .primitives import frames as frames_primitive
 from .primitives import joints as joints_primitive
 from .primitives import units as units_primitive
 from .sap_session import SapSessionError, get_session
@@ -91,3 +93,16 @@ def get_joints() -> JointsResponse:
         present_units = units_primitive.get_present_units(model)
         rows = joints_primitive.get_joints(model)
         return JointsResponse(units=present_units, count=len(rows), joints=rows)
+
+
+@app.get("/v1/frames", response_model=FramesResponse)
+def get_frames() -> FramesResponse:
+    """Every frame object: name, the two end point names (connectivity, matching
+    joint names) and the assigned section property. Facts only — no structural role
+    classification (chord/strut/diagonal is your domain reasoning)."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        present_units = units_primitive.get_present_units(model)
+        rows = frames_primitive.get_frames(model)
+        return FramesResponse(units=present_units, count=len(rows), frames=rows)
