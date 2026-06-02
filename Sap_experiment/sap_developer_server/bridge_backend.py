@@ -145,6 +145,24 @@ def get_load_case_details_bridge(
     )
 
 
+def run_analysis_bridge(
+    base_url: str, timeout_seconds: float, cases_to_run: list[str] | None
+) -> dict[str, Any]:
+    # POST: this mutates computation state. RunAnalysis is blocking, so give it a long
+    # timeout (analysis can outlast the default read timeout).
+    body = json.dumps({"cases_to_run": cases_to_run}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, "/v1/analysis/run", max(timeout_seconds, 300.0),
+        method="POST", body=body, content_type="application/json",
+    )
+
+
+def get_analysis_status_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
+    return _bridge_json_request(
+        base_url, "/v1/analysis/status", timeout_seconds, method="GET", body=None, content_type=None
+    )
+
+
 def get_section_properties_bridge(
     base_url: str, timeout_seconds: float, name: str
 ) -> dict[str, Any]:

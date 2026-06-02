@@ -3,7 +3,9 @@
 Runs on localhost:8766 (geometry_cognition's Rhino bridge uses 8765; SAP gets 8766).
 Endpoints are versioned under /v1 and every failure returns a structured
 ErrorResponse so all consumers — MCP, Rhino plugins, scripts — branch on a stable
-code. This module wires routes to the read-only primitives; it holds no domain logic.
+code. Read endpoints are GET; the one mutating operation (running analysis) is POST,
+signalling intent to the consumer. This module wires routes to the primitives; it
+holds no domain logic.
 """
 from __future__ import annotations
 
@@ -14,6 +16,9 @@ from fastapi.responses import JSONResponse
 
 from . import error_codes
 from .contracts import (
+    AnalysisRunRequest,
+    AnalysisRunResponse,
+    AnalysisStatusResponse,
     CombinationsResponse,
     DistributedLoadsResponse,
     ErrorResponse,
@@ -30,6 +35,7 @@ from .contracts import (
     UnitsResponse,
 )
 from .path_resolver import resolve_oapi_dll
+from .primitives import analysis as analysis_primitive
 from .primitives import combinations as combinations_primitive
 from .primitives import frame_loads as frame_loads_primitive
 from .primitives import frames as frames_primitive
@@ -259,3 +265,35 @@ def get_combinations() -> CombinationsResponse:
         present_units = units_primitive.get_present_units(model)
         rows = combinations_primitive.get_combinations(model)
         return CombinationsResponse(units=present_units, count=len(rows), combinations=rows)
+
+
+# --- Mutating operations -----------------------------------------------------
+# The bridge is read-only except here: running analysis changes the model's COMPUTATION
+# state (it produces results and may lock the model). It is POST to signal that intent.
+# It does NOT modify the model definition (that is Fase 1g, gated behind a design doc).
+
+
+@app.post("/v1/analysis/run", response_model=AnalysisRunResponse)
+def run_analysis(request: AnalysisRunRequest | None = None) -> AnalysisRunResponse:
+    """Run the analysis (BLOCKING — synchronous; large models can take a while). With no
+    body, runs all pending cases. With ``cases_to_run``, runs only those by name (validated
+    against existing cases first; the model's run-case flags are restored afterwards). A
+    non-zero RunAnalysis return surfaces as oapi_call_failed — the bridge relays the code,
+    it does not interpret a model-side failure. Re-running is idempotent (SAP skips cases
+    with current results), so no confirmation is required."""
+    req = request or AnalysisRunRequest()
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return analysis_primitive.run_analysis(model, req.cases_to_run)
+
+
+@app.get("/v1/analysis/status", response_model=AnalysisStatusResponse)
+def get_analysis_status() -> AnalysisStatusResponse:
+    """Current analysis status per load case (has_run + raw/named status) plus
+    model_is_locked. Facts only — 'locked' means results would be invalidated by editing
+    the model; the bridge does not judge it."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return analysis_primitive.get_analysis_status(model)

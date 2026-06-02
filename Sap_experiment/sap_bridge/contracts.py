@@ -323,3 +323,57 @@ class LoadCaseDetails(BaseModel):
 class LoadCaseDetailsResponse(BaseModel):
     units: UnitsResponse
     case: LoadCaseDetails
+
+
+class AnalysisRunRequest(BaseModel):
+    """Request body for POST /v1/analysis/run.
+
+    ``cases_to_run`` None means "run whatever SAP has pending" (the default
+    RunAnalysis behaviour). A list runs only those cases by name; the bridge validates
+    every name exists before touching SAP and restores the model's run-case flags
+    afterwards so the request leaves no side effect on which cases are flagged.
+    """
+
+    cases_to_run: list[str] | None = Field(
+        None, description="Case names to run; None runs all pending cases"
+    )
+
+
+class CaseStatus(BaseModel):
+    """Analysis status of one load case, as a fact.
+
+    ``status_code`` is the raw integer SAP returns from GetCaseStatus; ``status`` is its
+    documented name (1=Not Run, 2=Could Not Start, 3=Not Finished, 4=Finished),
+    'Unknown' for an unmapped code. ``has_run`` is True only when status is Finished
+    (results exist). A case that could not start / did not finish is reported as the
+    fact it is — the bridge never says the model is wrong.
+    """
+
+    case_name: str
+    status: str = Field(..., description="Documented status name for status_code")
+    status_code: int = Field(..., description="Raw integer case status from GetCaseStatus")
+    has_run: bool = Field(..., description="True if results exist (status Finished)")
+
+
+class AnalysisRunResponse(BaseModel):
+    """Result of a run. ``cases_run`` lists the cases that reached Finished during/after
+    this run; ``ran_count`` its length. ``runtime_seconds`` is the wall-clock time the
+    (blocking) RunAnalysis call took. ``model_is_locked`` reflects the post-run lock
+    state. ``status`` is the per-case status snapshot after the run.
+    """
+
+    ran_count: int
+    cases_run: list[str]
+    runtime_seconds: float
+    model_is_locked: bool
+    status: list[CaseStatus]
+
+
+class AnalysisStatusResponse(BaseModel):
+    """Current analysis status: per-case status plus whether the model is locked. A
+    locked model holds results that would be invalidated by modifying the model — a
+    fact for the client, not a judgement."""
+
+    model_is_locked: bool
+    count: int
+    status: list[CaseStatus]

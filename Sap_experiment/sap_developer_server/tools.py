@@ -11,6 +11,7 @@ from typing import Any
 
 from .bridge_backend import (
     bridge_settings,
+    get_analysis_status_bridge,
     get_combinations_bridge,
     get_distributed_loads_on_frame_bridge,
     get_frames_bridge,
@@ -22,6 +23,7 @@ from .bridge_backend import (
     get_point_loads_on_joint_bridge,
     get_section_properties_bridge,
     get_sections_bridge,
+    run_analysis_bridge,
 )
 
 
@@ -212,5 +214,41 @@ def get_load_case_details(case_name: str) -> dict[str, Any]:
     base_url, timeout = bridge_settings()
     try:
         return get_load_case_details_bridge(base_url, timeout, case_name)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def run_analysis(cases_to_run: list[str] | None = None) -> dict[str, Any]:
+    """Run the structural analysis on the open SAP model. MUTATES computation state (it
+    produces results and may lock the model); it does NOT modify the model definition.
+
+    With ``cases_to_run=None``, runs all pending cases. With a list of case names (from
+    get_load_cases), runs only those — names are validated to exist first, and the model's
+    run-case flags are restored afterwards. Returns ``ran_count``, ``cases_run``,
+    ``runtime_seconds`` (the call is BLOCKING — large models can take a while),
+    ``model_is_locked`` and a per-case ``status`` snapshot.
+
+    A model-side failure (non-convergence, singular matrix) surfaces as a structured
+    error or as cases that did not reach 'Finished' — reported as facts. The bridge never
+    says the model is wrong. Re-running is idempotent (SAP skips up-to-date cases).
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return run_analysis_bridge(base_url, timeout, cases_to_run)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def get_analysis_status() -> dict[str, Any]:
+    """Read the current analysis status of the open SAP model. Read-only.
+
+    Returns ``model_is_locked`` and, per load case, ``case_name``, ``status`` (named:
+    'Not Run'/'Could Not Start'/'Not Finished'/'Finished') with raw ``status_code``, and
+    ``has_run`` (True only when Finished — results exist). Facts only: a locked model or a
+    case that did not finish is reported as-is, never judged.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return get_analysis_status_bridge(base_url, timeout)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)

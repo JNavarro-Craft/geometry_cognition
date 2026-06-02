@@ -1,13 +1,15 @@
-"""MCP entrypoint for sap_developer_server. Registers the read-only SAP tools.
+"""MCP entrypoint for sap_developer_server. Registers the SAP tools.
 
 Run as an MCP server (stdio) and register in Claude Desktop. It is a thin consumer
-of the SAP bridge over HTTP; all SAP access happens in the bridge process.
+of the SAP bridge over HTTP; all SAP access happens in the bridge process. All tools
+are read-only except run_analysis, which mutates computation state (it produces results
+and may lock the model) but never modifies the model definition.
 """
 from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -20,6 +22,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from Sap_experiment.sap_developer_server.tools import (
+    get_analysis_status,
     get_combinations,
     get_distributed_loads_on_frame,
     get_frames,
@@ -31,6 +34,7 @@ from Sap_experiment.sap_developer_server.tools import (
     get_point_loads_on_joint,
     get_section_properties,
     get_sections,
+    run_analysis,
 )
 
 mcp = FastMCP("sap_developer_server")
@@ -134,6 +138,27 @@ def get_load_case_details_tool(case_name: str) -> dict[str, Any]:
     (type reported, internals deferred; not an error). load_pattern references
     get_load_patterns names."""
     return get_load_case_details(case_name)
+
+
+@mcp.tool(name="run_analysis")
+def run_analysis_tool(cases_to_run: Optional[list[str]] = None) -> dict[str, Any]:
+    """Run the structural analysis on the open SAP model. MUTATES computation state
+    (produces results, may lock the model); does NOT modify the model definition.
+    cases_to_run=None runs all pending cases; a list runs only those (names from
+    get_load_cases, validated first; run flags restored after). Returns ran_count,
+    cases_run, runtime_seconds (BLOCKING — may take a while), model_is_locked and a
+    per-case status snapshot. Model-side failures (non-convergence) are reported as
+    facts, never judged. Re-running is idempotent."""
+    return run_analysis(cases_to_run)
+
+
+@mcp.tool(name="get_analysis_status")
+def get_analysis_status_tool() -> dict[str, Any]:
+    """Read current analysis status (read-only): model_is_locked plus, per load case,
+    case_name, status ('Not Run'/'Could Not Start'/'Not Finished'/'Finished') with raw
+    status_code, and has_run (True only when Finished). Facts only — a locked model or an
+    unfinished case is reported as-is, never judged."""
+    return get_analysis_status()
 
 
 if __name__ == "__main__":
