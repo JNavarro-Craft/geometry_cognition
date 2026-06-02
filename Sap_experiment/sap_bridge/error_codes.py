@@ -45,6 +45,32 @@ UNSUPPORTED_CASE_TYPE = "unsupported_case_type"
 ResponseSpectrum). The case and its type are valid; the bridge just does not expose
 its results yet. Not a transport failure."""
 
+# Write-side (see docs/write_side_design.md). Declared here as the stable vocabulary
+# every write primitive branches on; some are not used until later 1g sub-phases.
+CONFIRM_REQUIRED = "confirm_required"
+"""A destructive write (modify/delete a pre-existing object, delete any object, or
+change a global model setting) was attempted without confirm=true."""
+
+PREFIX_REQUIRED = "prefix_required"
+"""A create operation was attempted without the bridge's namespace prefix on the new
+object's name (default 'AI_'; see BRIDGE_NAMESPACE_PREFIX)."""
+
+NAME_ALREADY_EXISTS = "name_already_exists"
+"""A create operation targets a name already taken."""
+
+OBJECT_NOT_FOUND = "object_not_found"
+"""A write references an object that does not exist."""
+
+DRY_RUN_VALIDATION_FAILED = "dry_run_validation_failed"
+"""A dry-run pre-validation detected a problem that would make the real write fail."""
+
+SAVEPOINT_NOT_FOUND = "savepoint_not_found"
+"""A restore or info request references a savepoint that does not exist on disk."""
+
+SAVEPOINT_ALREADY_EXISTS = "savepoint_already_exists"
+"""A create_savepoint targets a name whose file already exists. Refused rather than
+overwritten, to avoid silently losing a prior savepoint."""
+
 # Bridge internals
 PYTHONNET_UNAVAILABLE = "pythonnet_unavailable"
 """pythonnet / the SAP2000v1 assembly could not be loaded. The bridge cannot talk

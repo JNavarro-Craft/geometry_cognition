@@ -87,6 +87,14 @@ async def _session_error_handler(_request, exc: SapSessionError) -> JSONResponse
         error_codes.SAP_PROCESS_DIED,
         error_codes.NO_MODEL_OPEN,
         error_codes.CASE_NOT_RUN,
+        # Write-side preconditions — all client-fixable (fix the request and retry).
+        error_codes.CONFIRM_REQUIRED,
+        error_codes.PREFIX_REQUIRED,
+        error_codes.NAME_ALREADY_EXISTS,
+        error_codes.OBJECT_NOT_FOUND,
+        error_codes.DRY_RUN_VALIDATION_FAILED,
+        error_codes.SAVEPOINT_NOT_FOUND,
+        error_codes.SAVEPOINT_ALREADY_EXISTS,
     }
     status = 409 if exc.code in precondition else 502
     logger.warning("session error [%s]: %s", exc.code, exc.message)
