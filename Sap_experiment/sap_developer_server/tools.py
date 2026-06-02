@@ -13,6 +13,8 @@ from .bridge_backend import (
     bridge_settings,
     get_frames_bridge,
     get_joints_bridge,
+    get_materials_bridge,
+    get_section_properties_bridge,
     get_sections_bridge,
 )
 
@@ -69,5 +71,42 @@ def get_sections() -> dict[str, Any]:
     base_url, timeout = bridge_settings()
     try:
         return get_sections_bridge(base_url, timeout)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def get_materials() -> dict[str, Any]:
+    """The material property catalogue defined in the open SAP model: each material's
+    ``name``, its raw SAP ``mat_type`` (e.g. 'Steel', 'Concrete', 'NoDesign') and basic
+    mechanical facts when available — ``e`` (modulus), ``nu`` (Poisson), ``thermal_coeff``,
+    ``shear_modulus``, ``weight_per_volume``, ``mass_per_volume`` — in the model's present
+    units (echoed under ``units``).
+
+    Facts only. The MCP does not interpret a material: a name like 'MGP10' is reported
+    with whatever SAP type it has ('NoDesign' here), never relabelled 'timber'. Fields
+    are null when SAP does not provide them (e.g. non-isotropic materials), never faked.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return get_materials_bridge(base_url, timeout)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def get_section_properties(name: str) -> dict[str, Any]:
+    """Dimensions and universal section properties for ONE frame section, by its exact
+    ``name`` (as returned by get_sections). Returns the shape ``prop_type``, the
+    referenced ``material`` name, ``dimensions`` (shape-specific geometry keyed by SAP's
+    own parameter names, e.g. depth/width for Rectangular) and ``properties`` (universal:
+    area, inertias i22/i33, torsion, moduli, radii of gyration). All in present units.
+
+    Facts only — the bridge does not normalize geometry across shapes or interpret the
+    section. Unsupported shapes return a structured error carrying the received type. To
+    list all sections first, use get_sections; this resolves one at a time (compose the
+    loop client-side if you need every section's dimensions).
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return get_section_properties_bridge(base_url, timeout, name)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)

@@ -98,3 +98,59 @@ class SectionsResponse(BaseModel):
     units: UnitsResponse
     count: int
     sections: list[Section]
+
+
+class Material(BaseModel):
+    """One material property defined in the model: its name, raw SAP material type and
+    basic mechanical properties as SAP reports them.
+
+    ``mat_type`` is the raw eMatType member name (e.g. 'Steel', 'Concrete',
+    'NoDesign') — a fact, never an interpretation. A name like 'MGP10' may be timber to
+    a human, but SAP reports it as 'NoDesign'; the bridge relays that and does not
+    rename it. Mechanical fields come from GetMPIsotropic / GetWeightAndMass and are in
+    the model's present units (echoed in the response). They are Optional because not
+    every material type is isotropic; absent values are reported as null, never faked.
+    """
+
+    name: str
+    mat_type: str = Field(..., description="Raw eMatType member name (Steel/Concrete/NoDesign/…)")
+    e: float | None = Field(None, description="Modulus of elasticity E (isotropic), present units")
+    nu: float | None = Field(None, description="Poisson's ratio U (isotropic), dimensionless")
+    thermal_coeff: float | None = Field(None, description="Thermal expansion coefficient A (isotropic)")
+    shear_modulus: float | None = Field(None, description="Shear modulus G (isotropic), present units")
+    weight_per_volume: float | None = Field(None, description="Specific weight W, present units")
+    mass_per_volume: float | None = Field(None, description="Specific mass M, present units")
+
+
+class MaterialsResponse(BaseModel):
+    units: UnitsResponse
+    count: int
+    materials: list[Material]
+
+
+class SectionProperties(BaseModel):
+    """Geometric dimensions and universal section properties of ONE frame section.
+
+    ``dimensions`` holds the shape-specific geometry (depth/width for Rectangular,
+    diameter for Circle, …) keyed by SAP's own parameter names, in present units. It is
+    a dict because the key set varies by ``prop_type``; the bridge does not normalize
+    across shapes (that would be interpretation). ``properties`` holds the universal
+    section properties (area, inertias, …) that GetSectProps returns for any shape.
+    ``material`` is the material property name the section references (a fact; join with
+    /v1/materials). All values are in the model's present units, echoed in the response.
+    """
+
+    name: str
+    prop_type: str = Field(..., description="Raw eFramePropType member name for this section")
+    material: str = Field(..., description="Referenced material property name (raw)")
+    dimensions: dict[str, float] = Field(
+        ..., description="Shape-specific geometry keyed by SAP parameter name, present units"
+    )
+    properties: dict[str, float] = Field(
+        ..., description="Universal section properties (area, inertias, …), present units"
+    )
+
+
+class SectionPropertiesResponse(BaseModel):
+    units: UnitsResponse
+    section: SectionProperties

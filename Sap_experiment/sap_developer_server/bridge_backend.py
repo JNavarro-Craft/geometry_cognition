@@ -10,6 +10,7 @@ import json
 import os
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 
@@ -90,4 +91,21 @@ def get_frames_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
 def get_sections_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
     return _bridge_json_request(
         base_url, "/v1/sections", timeout_seconds, method="GET", body=None, content_type=None
+    )
+
+
+def get_materials_bridge(base_url: str, timeout_seconds: float) -> dict[str, Any]:
+    return _bridge_json_request(
+        base_url, "/v1/materials", timeout_seconds, method="GET", body=None, content_type=None
+    )
+
+
+def get_section_properties_bridge(
+    base_url: str, timeout_seconds: float, name: str
+) -> dict[str, Any]:
+    # Section names are model-supplied labels and may contain characters that need
+    # escaping in a path segment; quote with an empty safe set.
+    path = f"/v1/sections/{quote(name, safe='')}/properties"
+    return _bridge_json_request(
+        base_url, path, timeout_seconds, method="GET", body=None, content_type=None
     )

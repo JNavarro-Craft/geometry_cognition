@@ -18,12 +18,16 @@ from .contracts import (
     FramesResponse,
     HealthResponse,
     JointsResponse,
+    MaterialsResponse,
+    SectionPropertiesResponse,
     SectionsResponse,
     UnitsResponse,
 )
 from .path_resolver import resolve_oapi_dll
 from .primitives import frames as frames_primitive
 from .primitives import joints as joints_primitive
+from .primitives import materials as materials_primitive
+from .primitives import section_properties as section_properties_primitive
 from .primitives import sections as sections_primitive
 from .primitives import units as units_primitive
 from .sap_session import SapSessionError, get_session
@@ -121,3 +125,33 @@ def get_sections() -> SectionsResponse:
         present_units = units_primitive.get_present_units(model)
         rows = sections_primitive.get_sections(model, session.oapi_namespace())
         return SectionsResponse(units=present_units, count=len(rows), sections=rows)
+
+
+@app.get("/v1/sections/{name}/properties", response_model=SectionPropertiesResponse)
+def get_section_properties(name: str) -> SectionPropertiesResponse:
+    """Dimensions + universal section properties for ONE frame section (by exact name,
+    as returned by /v1/sections). Dimension keys are SAP's own parameter names; the
+    bridge does not normalize across shapes. Unsupported shapes return
+    oapi_unexpected_shape carrying the received type. Values are in present units."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        present_units = units_primitive.get_present_units(model)
+        section = section_properties_primitive.get_section_properties(
+            model, session.oapi_namespace(), name
+        )
+        return SectionPropertiesResponse(units=present_units, section=section)
+
+
+@app.get("/v1/materials", response_model=MaterialsResponse)
+def get_materials() -> MaterialsResponse:
+    """The material property catalogue defined in the model: name, raw SAP material
+    type and basic mechanical facts (E, nu, thermal coeff, shear modulus, weight/mass
+    per volume) when available. No interpretation — 'MGP10' is reported as its SAP type
+    'NoDesign', not 'timber'. Values are in present units."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        present_units = units_primitive.get_present_units(model)
+        rows = materials_primitive.get_materials(model, session.oapi_namespace())
+        return MaterialsResponse(units=present_units, count=len(rows), materials=rows)
