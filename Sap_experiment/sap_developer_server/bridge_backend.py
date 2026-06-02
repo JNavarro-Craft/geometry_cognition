@@ -163,6 +163,36 @@ def get_analysis_status_bridge(base_url: str, timeout_seconds: float) -> dict[st
     )
 
 
+def get_joint_displacements_bridge(
+    base_url: str, timeout_seconds: float, joint_name: str, case_name: str
+) -> dict[str, Any]:
+    path = f"/v1/joints/{quote(joint_name, safe='')}/displacements/{quote(case_name, safe='')}"
+    return _bridge_json_request(
+        base_url, path, timeout_seconds, method="GET", body=None, content_type=None
+    )
+
+
+def get_joint_reactions_bridge(
+    base_url: str, timeout_seconds: float, joint_name: str, case_name: str
+) -> dict[str, Any]:
+    path = f"/v1/joints/{quote(joint_name, safe='')}/reactions/{quote(case_name, safe='')}"
+    return _bridge_json_request(
+        base_url, path, timeout_seconds, method="GET", body=None, content_type=None
+    )
+
+
+def get_frame_forces_bridge(
+    base_url: str, timeout_seconds: float, frame_name: str, case_name: str,
+    station: float | None = None,
+) -> dict[str, Any]:
+    path = f"/v1/frames/{quote(frame_name, safe='')}/forces/{quote(case_name, safe='')}"
+    if station is not None:
+        path += f"?station={station}"
+    return _bridge_json_request(
+        base_url, path, timeout_seconds, method="GET", body=None, content_type=None
+    )
+
+
 def get_section_properties_bridge(
     base_url: str, timeout_seconds: float, name: str
 ) -> dict[str, Any]:

@@ -25,7 +25,10 @@ from Sap_experiment.sap_developer_server.tools import (
     get_analysis_status,
     get_combinations,
     get_distributed_loads_on_frame,
+    get_frame_forces,
     get_frames,
+    get_joint_displacements,
+    get_joint_reactions,
     get_joints,
     get_load_case_details,
     get_load_cases,
@@ -159,6 +162,34 @@ def get_analysis_status_tool() -> dict[str, Any]:
     status_code, and has_run (True only when Finished). Facts only — a locked model or an
     unfinished case is reported as-is, never judged."""
     return get_analysis_status()
+
+
+@mcp.tool(name="get_joint_displacements")
+def get_joint_displacements_tool(joint_name: str, case_name: str) -> dict[str, Any]:
+    """6-DOF displacement of ONE joint in ONE LinearStatic case (global, present units):
+    u1/u2/u3 (translations), r1/r2/r3 (rotations). Read-only post-analysis. Restrained
+    DOFs read ~0. case_not_run if the case has no results (call run_analysis first);
+    unsupported_case_type if not LinearStatic. A large displacement is a fact, not failure."""
+    return get_joint_displacements(joint_name, case_name)
+
+
+@mcp.tool(name="get_joint_reactions")
+def get_joint_reactions_tool(joint_name: str, case_name: str) -> dict[str, Any]:
+    """6-DOF reaction (force + moment) of ONE joint in ONE LinearStatic case (global,
+    present units): f1/f2/f3, m1/m2/m3. Read-only post-analysis. Unrestrained DOFs read
+    ~0; a free joint reads zeros (not an error). case_not_run / unsupported_case_type as
+    for displacements. Reactions balance applied loads (equilibrium) — a client cross-check."""
+    return get_joint_reactions(joint_name, case_name)
+
+
+@mcp.tool(name="get_frame_forces")
+def get_frame_forces_tool(frame_name: str, case_name: str, station: Optional[float] = None) -> dict[str, Any]:
+    """Internal forces along ONE frame in ONE LinearStatic case: stations with
+    relative_distance (0..1), absolute_distance, p (axial), v2/v3 (shears), t (torsion),
+    m2/m3 (moments), present units. Read-only post-analysis. station (0..1) returns just
+    that one; omit for all. case_not_run / unsupported_case_type as above. A large moment
+    is a number, not 'overstress'."""
+    return get_frame_forces(frame_name, case_name, station)
 
 
 if __name__ == "__main__":

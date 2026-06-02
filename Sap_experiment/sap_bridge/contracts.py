@@ -377,3 +377,80 @@ class AnalysisStatusResponse(BaseModel):
     model_is_locked: bool
     count: int
     status: list[CaseStatus]
+
+
+class JointDisplacements(BaseModel):
+    """The 6-DOF displacement vector of one joint in one load case, as a fact.
+
+    ``u1/u2/u3`` are translations and ``r1/r2/r3`` rotations in the global system, in the
+    model's present units. For a restrained DOF the value comes back ~0 (reported as SAP
+    gives it, never nullified). LinearStatic only this phase, so ``step_number`` is 0.
+    """
+
+    joint: str
+    case_name: str
+    coord_system: str = Field("Global", description="Coordinate system of the components")
+    step_number: float = Field(0.0, description="Result step (0 for LinearStatic)")
+    u1: float = Field(..., description="Translation U1, present units")
+    u2: float = Field(..., description="Translation U2, present units")
+    u3: float = Field(..., description="Translation U3, present units")
+    r1: float = Field(..., description="Rotation R1, present units")
+    r2: float = Field(..., description="Rotation R2, present units")
+    r3: float = Field(..., description="Rotation R3, present units")
+
+
+class JointDisplacementsResponse(BaseModel):
+    units: UnitsResponse
+    displacements: JointDisplacements
+
+
+class JointReactions(BaseModel):
+    """The 6-DOF reaction (force + moment) of one joint in one load case, as a fact.
+
+    ``f1/f2/f3`` are forces and ``m1/m2/m3`` moments in the global system, present units.
+    A DOF that is not restrained reads ~0 (reported as-is); a joint with no restraint at
+    all reads the zero vector SAP returns — correct information, not an error.
+    """
+
+    joint: str
+    case_name: str
+    coord_system: str = Field("Global", description="Coordinate system of the components")
+    step_number: float = Field(0.0, description="Result step (0 for LinearStatic)")
+    f1: float = Field(..., description="Reaction force F1, present units")
+    f2: float = Field(..., description="Reaction force F2, present units")
+    f3: float = Field(..., description="Reaction force F3, present units")
+    m1: float = Field(..., description="Reaction moment M1, present units")
+    m2: float = Field(..., description="Reaction moment M2, present units")
+    m3: float = Field(..., description="Reaction moment M3, present units")
+
+
+class JointReactionsResponse(BaseModel):
+    units: UnitsResponse
+    reactions: JointReactions
+
+
+class FrameForceStation(BaseModel):
+    """Internal forces at one station along a frame, in one load case.
+
+    ``relative_distance`` is 0..1 along the frame; ``absolute_distance`` is in present
+    length units. ``p`` is axial, ``v2``/``v3`` shears, ``t`` torsion, ``m2``/``m3``
+    moments — all in present units, all facts. A large value is not a judgement of
+    failure (anti-pattern #4).
+    """
+
+    relative_distance: float = Field(..., description="Station position 0..1 along the frame")
+    absolute_distance: float = Field(..., description="Station distance from i-end, present units")
+    p: float = Field(..., description="Axial force P, present units")
+    v2: float = Field(..., description="Shear V2, present units")
+    v3: float = Field(..., description="Shear V3, present units")
+    t: float = Field(..., description="Torsion T, present units")
+    m2: float = Field(..., description="Moment M2, present units")
+    m3: float = Field(..., description="Moment M3, present units")
+
+
+class FrameForcesResponse(BaseModel):
+    units: UnitsResponse
+    frame: str
+    case_name: str
+    count: int
+    stations: list[FrameForceStation]

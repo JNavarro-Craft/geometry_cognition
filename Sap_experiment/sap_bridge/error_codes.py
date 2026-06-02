@@ -35,6 +35,16 @@ OAPI_UNEXPECTED_SHAPE = "oapi_unexpected_shape"
 (e.g. a null array where a name list was expected). Reported, never silently
 patched — this is exactly the silent-bug class geometry_cognition hunts."""
 
+# Results preconditions (Fase 1e)
+CASE_NOT_RUN = "case_not_run"
+"""Results were requested for a load case that exists but has not been analysed (no
+results to read). The client should call run_analysis first. Client-fixable."""
+
+UNSUPPORTED_CASE_TYPE = "unsupported_case_type"
+"""Results were requested for a case type this phase does not resolve (e.g. Modal,
+ResponseSpectrum). The case and its type are valid; the bridge just does not expose
+its results yet. Not a transport failure."""
+
 # Bridge internals
 PYTHONNET_UNAVAILABLE = "pythonnet_unavailable"
 """pythonnet / the SAP2000v1 assembly could not be loaded. The bridge cannot talk

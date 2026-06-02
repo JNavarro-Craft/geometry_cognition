@@ -14,7 +14,10 @@ from .bridge_backend import (
     get_analysis_status_bridge,
     get_combinations_bridge,
     get_distributed_loads_on_frame_bridge,
+    get_frame_forces_bridge,
     get_frames_bridge,
+    get_joint_displacements_bridge,
+    get_joint_reactions_bridge,
     get_joints_bridge,
     get_load_case_details_bridge,
     get_load_cases_bridge,
@@ -250,5 +253,55 @@ def get_analysis_status() -> dict[str, Any]:
     base_url, timeout = bridge_settings()
     try:
         return get_analysis_status_bridge(base_url, timeout)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def get_joint_displacements(joint_name: str, case_name: str) -> dict[str, Any]:
+    """The 6-DOF displacement of ONE joint in ONE load case (LinearStatic). Returns
+    ``u1/u2/u3`` (translations) and ``r1/r2/r3`` (rotations) in the global system,
+    present units. Read-only post-analysis.
+
+    Facts only. A restrained DOF reads ~0 (as SAP gives it). If the case has not been run,
+    returns a structured ``case_not_run`` (call run_analysis first); a non-LinearStatic
+    case returns ``unsupported_case_type``. A large displacement is a number, not "failure".
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return get_joint_displacements_bridge(base_url, timeout, joint_name, case_name)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def get_joint_reactions(joint_name: str, case_name: str) -> dict[str, Any]:
+    """The 6-DOF reaction (force + moment) of ONE joint in ONE load case (LinearStatic).
+    Returns ``f1/f2/f3`` (forces) and ``m1/m2/m3`` (moments) in the global system, present
+    units. Read-only post-analysis.
+
+    Facts only. An unrestrained DOF reads ~0; a fully free joint reads the zero vector —
+    correct information, not an error. ``case_not_run`` / ``unsupported_case_type`` as for
+    displacements. Reactions at the restrained joints balance the applied loads (global
+    equilibrium) — a cross-check the client can compose, not a judgement the bridge makes.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return get_joint_reactions_bridge(base_url, timeout, joint_name, case_name)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def get_frame_forces(frame_name: str, case_name: str, station: float | None = None) -> dict[str, Any]:
+    """Internal forces along ONE frame in ONE load case (LinearStatic): a list of
+    ``stations``, each with ``relative_distance`` (0..1), ``absolute_distance``, ``p``
+    (axial), ``v2``/``v3`` (shears), ``t`` (torsion), ``m2``/``m3`` (moments), present
+    units. Read-only post-analysis.
+
+    ``station`` (0..1) returns just that station; omit for all SAP computed. Facts only —
+    a large moment is a number, not "overstress". ``case_not_run`` / ``unsupported_case_type``
+    as above.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return get_frame_forces_bridge(base_url, timeout, frame_name, case_name, station)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)

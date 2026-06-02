@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 
 from . import error_codes
@@ -22,8 +22,11 @@ from .contracts import (
     CombinationsResponse,
     DistributedLoadsResponse,
     ErrorResponse,
+    FrameForcesResponse,
     FramesResponse,
     HealthResponse,
+    JointDisplacementsResponse,
+    JointReactionsResponse,
     JointsResponse,
     LoadCaseDetailsResponse,
     LoadCasesResponse,
@@ -38,8 +41,10 @@ from .path_resolver import resolve_oapi_dll
 from .primitives import analysis as analysis_primitive
 from .primitives import combinations as combinations_primitive
 from .primitives import frame_loads as frame_loads_primitive
+from .primitives import frame_results as frame_results_primitive
 from .primitives import frames as frames_primitive
 from .primitives import joint_loads as joint_loads_primitive
+from .primitives import joint_results as joint_results_primitive
 from .primitives import joints as joints_primitive
 from .primitives import load_case_details as load_case_details_primitive
 from .primitives import load_cases as load_cases_primitive
@@ -79,6 +84,7 @@ async def _session_error_handler(_request, exc: SapSessionError) -> JSONResponse
         error_codes.SAP_NOT_RUNNING,
         error_codes.SAP_PROCESS_DIED,
         error_codes.NO_MODEL_OPEN,
+        error_codes.CASE_NOT_RUN,
     }
     status = 409 if exc.code in precondition else 502
     logger.warning("session error [%s]: %s", exc.code, exc.message)
@@ -297,3 +303,60 @@ def get_analysis_status() -> AnalysisStatusResponse:
     with session.lock():
         model = session.sap_model()
         return analysis_primitive.get_analysis_status(model)
+
+
+# --- Analysis results (read-only post-analysis) ------------------------------
+# These read results the analysis produced. They depend on computation state: a case
+# that has not been run returns case_not_run; a non-LinearStatic case returns
+# unsupported_case_type. Values are in present units (the bridge never converts).
+
+
+@app.get("/v1/joints/{name}/displacements/{case_name}", response_model=JointDisplacementsResponse)
+def get_joint_displacements(name: str, case_name: str) -> JointDisplacementsResponse:
+    """6-DOF displacement of one joint in one LinearStatic case (global, present units).
+    Restrained DOFs read ~0, reported as SAP gives them. case_not_run if the case has no
+    results; unsupported_case_type if it is not LinearStatic."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        present_units = units_primitive.get_present_units(model)
+        disp = joint_results_primitive.get_joint_displacements(
+            model, session.oapi_namespace(), name, case_name
+        )
+        return JointDisplacementsResponse(units=present_units, displacements=disp)
+
+
+@app.get("/v1/joints/{name}/reactions/{case_name}", response_model=JointReactionsResponse)
+def get_joint_reactions(name: str, case_name: str) -> JointReactionsResponse:
+    """6-DOF reaction (force + moment) of one joint in one LinearStatic case (global,
+    present units). Unrestrained DOFs read ~0; a free joint reads the zero vector — a
+    fact, not an error. case_not_run / unsupported_case_type as above."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        present_units = units_primitive.get_present_units(model)
+        react = joint_results_primitive.get_joint_reactions(
+            model, session.oapi_namespace(), name, case_name
+        )
+        return JointReactionsResponse(units=present_units, reactions=react)
+
+
+@app.get("/v1/frames/{name}/forces/{case_name}", response_model=FrameForcesResponse)
+def get_frame_forces(
+    name: str,
+    case_name: str,
+    station: float | None = Query(None, ge=0.0, le=1.0, description="Relative station 0..1; omit for all"),
+) -> FrameForcesResponse:
+    """Internal forces (P, V2, V3, T, M2, M3) at the stations along one frame in one
+    LinearStatic case (present units). ``station`` (0..1) returns just that station; omit
+    for all SAP computed. case_not_run / unsupported_case_type as above."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        present_units = units_primitive.get_present_units(model)
+        rows = frame_results_primitive.get_frame_forces(
+            model, session.oapi_namespace(), name, case_name, station
+        )
+        return FrameForcesResponse(
+            units=present_units, frame=name, case_name=case_name, count=len(rows), stations=rows
+        )
