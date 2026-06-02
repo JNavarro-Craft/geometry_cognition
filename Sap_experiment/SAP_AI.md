@@ -60,6 +60,7 @@ día uno.
 | 🔶 **Savepoint: restaurar (WRITE destr.)** | `POST /v1/savepoints/{name}/restore` | `restore_savepoint` | ✅ confirm obligatorio; dry_run; ciclo undo validado (revierte cambio real de active_dof) |
 | Savepoint: listar | `GET /v1/savepoints` | `list_savepoints` | ✅ scan de filesystem; [] si ninguno; sin OAPI |
 | 🔶 **set_active_dof (MUTA modelo)** | `POST /v1/model/settings/active_dof` | `set_active_dof` | ✅ confirm obligatorio; dry_run con diff legible; locked → rechaza; ciclo cliente validado |
+| 🔶 **set_present_units (MUTA modelo)** | `POST /v1/model/settings/present_units` | `set_present_units` | ✅ name→enum; confirm + dry_run; TEST KEY: propagación a read-side (fuerzas ×9.80665, distancias intactas) |
 | Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; `case_not_run`, `unsupported_case_type`, `confirm_required`, `savepoint_not_found`, `savepoint_already_exists` |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
@@ -117,6 +118,14 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 > Hecho, no juicio: un displacement grande es un número, no "falla" (anti-patrón #4); las
 > reacciones equilibran las cargas pero ese cross-check lo compone el cliente, no el bridge.
 > Sigue fuera: stresses (1e.2), envelope (1e.3), modal/spectrum (1f).
+
+> Actualización sesión 10 (Fase 1g.3 — generalización de la plantilla write):
+> `set_present_units` (`POST /v1/model/settings/present_units`) cambia el sistema de
+> unidades de *display* por NOMBRE (name→enum vía getattr; `unknown_unit_system` si no
+> existe). Setting global → confirm + dry_run + audit, siguiendo la plantilla de 1g.2 sin
+> fricción. **22 primitivas**. **TEST KEY validado**: tras cambiar a N_m_C, el read-side
+> reporta consistentemente — distancias intactas (metros), fuerzas ×9.80665 (kgf→N); el
+> bridge NO convierte, SAP reformatea y el bridge relaya. database_units no se toca.
 
 > Actualización sesión 9 (Fase 1g.2 — primer write que MUTA el modelo): `set_active_dof`
 > (`POST /v1/model/settings/active_dof`) cambia los DOFs activos en memoria. Setting global

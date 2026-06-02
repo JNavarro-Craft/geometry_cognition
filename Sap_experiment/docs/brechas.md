@@ -310,6 +310,41 @@ dedicado. Anotado, no parcheado (no bloquea).
 
 ---
 
+## 🔶 Hallazgos OAPI Fase 1g.3 — set_present_units (resueltos)
+
+### 22. `SetPresentUnits(eUnits)` toma el MIEMBRO del enum, no un int; códigos ≠ asumidos
+- `cSapModel.SetPresentUnits(eUnits Units)` → exige el **miembro del enum** (un int crudo
+  lanza `TypeError`), retorna 0 OK. Por eso la primitiva resuelve name→miembro con
+  `getattr(oapi.eUnits, name)` (en `units.resolve_unit_system`), no a un int.
+- ⚠️ **Los códigos del enum NO son los que asumía el prompt**: `N_m_C` es **10**, no 7
+  (7 es `kgf_mm_C`). Resolver por NOMBRE contra el enum vivo evita toda esa clase de error
+  (anti-patrón #5). El conjunto soportado (16 sistemas) sale del propio enum, así que
+  **coincide exactamente con lo que el read-side expone** — sin tabla duplicada que derive.
+- Cambiar present_units **NO** cambia `model_is_locked` (es display preference). Idempotente
+  (setear el valor actual → ret 0, `change_summary: 'X → X'`).
+- Código de error nuevo: `UNKNOWN_UNIT_SYSTEM` (409, lista los nombres soportados) — más
+  claro que reusar `oapi_unexpected_shape` para input del cliente (empieza a resolver el
+  filo anotado en §21).
+
+### ✅ TEST KEY — propagación de units a TODO el read-side (validado positivo)
+Cambiar present_units a N_m_C y re-leer el read-side:
+- **Distancias se mantienen**: joint 9 x = -13.7687 en kgf_m_C y en N_m_C (metros es metros).
+- **Fuerzas re-escalan**: frame 4133 distributed load 19.4 → 190.249, **factor 9.80665
+  exacto** (1 kgf = 9.80665 N). El campo `units` de cada respuesta cambió a N_m_C.
+- Tras restore, todo volvió a kgf_m_C / 19.4. **El bridge respeta present_units de forma
+  consistente en todo el read-side** — y NO convierte nada él mismo: SAP reformatea según
+  el sistema y el bridge relaya (la decisión agnóstica de raíz, sin el leak de unidades del
+  C# heredado). No es un bug — es el comportamiento correcto.
+
+### Generalización de la plantilla write
+set_present_units siguió la plantilla de set_active_dof (validar → dry_run → confirm →
+aplicar → audit) **sin fricción**. Confirma la plantilla como reusable para todo write de
+setting global. El shape `UnitsChange` reutiliza `UnitsResponse` (campo interno
+`present_units`) en vez de un `{name,code}` nuevo — consistencia del contrato sobre la
+sugerencia del prompt.
+
+---
+
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
 
 Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fase.
@@ -344,9 +379,12 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
     global → confirm obligatorio) + **audit logging** compartido (retrofit a savepoints).
     **Hecha** (sesión 9); ciclo del patrón cliente validado end-to-end (savepoint → preview
     → rechazo-sin-confirm → aplicar → restore). 21 primitivas.
-  - ◾ **1g.3+** — writes "reales" restantes (`set_present_units`, create/modify/delete
-    sections, assign sections…), cada una apoyada en savepoints + audit log. Evitar el
-    delete-all-then-recreate peligroso de `RhinoSAP/SapFrameSynchronizer`.
+  - ✅ **1g.3** — `set_present_units` (segundo setting global; valida que la plantilla
+    generaliza). **Hecha** (sesión 10); ciclo del patrón cliente + TEST KEY de propagación
+    de units validados. 22 primitivas.
+  - ◾ **1g.4+** — SALTO CUALITATIVO: writes sobre OBJETOS (create_material/create_section…
+    introducen el prefijo AI_), luego assign (batches + stop-on-first-failure), modify,
+    delete. Evitar el delete-all-then-recreate peligroso de `RhinoSAP/SapFrameSynchronizer`.
 - ◾ **Fase 1h** — snapshots + diff.
 - ◾ **Fase 1i** — poblar `docs/domains/structural/` (códigos, materiales, factores,
   recetas, casos) — conocimiento del cliente, no tools.

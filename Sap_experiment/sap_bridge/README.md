@@ -83,6 +83,7 @@ Match on either; the bridge does not interpret the system.
 | `GET /v1/units` | (internal) | active SAP unit system |
 | `GET /v1/model/settings` | `get_model_settings` | active DOFs, lock state, present + database units |
 | **`POST`** `/v1/model/settings/active_dof` | `set_active_dof` | **write**: set active DOFs (global setting) |
+| **`POST`** `/v1/model/settings/present_units` | `set_present_units` | **write**: set present units (global setting) |
 | `GET /v1/joints` | `get_joints` | points: name, coords, 6-DOF restraints |
 | `GET /v1/frames` | `get_frames` | frames: name, i/j connectivity, section |
 | `GET /v1/sections` | `get_sections` | section catalogue: name + type |
@@ -667,6 +668,33 @@ echoed as a fact.
 > Validated end-to-end on TEST_01 via the client pattern: `create_savepoint` → dry-run
 > preview → reject without confirm → apply with confirm → restore. The audit log captured
 > all steps including the errors.
+
+### `POST /v1/model/settings/present_units`  *(write — global setting)*
+
+Set the model's present (display) units **by name**. The write counterpart of the
+`present_units` field from `GET /v1/model/settings`.
+
+```json
+{ "units": "N_m_C", "dry_run": false, "confirm": true }
+```
+
+- `units`: an eUnits member name (`kgf_m_C`, `N_m_C`, `lb_ft_F`, …). An unknown name →
+  `unknown_unit_system` (the message lists the supported names). The bridge resolves
+  name → enum off the live `eUnits`, so the accepted set is exactly the read-side's.
+- `confirm` is **mandatory** (global setting): without it → `confirm_required`.
+  `dry_run: true` previews with a `change_summary` without applying. Idempotent — setting
+  the current value again is a valid no-op (`change_summary: "kgf_m_C → kgf_m_C"`).
+
+Dry-run → `would_apply` (`current_units`, `new_units`, `change_summary`); real run →
+`applied` (`previous_units`, `current_units`, `change_summary`). Each units value uses the
+existing [`units` object](#the-units-object) shape.
+
+> **Display preference, not a conversion.** Changing present units reformats how the
+> read-side reports values; the bridge converts nothing itself. Verified on TEST_01:
+> switching to `N_m_C`, distances are unchanged (joint 9 `x` = -13.7687 in both — metres is
+> metres) while forces rescale (frame 4133 distributed load 19.4 → 190.249, a factor of
+> 9.80665 = kgf→N). `database_units` is **not** touched (that would convert stored data —
+> out of scope). `model_is_locked` is unaffected.
 
 ### `GET /v1/savepoints`
 
