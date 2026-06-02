@@ -67,21 +67,34 @@ Contrato completo en [`sap_bridge/README.md`](sap_bridge/README.md).
 
 ## Cómo correr
 
+**Antes de usar el MCP, arranca el bridge con:** `./scripts/start_bridge.ps1`
+(desde `Sap_experiment/`; deja la terminal ocupada — el bridge corre en primer plano).
+
 ```powershell
-# 1) instalar deps del bridge
+# 1) instalar deps del bridge (una vez)
 python -m pip install -r Sap_experiment/sap_bridge/requirements.txt
 
 # 2) abrir SAP2000 con un modelo (attach-only: el bridge NO lo lanza)
 
-# 3) levantar el bridge
-$env:PYTHONPATH = "i:\Mi unidad\geometry_cognition"
-python -m uvicorn Sap_experiment.sap_bridge.main:app --host 127.0.0.1 --port 8766
+# 3) levantar el bridge (one-liner)
+./scripts/start_bridge.ps1
 
 # 4) probar
 Invoke-RestMethod http://127.0.0.1:8766/v1/joints
 ```
 
 Registrar el MCP en Claude Desktop: ver [`sap_developer_server/README.md`](sap_developer_server/README.md).
+
+### Orden operacional recomendado
+
+1. **Abrir SAP2000** con el modelo.
+2. **Arrancar el bridge** (`./scripts/start_bridge.ps1`).
+3. **Registrar el MCP / abrir Claude.**
+
+Técnicamente el bridge puede arrancarse antes o después de SAP — el attach a la sesión OAPI
+es *lazy* (ocurre en la primera llamada `/v1/*`, no al arrancar), así que el orden no rompe
+nada hoy. Pero como práctica operacional conviene seguir ese orden: deja un punto único de
+diagnóstico si SAP no abre bien, y evita confusión en casos futuros donde el orden sí importe.
 
 ## Validación
 
