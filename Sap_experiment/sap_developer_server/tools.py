@@ -20,6 +20,10 @@ from .bridge_backend import (
     get_combinations_bridge,
     get_model_settings_bridge,
     list_savepoints_bridge,
+    create_joint_bridge,
+    create_joints_bridge,
+    delete_joint_bridge,
+    modify_joint_bridge,
     modify_rectangular_section_bridge,
     new_blank_model_bridge,
     open_model_bridge,
@@ -493,6 +497,61 @@ def save_workspace_as(path: str, dry_run: bool = False, confirm: bool = False) -
     base_url, timeout = bridge_settings()
     try:
         return save_workspace_as_bridge(base_url, timeout, path, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def create_joint(
+    x: float, y: float, z: float, name: str | None = None,
+    dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Create one joint at (x,y,z) in the model's present units (WRITE — geometry). ``name`` is
+    OPTIONAL: if given it must carry the bridge prefix (AI_); if omitted the bridge autogenerates
+    AI_J### (a per-session counter; an explicit name does NOT advance it). ``confirm=true``
+    mandatory (modifies the model); ``dry_run=true`` previews the resolved name + coords. The
+    model must be buildable (open a model or new_blank_model first)."""
+    base_url, timeout = bridge_settings()
+    try:
+        return create_joint_bridge(base_url, timeout, x, y, z, name, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def create_joints(
+    joints: list[dict], dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Create many joints atomically (WRITE — batch). ``joints`` is a list of {x, y, z, name?}
+    (name optional per element, same hybrid rule as create_joint). Stop-on-first-failure:
+    returns applied / failed_at / not_attempted. ``dry_run=true`` previews ALL resolved names in
+    order (so you see exactly what a real run assigns). ``confirm=true`` mandatory."""
+    base_url, timeout = bridge_settings()
+    try:
+        return create_joints_bridge(base_url, timeout, joints, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def delete_joint(name: str, dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """Delete a joint (WRITE — destructive). REFUSED with ``joint_has_connected_frames`` (listing
+    them) if any frame touches the joint — delete those frames first (no automatic cascade).
+    ``confirm=true`` mandatory; ``dry_run=true`` reports whether it has connected frames without
+    deleting."""
+    base_url, timeout = bridge_settings()
+    try:
+        return delete_joint_bridge(base_url, timeout, name, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def modify_joint(
+    name: str, x: float, y: float, z: float, dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Move a joint to new coords (WRITE). Affects EVERY connected frame → ``confirm=true``
+    mandatory; ``dry_run=true`` previews old/new coords + the list of affected frames. The
+    frames follow the joint (their endpoints are the joint name, geometry updates in place)."""
+    base_url, timeout = bridge_settings()
+    try:
+        return modify_joint_bridge(base_url, timeout, name, x, y, z, dry_run, confirm)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)
 

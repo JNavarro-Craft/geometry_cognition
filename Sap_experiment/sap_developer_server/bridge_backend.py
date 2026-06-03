@@ -155,6 +155,51 @@ def save_workspace_as_bridge(
     )
 
 
+# --- Geometry: joints (Fase 1h.2) --------------------------------------------
+
+def create_joint_bridge(
+    base_url: str, timeout_seconds: float, x: float, y: float, z: float,
+    name: str | None, dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"x": x, "y": y, "z": z, "name": name,
+                       "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, "/v1/joints", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
+def create_joints_bridge(
+    base_url: str, timeout_seconds: float, joints: list[dict], dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"joints": joints, "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, "/v1/joints/batch", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
+def delete_joint_bridge(
+    base_url: str, timeout_seconds: float, name: str, dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, f"/v1/joints/{quote(name)}", timeout_seconds,
+        method="DELETE", body=body, content_type="application/json",
+    )
+
+
+def modify_joint_bridge(
+    base_url: str, timeout_seconds: float, name: str, x: float, y: float, z: float,
+    dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"x": x, "y": y, "z": z, "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, f"/v1/joints/{quote(name)}", timeout_seconds,
+        method="PATCH", body=body, content_type="application/json",
+    )
+
+
 def create_material_bridge(
     base_url: str, timeout_seconds: float, name: str, material_type: str, dry_run: bool
 ) -> dict[str, Any]:

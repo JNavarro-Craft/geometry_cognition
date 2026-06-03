@@ -102,6 +102,11 @@ calling OpenFile (SAP would otherwise leave the session pointing at a phantom fi
 INVALID_PATH = "invalid_path"
 """open_model was given a path that is not absolute or does not end in .sdb."""
 
+JOINT_HAS_CONNECTED_FRAMES = "joint_has_connected_frames"
+"""delete_joint was called on a joint that still has frames connected to it (as i or j end).
+SAP only deletes points with no connected objects (§33); the bridge refuses and lists the
+connected frames so the client can delete those first. No automatic cascade (decisión #5)."""
+
 EMPTY_MODEL = "empty_model"
 """save_workspace_as was asked to materialize a model with no joints and no frames.
 Verified empirically (brechas.md §31): cFile.Save on an empty model produces a .sdb that
