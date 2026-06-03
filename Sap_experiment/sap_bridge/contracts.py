@@ -951,3 +951,67 @@ class ResetWorkspaceResponse(BaseModel):
     validation_passed: bool = True
     would_apply: WorkspaceInfo | None = None
     applied: WorkspaceInfo | None = None
+
+
+# --- Build-from-blank: new_blank_model + save_workspace_as (Fase 1h.1) --------
+# new_blank_model starts an empty model in memory (no base file) on a temp workspace;
+# save_workspace_as materializes the workspace to disk as a new base. Together they let a
+# client build a model from scratch and then enter the normal workspace pattern.
+
+
+class NewBlankModelRequest(BaseModel):
+    """Body for POST /v1/model/new_blank. ``units`` is an eUnits member NAME (e.g. 'kgf_m_C')
+    — resolved name → enum. ``confirm`` mandatory (DESTRUCTIVE: discards the loaded model
+    without saving); ``dry_run`` previews."""
+
+    units: str = Field(..., description="Unit-system name (eUnits member, e.g. 'kgf_m_C')")
+    dry_run: bool = Field(False, description="If true, preview without initializing")
+    confirm: bool = Field(False, description="Mandatory: discards the loaded model (no save)")
+
+
+class BlankModelChange(BaseModel):
+    """The blank-init as facts: what was loaded before, the units, and the new
+    base (always None — no base file) / temp workspace the bridge will write to."""
+
+    previous_loaded: str = Field(..., description="Model loaded before ('none' / '(Untitled)')")
+    new_units: str = Field(..., description="Units the empty model is initialized with")
+    new_base_model_path: str | None = Field(None, description="Always None — a blank model has no base")
+    new_workspace_path: str = Field(..., description="Temp workspace the bridge writes to")
+
+
+class NewBlankModelResponse(BaseModel):
+    """Result of new_blank_model. Dry-run: ``would_apply``, ``applied`` null; real run the
+    reverse. ``confirm`` is mandatory (destructive)."""
+
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: BlankModelChange | None = None
+    applied: BlankModelChange | None = None
+
+
+class SaveWorkspaceAsRequest(BaseModel):
+    """Body for POST /v1/workspace/save_as. ``path`` is an absolute .sdb path. PROHIBITS
+    path == current base (that would be a commit-to-base, a future separate primitive).
+    ``confirm`` mandatory ONLY to overwrite an existing file; ``dry_run`` previews."""
+
+    path: str = Field(..., description="Absolute .sdb path to save the workspace as a new base")
+    dry_run: bool = Field(False, description="If true, preview without saving")
+    confirm: bool = Field(False, description="Mandatory only when overwriting an existing file")
+
+
+class SaveWorkspaceAsChange(BaseModel):
+    """The save-as as facts: the base before/after and the new workspace alongside the new
+    base. After this the saved file IS the immutable base and the bridge re-anchors onto a
+    fresh ``<new_base>__workspace.sdb`` (normal workspace pattern resumes)."""
+
+    previous_base_model_path: str | None = Field(None, description="Base before (None if from blank)")
+    new_base_model_path: str = Field(..., description="The saved path, now the immutable base")
+    new_workspace_path: str = Field(..., description="Fresh workspace alongside the new base")
+    overwrote_existing: bool = Field(..., description="True if an existing file was overwritten")
+
+
+class SaveWorkspaceAsResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: SaveWorkspaceAsChange | None = None
+    applied: SaveWorkspaceAsChange | None = None

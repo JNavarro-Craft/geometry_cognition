@@ -21,6 +21,7 @@ from .bridge_backend import (
     get_model_settings_bridge,
     list_savepoints_bridge,
     modify_rectangular_section_bridge,
+    new_blank_model_bridge,
     open_model_bridge,
     reset_workspace_bridge,
     restore_savepoint_bridge,
@@ -472,6 +473,24 @@ def reset_workspace(dry_run: bool = False, confirm: bool = False) -> dict[str, A
     base_url, timeout = bridge_settings()
     try:
         return reset_workspace_bridge(base_url, timeout, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def new_blank_model(units: str, dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """Initialize an EMPTY model from scratch (WRITE — build-from-blank). ``units`` is a
+    unit-system name (eUnits member, e.g. 'kgf_m_C', 'N_m_C'; else ``unknown_unit_system``).
+    DESTRUCTIVE: discards the currently loaded model WITHOUT saving → ``confirm=true`` is
+    mandatory (else ``confirm_required``); ``dry_run=true`` previews.
+
+    The empty model (0 joints, 0 frames, SAP default materials) gets a temp workspace and NO
+    base file. Build it with the create_* primitives (materials, sections, geometry — phases
+    1h.2+), then call save_workspace_as(path) to materialize it as a new base on disk. Units are
+    not anchored — set_present_units can change them afterward.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return new_blank_model_bridge(base_url, timeout, units, dry_run, confirm)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)
 

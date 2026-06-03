@@ -45,6 +45,7 @@ from Sap_experiment.sap_developer_server.tools import (
     get_sections,
     list_savepoints,
     modify_rectangular_section,
+    new_blank_model,
     open_model,
     reset_workspace,
     restore_savepoint,
@@ -358,6 +359,16 @@ def open_model_tool(path: str, dry_run: bool = False, confirm: bool = False) -> 
     (discards unsaved changes); dry_run previews. The opened model becomes the new base and the
     bridge re-anchors to a fresh workspace derived from it."""
     return open_model(path, dry_run, confirm)
+
+
+@mcp.tool(name="new_blank_model")
+def new_blank_model_tool(units: str, dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """WRITE: initialize an EMPTY model from scratch (build-from-blank). units is a unit-system
+    name (eUnits member, e.g. 'kgf_m_C'; else unknown_unit_system). DESTRUCTIVE: discards the
+    loaded model WITHOUT saving → confirm=true mandatory (else confirm_required); dry_run previews.
+    The empty model (0 joints, 0 frames) gets a temp workspace and no base file; build it with the
+    create_* primitives, then save_workspace_as(path) to materialize it as a new base."""
+    return new_blank_model(units, dry_run, confirm)
 
 
 @mcp.tool(name="reset_workspace")

@@ -125,6 +125,16 @@ def open_model_bridge(
     )
 
 
+def new_blank_model_bridge(
+    base_url: str, timeout_seconds: float, units: str, dry_run: bool, confirm: bool
+) -> dict[str, Any]:
+    body = json.dumps({"units": units, "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, "/v1/model/new_blank", max(timeout_seconds, 120.0),
+        method="POST", body=body, content_type="application/json",
+    )
+
+
 def reset_workspace_bridge(
     base_url: str, timeout_seconds: float, dry_run: bool, confirm: bool
 ) -> dict[str, Any]:

@@ -33,11 +33,15 @@ from .contracts import (
     LoadPatternsResponse,
     MaterialsResponse,
     ModelSettingsResponse,
+    NewBlankModelRequest,
+    NewBlankModelResponse,
     OpenModelRequest,
     OpenModelResponse,
     PointLoadsResponse,
     ResetWorkspaceRequest,
     ResetWorkspaceResponse,
+    SaveWorkspaceAsRequest,
+    SaveWorkspaceAsResponse,
     SetModelLockedRequest,
     SetModelLockedResponse,
     SavepointCreateRequest,
@@ -79,6 +83,7 @@ from .primitives import load_cases as load_cases_primitive
 from .primitives import load_patterns as load_patterns_primitive
 from .primitives import materials as materials_primitive
 from .primitives import materials_write as materials_write_primitive
+from .primitives import model_initialization as model_initialization_primitive
 from .primitives import model_settings as model_settings_primitive
 from .primitives import model_state as model_state_primitive
 from .primitives import present_units as present_units_primitive
@@ -232,6 +237,23 @@ def open_model(request: OpenModelRequest) -> OpenModelResponse:
         session.sap_model()  # ensure attached
         return model_state_primitive.open_model(
             session.sap_model, session.workspace, request.path, request.dry_run, request.confirm
+        )
+
+
+@app.post("/v1/model/new_blank", response_model=NewBlankModelResponse)
+def new_blank_model(request: NewBlankModelRequest) -> NewBlankModelResponse:
+    """Initialize an empty model from scratch (write — build-from-blank, Fase 1h.1). ``units``
+    is an eUnits member NAME (else unknown_unit_system). DESTRUCTIVE: discards the currently
+    loaded model WITHOUT saving → ``confirm`` mandatory (else confirm_required); ``dry_run``
+    previews. The empty model gets a temp workspace (no base file); build it with the create_*
+    primitives, then save_workspace_as to materialize it as a new base. Units are not anchored
+    (set_present_units can change them)."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()  # ensure attached
+        return model_initialization_primitive.new_blank_model(
+            model, session.oapi_namespace(), session.workspace,
+            request.units, request.dry_run, request.confirm,
         )
 
 
