@@ -84,9 +84,13 @@ class SapSession:
         self._sap_model: Any | None = None
         self._lock = threading.RLock()
         # Workspace state (Fase 1g.9). Imported lazily to avoid a circular import.
+        import uuid
+
         from .bridge_state import WorkspaceState
 
-        self.workspace = WorkspaceState()
+        # session_id (UUID) assigned at construction: anchors blank-model temp workspaces
+        # and lets a future cleanup target this session's files (Fase 1h.1).
+        self.workspace = WorkspaceState(session_id=uuid.uuid4().hex)
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -130,11 +134,19 @@ class SapSession:
                 ) from exc
 
             # Auto-workspace: immediately move the session onto a transient workspace copy
-            # so the user's base model is never written in the default flow (§28, §3c). Done
-            # inside the same lock, right after a successful attach. Imported lazily.
+            # so the user's base model is never written in the default flow (§28, §3c). If
+            # SAP is open without a model (GetModelFilename non-absolute, §30), no workspace
+            # is created — base/workspace stay None, awaiting new_blank_model/open_model.
             from .bridge_state import ensure_workspace_from_current_model
 
-            ensure_workspace_from_current_model(self._sap_model, self.workspace)
+            if ensure_workspace_from_current_model(self._sap_model, self.workspace):
+                pass  # workspace established and logged inside the helper
+            else:
+                logger.info(
+                    "Bridge attached. No model loaded. Awaiting new_blank_model or open_model. "
+                    "(session_id=%s)",
+                    self.workspace.session_id,
+                )
 
     def is_alive(self) -> bool:
         """Cheap liveness probe: a model handle that answers GetModelIsLocked.
