@@ -79,6 +79,8 @@ día uno.
 | 🔶 **modify_joint (mueve)** | `PATCH /v1/joints/{name}` | `modify_joint` | ✅ ChangeCoordinates_1; lista frames afectados; confirm; M2 |
 | 🔶 **modify_frame (in-place)** | `PATCH /v1/frames/{name}` | `modify_frame` | ✅ ChangeConnectivity in-place (preserva releases, §33) + SetSection; ≥1 campo; confirm |
 | 🔶 **set_frame_releases** | `POST /v1/frames/{name}/releases` | `set_frame_releases` | ✅ flags nombrados {U1..R3}→array [orden §33]; confirm; dry_run diff; SAP rechaza inestables→oapi_call_failed |
+| 🔶 **set_joint_restraints / _batch** | `POST /v1/joints/{name}/restraints` `/restraints/batch` | `set_joint_restraints(_batch)` | ✅ apoyos 6-DOF, flags nombrados {U1..R3}; SetRestraint sobrescribe (M1); confirm; batch atómico; sin dominio (pinned/fixed los compone el cliente) |
+| Restraints de UN joint | `GET /v1/joints/{name}/restraints` | `get_joint_restraints` | ✅ los 6 flags crudos; lookup puntual (get_joints trae los de todos) |
 | Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; `case_not_run`, `confirm_required`, `savepoint_not_found`, `invalid_path`, `empty_model`, `joint_has_connected_frames` |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
@@ -197,6 +199,21 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 > reveló bugs nuevos — las 9 primitivas funcionaron a la primera. Future-aware: `apply_batch_atomic`
 > y `get_frames_connected_to_joint` (patrón "referencias a X") listos para 1h.3 (restraints) /
 > 1h.4 (cargas). Fuera de fase: restraints, cargas, `launch_sap`, `commit_workspace_to_base`.
+
+> Actualización sesión 18 (Fase 1h.3 — joint restraints / apoyos 6-DOF): 3 primitivas (**45 en
+> total**): `set_joint_restraints` + `set_joint_restraints_batch` (write) + `get_joint_restraints`
+> (read puntual). Con esto la cercha de 1h.2 ya puede **apoyarse** — falta solo 1h.4 (cargas) para
+> analizar desde cero. Mismo patrón que `set_frame_releases`: **flags nombrados** `{U1..R3}` (el
+> cliente no recuerda el orden), el bridge mapea al array posicional. **Sin patrones de dominio**:
+> el bridge expone los 6 flags crudos, "pinned"/"fixed"/"roller" los compone el cliente
+> (anti-patrón #4). Pre-vuelo (§34): `SetRestraint` sobrescribe el estado completo (M1); orden
+> `[U1,U2,U3,R1,R2,R3]` (= releases); ⚠️ **`DeleteRestraint` retorna 0 pero NO limpia los flags** →
+> el bridge libera un apoyo con `SetRestraint(all-False)`, no `DeleteRestraint` (no se expone).
+> **Validación end-to-end** (apoyar la cercha: AI_J001 pinned U1/U2/U3 + AI_apoyo_der roller U3):
+> dry_run + apply (single y batch), `get_joint_restraints` puntual coincide, `get_joints` masivo
+> refleja los apoyos, **persisten tras save→reopen**, y liberar (all-False) limpia correctamente
+> (§34 confirmado). Sin bugs nuevos — las 3 primitivas a la primera. Reusó `apply_batch_atomic` de
+> 1h.2. Fuera de fase: cargas (1h.4), springs/constraints/local-axes.
 
 > Actualización sesión 14 (Fase 1g.8 — workflow iterativo robusto + tercer bloqueante):
 > resuelve los 2 bloqueantes de §26: `set_model_locked` (unlock tras analyze → cierra el loop

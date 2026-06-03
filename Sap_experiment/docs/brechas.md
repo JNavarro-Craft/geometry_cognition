@@ -779,10 +779,11 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
     check, modify_frame in-place (§33 ChangeConnectivity). **Hecha + validada** (sesión 17). 42
     primitivas. **§31 resuelto de raíz vía §32 (NewBlank).** Validación: cercha triangular desde
     blank, 7 fases A-G, save→reopen reabrible. Ver §32, §33 y write_side_design §3e.
-  - 🟡 **1h.3** — joint restraints (apoyos 6-DOF): `set_joint_restraints` + `_batch` +
+  - ✅ **1h.3** — joint restraints (apoyos 6-DOF): `set_joint_restraints` + `_batch` +
     `get_joint_restraints`. Flags nombrados {U1..R3}, batch atómico, confirm; sin patrones de
-    dominio (pinned/fixed los compone el cliente). **En curso** (sesión 18). 42→45 primitivas.
-    Ver §34 y write_side_design §3f.
+    dominio (pinned/fixed los compone el cliente). **Hecha + validada** (sesión 18). 45 primitivas.
+    Validación: apoyar la cercha (pinned + roller), persiste tras save→reopen, liberar con
+    all-False (§34). Ver §34 y write_side_design §3f.
   - ◾ **1h.4+** — cargas (point en joints, distributed/point en frames), validación cercha
     completa con apoyos+cargas+analyze (1h.5). Fuera de 1h: `launch_sap`, `new_from_template`,
     `commit_workspace_to_base`, springs/constraints/local-axes, cleanup automático del temp.
