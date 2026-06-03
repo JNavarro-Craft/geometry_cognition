@@ -12,7 +12,7 @@ from typing import Any
 
 from .. import error_codes
 from ..audit_log import audited
-from ..bridge_state import WorkspaceState, _compute_workspace_path
+from ..bridge_state import WorkspaceState, _compute_workspace_path, reset_naming_counters
 from ..contracts import ResetWorkspaceResponse, WorkspaceInfo
 from ..sap_session import SapSessionError
 
@@ -129,5 +129,7 @@ def reset_workspace(sap_model: Any, state: WorkspaceState, dry_run: bool, confir
                 f"reset_workspace: loaded path is '{now}', expected workspace "
                 f"'{state.workspace_path}'",
             )
+        # A clean workspace restarts the geometry naming (AI_J001.. / AI_F001..), Fase 1h.2.
+        reset_naming_counters(state)
         ctx["result_details"] = {"workspace_path": state.workspace_path}
         return ResetWorkspaceResponse(dry_run=False, applied=info)

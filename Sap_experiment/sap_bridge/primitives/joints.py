@@ -42,6 +42,31 @@ def get_joints(sap_model: Any) -> list[Joint]:
             f"PointObj.GetNameList reported {number} points but returned no names",
         )
 
+    return _build_joints(point, names)
+
+
+def list_joint_names(sap_model: Any) -> list[str]:
+    """Just the joint names (for existence checks by write primitives, Fase 1h.2)."""
+    ret, number, names = sap_model.PointObj.GetNameList(0, None)
+    if ret != 0:
+        raise SapSessionError(
+            error_codes.OAPI_CALL_FAILED, f"PointObj.GetNameList returned {ret}"
+        )
+    return [str(names[i]) for i in range(number)] if number else []
+
+
+def get_joint_coords(sap_model: Any, name: str) -> tuple[float, float, float]:
+    """The global Cartesian coordinates of one joint (for modify previews, Fase 1h.2)."""
+    cret, x, y, z = sap_model.PointObj.GetCoordCartesian(name, 0.0, 0.0, 0.0, "Global")
+    if cret != 0:
+        raise SapSessionError(
+            error_codes.OAPI_CALL_FAILED,
+            f"PointObj.GetCoordCartesian('{name}') returned {cret}",
+        )
+    return float(x), float(y), float(z)
+
+
+def _build_joints(point: Any, names: Any) -> list[Joint]:
     joints: list[Joint] = []
     for name in names:
         cret, x, y, z = point.GetCoordCartesian(name, 0.0, 0.0, 0.0, "Global")
