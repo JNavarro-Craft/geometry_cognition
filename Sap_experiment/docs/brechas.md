@@ -626,6 +626,23 @@ culpa del workspace pattern:
 > `save_workspace_as` (el primero, desde blank con base=None, cortaba por el `and` antes de
 > evaluar `os`). No saltó en los tests por-primitiva; sí en el uso iterativo. Otra evidencia de §26/§28.
 
+#### §31 — TRIGGER WATCHLIST
+
+Si durante **1h.2-1h.5** aparece OTRO escenario que dispara un diálogo modal de SAP (además
+del save de modelo vacío, ya cubierto por el guard `empty_model`), **ESCALAR a una mini-fase de
+hardening sistémico** con este alcance:
+
+- Instrumentar **detección de modal** antes/después de `Save`/`OpenFile` (¿hay una ventana
+  top-level nueva de SAP? ¿la llamada COM tardó > umbral?).
+- **Timeouts configurables** en las operaciones de filesystem (Save/OpenFile/re-anchor).
+- **Validación pre-`OpenFile`** (tamaño mínimo del `.sdb`, header check) — extender la lógica
+  que ya hacen `open_model` (§27) y `save_workspace_as` (§31).
+- **Estrategia de recovery** si el modal aparece igual: matar SAP / restart / reattach limpio.
+
+Hasta entonces, **el guard `empty_model` + atención humana durante las validaciones es
+suficiente** — no endurecer especulativamente (anti-patrón #6 inverso). Esta nota es el criterio
+de escalada: el 2º trigger real convierte la brecha abierta en fase.
+
 ---
 
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
