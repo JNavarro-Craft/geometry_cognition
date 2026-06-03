@@ -84,6 +84,7 @@ from .primitives import load_patterns as load_patterns_primitive
 from .primitives import materials as materials_primitive
 from .primitives import materials_write as materials_write_primitive
 from .primitives import model_initialization as model_initialization_primitive
+from .primitives import persistence as persistence_primitive
 from .primitives import model_settings as model_settings_primitive
 from .primitives import model_state as model_state_primitive
 from .primitives import present_units as present_units_primitive
@@ -268,6 +269,21 @@ def reset_workspace(request: ResetWorkspaceRequest) -> ResetWorkspaceResponse:
         model = session.sap_model()
         return workspace_primitive.reset_workspace(
             model, session.workspace, request.dry_run, request.confirm
+        )
+
+
+@app.post("/v1/workspace/save_as", response_model=SaveWorkspaceAsResponse)
+def save_workspace_as(request: SaveWorkspaceAsRequest) -> SaveWorkspaceAsResponse:
+    """Save the current workspace content to ``path`` as a NEW base model (write — closes the
+    build-from-blank cycle). ``path`` must be absolute .sdb and must NOT be the current base
+    (that is a future commit_workspace_to_base; else invalid_path). ``confirm`` is mandatory
+    only to OVERWRITE an existing file; ``dry_run`` previews. After saving, ``path`` becomes
+    the immutable base and the bridge re-anchors onto a fresh workspace beside it."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return persistence_primitive.save_workspace_as(
+            model, session.workspace, request.path, request.dry_run, request.confirm
         )
 
 

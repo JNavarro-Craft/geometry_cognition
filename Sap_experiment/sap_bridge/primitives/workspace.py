@@ -11,11 +11,63 @@ from typing import Any
 
 from .. import error_codes
 from ..audit_log import audited
-from ..bridge_state import WorkspaceState
+from ..bridge_state import WorkspaceState, _compute_workspace_path
 from ..contracts import ResetWorkspaceResponse, WorkspaceInfo
 from ..sap_session import SapSessionError
 
 logger = logging.getLogger("sap_bridge.primitives.workspace")
+
+
+def _save_to_path_and_update_state(
+    sap_model: Any, state: WorkspaceState, path: str, allow_base_overwrite: bool
+) -> str:
+    """Save the CURRENT model content to ``path``, promote ``path`` to the new base, and
+    re-anchor onto a fresh workspace derived from it. Returns the new workspace path.
+
+    Shared infrastructure for two inverse operations (write_side_design §3d):
+      * save_workspace_as (this phase): saves to a NEW path, ``allow_base_overwrite=False`` —
+        it must NOT write the current base (path == base is rejected by the caller).
+      * commit_workspace_to_base (future): saves to the CURRENT base, ``allow_base_overwrite=
+        True`` — that IS the point. The restriction is inverted, the machinery identical.
+
+    The flag is the only difference; the caller does the policy checks (overwrite confirm,
+    path validity) before calling. This keeps the OAPI Save + re-anchor logic in one place.
+    """
+    if not allow_base_overwrite and state.base_model_path and \
+            os.path.normcase(path) == os.path.normcase(state.base_model_path):
+        # Defense in depth — the caller should already have rejected this.
+        raise SapSessionError(
+            error_codes.INVALID_PATH,
+            f"path '{path}' is the current base; use commit_workspace_to_base to write the base",
+        )
+
+    sret = sap_model.File.Save(path)  # NOT Save_2 — does not exist (§18)
+    ret_code = sret[0] if isinstance(sret, tuple) else sret
+    if ret_code != 0:
+        raise SapSessionError(
+            error_codes.OAPI_CALL_FAILED,
+            f"cFile.Save('{path}') returned {ret_code}",
+        )
+    # ``path`` is now the new immutable base. Re-derive a fresh workspace alongside it and
+    # Save into it so the session keeps operating on a transient copy, never on the base.
+    new_workspace = _compute_workspace_path(path)
+    wret = sap_model.File.Save(new_workspace)
+    wret_code = wret[0] if isinstance(wret, tuple) else wret
+    if wret_code != 0:
+        raise SapSessionError(
+            error_codes.OAPI_CALL_FAILED,
+            f"cFile.Save('{new_workspace}') (re-anchor) returned {wret_code}",
+        )
+    now = sap_model.GetModelFilename(True)
+    if now.lower() != new_workspace.lower():
+        raise SapSessionError(
+            error_codes.OAPI_UNEXPECTED_SHAPE,
+            f"after save_as, loaded path is '{now}', expected workspace '{new_workspace}'",
+        )
+    state.base_model_path = path
+    state.workspace_path = new_workspace
+    logger.info("Saved as new base: %s. Fresh workspace: %s", path, new_workspace)
+    return new_workspace
 
 
 def reset_workspace(sap_model: Any, state: WorkspaceState, dry_run: bool, confirm: bool) -> ResetWorkspaceResponse:

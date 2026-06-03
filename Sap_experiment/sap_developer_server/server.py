@@ -50,6 +50,7 @@ from Sap_experiment.sap_developer_server.tools import (
     reset_workspace,
     restore_savepoint,
     run_analysis,
+    save_workspace_as,
     set_active_dof,
     set_material_properties_isotropic,
     set_model_locked,
@@ -379,6 +380,16 @@ def reset_workspace_tool(dry_run: bool = False, confirm: bool = False) -> dict[s
     savepoints. confirm=true mandatory (discards workspace changes); dry_run previews. Use
     between iterations of a what-if experiment to start each from the same clean baseline."""
     return reset_workspace(dry_run, confirm)
+
+
+@mcp.tool(name="save_workspace_as")
+def save_workspace_as_tool(path: str, dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """WRITE: save the current workspace to path as a NEW base model (closes build-from-blank).
+    path must be ABSOLUTE .sdb and must NOT be the current base (writing the base is a future
+    commit primitive; else invalid_path). confirm=true mandatory ONLY to OVERWRITE an existing
+    file; dry_run previews. After saving, path becomes the immutable base and the bridge
+    re-anchors onto a fresh workspace beside it (normal workspace pattern resumes)."""
+    return save_workspace_as(path, dry_run, confirm)
 
 
 if __name__ == "__main__":

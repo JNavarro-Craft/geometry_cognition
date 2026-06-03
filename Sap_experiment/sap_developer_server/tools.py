@@ -25,6 +25,7 @@ from .bridge_backend import (
     open_model_bridge,
     reset_workspace_bridge,
     restore_savepoint_bridge,
+    save_workspace_as_bridge,
     set_model_locked_bridge,
     set_active_dof_bridge,
     set_material_properties_isotropic_bridge,
@@ -473,6 +474,25 @@ def reset_workspace(dry_run: bool = False, confirm: bool = False) -> dict[str, A
     base_url, timeout = bridge_settings()
     try:
         return reset_workspace_bridge(base_url, timeout, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def save_workspace_as(path: str, dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """Save the current workspace content to ``path`` as a NEW base model (WRITE — closes the
+    build-from-blank cycle). ``path`` must be an ABSOLUTE .sdb path and must NOT be the current
+    base model (writing the base is a future commit primitive; else ``invalid_path``).
+    ``confirm=true`` is mandatory ONLY to OVERWRITE an existing file (saving to a fresh path
+    needs no confirm); ``dry_run=true`` previews.
+
+    Use after building a model from new_blank_model (or after editing any workspace) to
+    materialize it on disk. After saving, ``path`` becomes the immutable base and the bridge
+    re-anchors onto a fresh workspace beside it — the normal workspace pattern resumes (you can
+    reset_workspace, savepoint, etc. against the new base).
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return save_workspace_as_bridge(base_url, timeout, path, dry_run, confirm)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)
 
