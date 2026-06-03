@@ -44,18 +44,20 @@ _SP_INFIX = "__sp_"
 
 
 def _base_model_name(stem: str) -> str:
-    """Strip any ``__sp_*`` suffix chain from a filename stem to recover the BASE model name.
+    """Strip any bridge-reserved suffix (``__sp_*`` chain or ``__workspace``) from a filename
+    stem to recover the BASE model name.
 
-    After a restore, the session is loaded on ``<base>__sp_<name>.sdb``; without this, a
-    subsequent create/restore would nest names recursively (``__sp_X__sp_Y`` — the §26 bug).
-    Cutting at the FIRST ``__sp_`` recovers the base in every case, including deep nesting:
-    ``TEST_01``→``TEST_01``; ``TEST_01__sp_v1``→``TEST_01``;
-    ``TEST_01__sp_v1__sp_v2``→``TEST_01``. ``__sp_`` is a bridge-reserved suffix
-    (write_side_design.md; a model legitimately named with ``__sp_`` would be misread —
-    known limitation).
+    The session loads on ``<base>__workspace.sdb`` (Fase 1g.9) or, transiently, on a
+    ``<base>__sp_<name>.sdb`` — without stripping, a create/restore would build names against
+    the workspace/savepoint and nest (``__sp_X__sp_Y`` — §26). Cutting at the FIRST reserved
+    suffix recovers the base in every case: ``TEST_01``→``TEST_01``;
+    ``TEST_01__workspace``→``TEST_01``; ``TEST_01__sp_v1__sp_v2``→``TEST_01``. ``__sp_`` and
+    ``__workspace`` are bridge-reserved (write_side_design.md; a model legitimately named
+    with them would be misread — known limitation).
     """
-    idx = stem.find(_SP_INFIX)
-    return stem[:idx] if idx != -1 else stem
+    candidates = [stem.find(_SP_INFIX), stem.find("__workspace")]
+    cuts = [c for c in candidates if c != -1]
+    return stem[: min(cuts)] if cuts else stem
 
 
 def _model_paths(sap_model: Any) -> tuple[str, str, str]:
@@ -102,17 +104,17 @@ def list_savepoints(sap_model: Any) -> SavepointListResponse:
     return SavepointListResponse(model_name=model_name, count=len(found), savepoints=found)
 
 
-def create_savepoint(sap_model: Any, name: str, dry_run: bool) -> SavepointCreateResponse:
-    """Save the current model state to a savepoint .sdb file.
-
-    Refuses with SAVEPOINT_ALREADY_EXISTS if the target file exists (no silent overwrite).
-    In dry-run, returns the target path + writability + estimated size without writing.
-    Audited (write_side_design.md logging).
+def create_savepoint(sap_model: Any, state: Any, name: str, dry_run: bool) -> SavepointCreateResponse:
+    """Save the current workspace state to a savepoint .sdb file, then re-anchor to the
+    workspace. ``state`` is the WorkspaceState (savepoint names resolve against the base;
+    the session returns to the workspace after — §3c). Refuses with SAVEPOINT_ALREADY_EXISTS
+    if the target exists. Audited.
     """
+    from ..bridge_state import reanchor_to_workspace
+
     with audited("create_savepoint", {"name": name, "dry_run": dry_run}) as ctx:
-        # ``loaded`` = the file the session is on now (preserved by reopening it after Save);
-        # ``model_name`` is the BASE name (stripped of any __sp_*), so the savepoint name
-        # never nests (§26 fix).
+        # ``loaded`` = the file the session is on now (the workspace). ``model_name`` is the
+        # BASE name (stripped of any __sp_*/__workspace), so the savepoint name never nests.
         loaded, model_dir, model_name = _model_paths(sap_model)
         sp_path = _savepoint_path(model_dir, model_name, name)
 
@@ -129,7 +131,6 @@ def create_savepoint(sap_model: Any, name: str, dry_run: bool) -> SavepointCreat
                     error_codes.DRY_RUN_VALIDATION_FAILED,
                     f"savepoint directory is not writable: {model_dir}",
                 )
-            # Estimate size from the current model file (the savepoint is a copy of it).
             est = os.path.getsize(loaded) if os.path.exists(loaded) else 0
             ctx["result"] = "preview_only"
             ctx["result_details"] = {"target_path": sp_path, "estimated_size_bytes": est}
@@ -139,43 +140,38 @@ def create_savepoint(sap_model: Any, name: str, dry_run: bool) -> SavepointCreat
                 would_apply=_info(name, sp_path, size_override=est),
             )
 
-        # Real write. Save acts like Save As (it repoints the in-memory model), so save to
-        # the savepoint and then reopen the file the session was on, preserving its state.
+        # Save acts like Save As (repoints the loaded model to the savepoint), so Save then
+        # re-anchor to the workspace (§3c) — the session always ends on the workspace.
         sret = sap_model.File.Save(sp_path)
         if sret != 0:
             raise SapSessionError(
                 error_codes.OAPI_CALL_FAILED,
                 f"cFile.Save('{sp_path}') returned {sret}",
             )
-        oret = sap_model.File.OpenFile(loaded)
-        if oret != 0:
-            raise SapSessionError(
-                error_codes.OAPI_CALL_FAILED,
-                f"savepoint written but reopening the loaded model returned {oret}; the "
-                f"session may be pointing at the savepoint ({sp_path}) — reopen {loaded} in SAP",
-            )
         if not os.path.exists(sp_path):
             raise SapSessionError(
                 error_codes.OAPI_UNEXPECTED_SHAPE,
                 f"cFile.Save returned 0 but no file appeared at {sp_path}",
             )
+        reanchor_to_workspace(sap_model, state)
         ctx["result_details"] = {"path": sp_path, "size_bytes": os.path.getsize(sp_path)}
         return SavepointCreateResponse(dry_run=False, applied=_info(name, sp_path))
 
 
 def restore_savepoint(
-    sap_model: Any, name: str, confirm: bool, dry_run: bool
+    sap_model: Any, state: Any, name: str, confirm: bool, dry_run: bool
 ) -> SavepointRestoreResponse:
-    """Restore a savepoint, replacing the loaded model with it.
+    """Restore a savepoint into the workspace. ``state`` is the WorkspaceState.
 
-    Destructive (it replaces the current model), so confirm=true is mandatory unless
-    dry_run. Refuses with SAVEPOINT_NOT_FOUND if the file is missing. The cSapModel handle
-    stays valid after OpenFile, so no re-attach is needed.
+    Opens the savepoint, then Saves it into the workspace (overwriting it) and leaves the
+    session ON the workspace (§3c) — so the session always operates on the transient
+    workspace, never on the savepoint file directly. Destructive → confirm mandatory unless
+    dry_run. Refuses with SAVEPOINT_NOT_FOUND if missing.
     """
     with audited(
         "restore_savepoint", {"name": name, "confirm": confirm, "dry_run": dry_run}
     ) as ctx:
-        _original, model_dir, model_name = _model_paths(sap_model)
+        _loaded, model_dir, model_name = _model_paths(sap_model)
         sp_path = _savepoint_path(model_dir, model_name, name)
 
         if not os.path.exists(sp_path):
@@ -193,16 +189,24 @@ def restore_savepoint(
         if not confirm:
             raise SapSessionError(
                 error_codes.CONFIRM_REQUIRED,
-                f"restore_savepoint('{name}') replaces the loaded model with the savepoint "
+                f"restore_savepoint('{name}') replaces the workspace with the savepoint "
                 "and discards unsaved changes; pass confirm=true to proceed",
             )
 
+        # Open the savepoint, then Save its content into the workspace and stay there.
         oret = sap_model.File.OpenFile(sp_path)
         if oret != 0:
             raise SapSessionError(
                 error_codes.OAPI_CALL_FAILED,
                 f"cFile.OpenFile('{sp_path}') returned {oret}",
             )
+        if state.workspace_path:
+            sret = sap_model.File.Save(state.workspace_path)
+            if sret != 0:
+                raise SapSessionError(
+                    error_codes.OAPI_CALL_FAILED,
+                    f"restored savepoint but Save to workspace returned {sret}",
+                )
         model_file = sap_model.GetModelFilename(True)
         ctx["result_details"] = {"restored_from": sp_path, "model_file": model_file}
         return SavepointRestoreResponse(dry_run=False, restored_from=info, model_file=model_file)

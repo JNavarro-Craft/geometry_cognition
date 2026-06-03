@@ -36,6 +36,8 @@ from .contracts import (
     OpenModelRequest,
     OpenModelResponse,
     PointLoadsResponse,
+    ResetWorkspaceRequest,
+    ResetWorkspaceResponse,
     SetModelLockedRequest,
     SetModelLockedResponse,
     SavepointCreateRequest,
@@ -85,6 +87,7 @@ from .primitives import section_assignment as section_assignment_primitive
 from .primitives import section_properties as section_properties_primitive
 from .primitives import sections as sections_primitive
 from .primitives import sections_write as sections_write_primitive
+from .primitives import workspace as workspace_primitive
 from .primitives import units as units_primitive
 from .sap_session import SapSessionError, get_session
 
@@ -222,13 +225,27 @@ def open_model(request: OpenModelRequest) -> OpenModelResponse:
     """Open a model, replacing the loaded one (write). ``path`` must be an absolute .sdb that
     exists (else invalid_path / file_not_found — checked before OpenFile so SAP never lands on
     a phantom path). ``confirm`` mandatory (discards unsaved changes); ``dry_run`` previews.
-    Useful to recover the base model after a restore (savepoints leave the session on the
-    savepoint file)."""
+    The opened model becomes the new base: the bridge re-anchors to a fresh workspace derived
+    from it. Useful to recover the base model after a restore."""
     session = get_session()
     with session.lock():
         session.sap_model()  # ensure attached
         return model_state_primitive.open_model(
-            session.sap_model, request.path, request.dry_run, request.confirm
+            session.sap_model, session.workspace, request.path, request.dry_run, request.confirm
+        )
+
+
+@app.post("/v1/workspace/reset", response_model=ResetWorkspaceResponse)
+def reset_workspace(request: ResetWorkspaceRequest) -> ResetWorkspaceResponse:
+    """Reset the transient workspace to a clean copy of the immutable base model (write). The
+    base file is only read, never written. ``confirm`` mandatory (discards workspace edits);
+    ``dry_run`` previews. Use this to return to a known baseline between iterations without
+    relying on savepoints."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return workspace_primitive.reset_workspace(
+            model, session.workspace, request.dry_run, request.confirm
         )
 
 
@@ -598,7 +615,9 @@ def create_savepoint(request: SavepointCreateRequest) -> SavepointCreateResponse
     session = get_session()
     with session.lock():
         model = session.sap_model()
-        return savepoints_primitive.create_savepoint(model, request.name, request.dry_run)
+        return savepoints_primitive.create_savepoint(
+            model, session.workspace, request.name, request.dry_run
+        )
 
 
 @app.post("/v1/savepoints/{name}/restore", response_model=SavepointRestoreResponse)
@@ -610,7 +629,9 @@ def restore_savepoint(name: str, request: SavepointRestoreRequest | None = None)
     session = get_session()
     with session.lock():
         model = session.sap_model()
-        return savepoints_primitive.restore_savepoint(model, name, req.confirm, req.dry_run)
+        return savepoints_primitive.restore_savepoint(
+            model, session.workspace, name, req.confirm, req.dry_run
+        )
 
 
 @app.get("/v1/savepoints", response_model=SavepointListResponse)

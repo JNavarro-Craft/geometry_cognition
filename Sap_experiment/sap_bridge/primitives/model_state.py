@@ -71,14 +71,17 @@ def set_model_locked(sap_model: Any, locked: bool, dry_run: bool, confirm: bool)
         )
 
 
-def open_model(sap_model_getter: Any, path: str, dry_run: bool, confirm: bool) -> OpenModelResponse:
-    """Open a model, replacing the loaded one.
+def open_model(sap_model_getter: Any, state: Any, path: str, dry_run: bool, confirm: bool) -> OpenModelResponse:
+    """Open a model, replacing the loaded one. The opened model becomes the new BASE: after
+    OpenFile, the bridge derives a fresh workspace from it and re-anchors there (so the
+    bridge keeps operating on a transient copy, never on the just-opened base — §3c).
 
-    ``sap_model_getter`` is a callable returning the live cSapModel (so the response can
-    read the path before and after). Validates the path (absolute, .sdb, exists on disk)
-    BEFORE calling OpenFile — SAP would otherwise leave the session on a phantom path.
-    Confirm-gated (replaces the model, discarding unsaved changes).
+    ``sap_model_getter`` is a callable returning the live cSapModel. ``state`` is the
+    WorkspaceState. Validates the path (absolute, .sdb, exists) BEFORE OpenFile — SAP would
+    otherwise leave the session on a phantom path (§27). Confirm-gated.
     """
+    from ..bridge_state import ensure_workspace_from_current_model
+
     with audited("open_model", {"path": path, "dry_run": dry_run, "confirm": confirm}) as ctx:
         sap_model = sap_model_getter()
         current_path = sap_model.GetModelFilename(True)
@@ -117,7 +120,11 @@ def open_model(sap_model_getter: Any, path: str, dry_run: bool, confirm: bool) -
                 error_codes.OAPI_CALL_FAILED,
                 f"cFile.OpenFile('{path}') returned {ret_code}",
             )
-        # Handle stays valid after OpenFile (§18); re-fetch and read the new path (M2).
+        # The opened model is the new base. Re-derive a fresh workspace from it (this also
+        # resets state.base_model_path / workspace_path) so subsequent writes never touch it.
+        state.base_model_path = None  # force re-derivation from the just-opened (non-workspace) file
+        ensure_workspace_from_current_model(sap_model_getter(), state)
+        # Handle stays valid after OpenFile (§18); read the final (workspace) path (M2).
         now_path = sap_model_getter().GetModelFilename(True)
         ctx["result_details"] = {"previous_model_path": current_path, "current_model_path": now_path}
         return OpenModelResponse(
