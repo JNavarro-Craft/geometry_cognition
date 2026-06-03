@@ -572,6 +572,24 @@ que deletes o assign-material).
   posterior va al workspace, nunca al base → **§28 resuelto por construcción**, no por
   convención. El base solo cambiaría vía un futuro `commit_workspace_to_base` explícito.
 
+## 🔶 Hallazgos OAPI Fase 1h.1 — construir desde cero (resueltos)
+
+### 30. `InitializeNewModel(eUnits)` descarta en silencio y deja `'(Untitled)'`
+Pre-vuelo de 1h.1 contra SAP26, confirmando empíricamente (anti-patrón #5) antes de cablear:
+- `cSapModel.InitializeNewModel(eUnits)` → ret=0. **Toma el miembro del enum eUnits** (resuelto
+  por nombre off el enum vivo, reusa `resolve_unit_system` de 1g.3). **DESCARTA el modelo
+  cargado SIN avisar y SIN guardar** → `confirm` es la única protección contra perder trabajo.
+- Tras init: `GetModelFilename(True)` devuelve **`'(Untitled)'`** (un placeholder, NO una ruta
+  absoluta) y el modelo tiene **0 joints / 0 frames**. Por eso `_loaded_path_or_none` mapea
+  `''` y `'(Untitled)'` (todo lo no-absoluto) → `None` = "no hay base file".
+- Las **units NO quedan ancladas**: `set_present_units` las cambia después sin fricción.
+- `cFile.Save(path)` sobre el modelo en memoria **funciona** (crea el archivo), ret=0. Confirma
+  de nuevo (§18, §29) que **`Save_2` NO existe**: el prompt de 1h.1 lo asumía; se usó `Save`.
+- Implicación de diseño: el attach debe tolerar "SAP abierto sin modelo" — `GetModelFilename`
+  no-absoluto → base/workspace `None`, esperando `new_blank_model` u `open_model` (antes el
+  attach asumía siempre un modelo on-disk). El workspace de un blank vive en un temp dir por
+  `session_id` (UUID), no al lado de un base que no existe.
+
 ---
 
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
@@ -631,8 +649,17 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
   - ◾ **1g.10+** — otros tipos de sección (Circle, I…), `assign_material_to_sections`, modify
     masivo, delete. Evitar el delete-all-then-recreate peligroso de
     `RhinoSAP/SapFrameSynchronizer`. También `get_combination_results` (gap menor de §26).
-- ◾ **Fase 1h** — snapshots + diff.
-- ◾ **Fase 1i** — poblar `docs/domains/structural/` (códigos, materiales, factores,
+- 🟡 **Fase 1h** — construir modelos desde cero (build-from-blank).
+  - ✅ **1h.1** — infraestructura: `new_blank_model` (modelo vacío en memoria, workspace temp
+    sin base file) + `save_workspace_as` (materializa el workspace a nuevo base inmutable).
+    **Hecha** (sesión 16). 33 primitivas. Future-aware: `_save_to_path_and_update_state`
+    compartido (futuro `commit_workspace_to_base`), `session_id`, seam `_initialize_from`
+    (futuro `new_from_template`). Ver §30 y write_side_design §3d.
+  - ◾ **1h.2+** — primitivas de **construcción** que pueblan el modelo vacío: `create_joint`,
+    `create_frame`, `set_joint_restraints`, etc. Fuera de 1h.1: `launch_sap`,
+    `new_from_template`, `commit_workspace_to_base`, cleanup automático del temp.
+- ◾ **Fase 1i** — snapshots + diff.
+- ◾ **Fase 1j** — poblar `docs/domains/structural/` (códigos, materiales, factores,
   recetas, casos) — conocimiento del cliente, no tools.
 
 ---

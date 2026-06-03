@@ -70,7 +70,9 @@ día uno.
 | 🔶 **set_model_locked (estado global)** | `POST /v1/model/locked` | `set_model_locked` | ✅ unlock tras analyze (cierra loop iterativo); confirm; idempotente; NO auto-unlock |
 | 🔶 **open_model (reemplaza modelo)** | `POST /v1/model/open` | `open_model` | ✅ valida path en fs antes de OpenFile (evita estado fantasma); confirm; el modelo abierto pasa a ser base + workspace fresco |
 | 🔶 **reset_workspace (regenera)** | `POST /v1/workspace/reset` | `reset_workspace` | ✅ regenera workspace desde base inmutable; confirm; base byte-intacto verificado |
-| Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; `case_not_run`, `unsupported_case_type`, `confirm_required`, `savepoint_not_found`, `savepoint_already_exists` |
+| 🔶 **new_blank_model (modelo vacío)** | `POST /v1/model/new_blank` | `new_blank_model` | ✅ InitializeNewModel(units); DESTRUCTIVO (descarta lo cargado sin guardar)→confirm; workspace temp sin base file; 0 joints/frames |
+| 🔶 **save_workspace_as (materializa)** | `POST /v1/workspace/save_as` | `save_workspace_as` | ✅ guarda workspace→nuevo base inmutable; prohíbe path==base actual (eso es commit futuro); confirm solo si sobrescribe; re-anchora workspace fresco |
+| Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; `case_not_run`, `unsupported_case_type`, `confirm_required`, `savepoint_not_found`, `savepoint_already_exists`, `invalid_path` |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
 unir frames↔joints por nombre de punto para reconstruir geometría; cruzar
@@ -140,6 +142,23 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 > `reanchor_to_workspace`, `_compute_workspace_path`), `base_model_path` mutable+Optional,
 > `sap_instance_origin` para un futuro `launch_sap`. El loop de verificación iterativo del
 > Objetivo 1 queda completo y robusto.
+
+> Actualización sesión 16 (Fase 1h.1 — construir desde cero, infraestructura): el bridge ya
+> **no** requiere un modelo base preexistente. Dos primitivas nuevas abren y cierran el ciclo
+> build-from-blank: `new_blank_model(units)` (`InitializeNewModel` → modelo vacío en memoria;
+> DESTRUCTIVO, descarta lo cargado sin guardar → confirm; monta un **workspace temporal**
+> en `%TEMP%/sap_bridge_sessions/<session_id>/` con `base_model_path=None`) y
+> `save_workspace_as(path)` (materializa el workspace a disco como **nuevo base inmutable** y
+> re-anchora sobre un workspace fresco al lado — el patrón normal resume). **33 primitivas.**
+> Future-aware: `_compute_workspace_path` ahora es función PURA que maneja base=None;
+> `_save_to_path_and_update_state(path, allow_base_overwrite)` es el helper compartido del que
+> un futuro `commit_workspace_to_base` colgará con el flag invertido; `session_id` (UUID al
+> construir la sesión) ancla el workspace temp y habilita un futuro cleanup por sesión;
+> `_initialize_from(source)` deja el seam para `new_from_template`. El attach ya tolera "SAP
+> abierto sin modelo" (GetModelFilename no-absoluto → base/workspace=None, esperando
+> new_blank_model u open_model). Fuera de esta fase: `launch_sap`, `new_from_template`,
+> `commit_workspace_to_base`, cleanup automático del temp, y las primitivas de **construcción**
+> (create_joint/frame, restraints — 1h.2+) que poblarán el modelo vacío.
 
 > Actualización sesión 14 (Fase 1g.8 — workflow iterativo robusto + tercer bloqueante):
 > resuelve los 2 bloqueantes de §26: `set_model_locked` (unlock tras analyze → cierra el loop
