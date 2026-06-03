@@ -50,12 +50,14 @@ from Sap_experiment.sap_developer_server.tools import (
     assign_frame_loads_point_batch,
     assign_joint_load,
     assign_joint_loads_batch,
+    clear_frame_loads,
     clear_joint_loads,
     create_frame,
     create_frames,
     create_joint,
     create_joints,
     create_load_pattern,
+    get_frame_loads,
     get_joint_loads,
     delete_frame,
     delete_joint,
@@ -236,6 +238,25 @@ def assign_frame_loads_point_batch_tool(
     pattern_name, value, distance, direction, rel_distance?, coord_sys?, load_type?}.
     Stop-on-first-failure. confirm=true mandatory; dry_run previews."""
     return assign_frame_loads_point_batch(items, dry_run, confirm)
+
+
+@mcp.tool(name="get_frame_loads")
+def get_frame_loads_tool(frame_name: str) -> dict[str, Any]:
+    """READ: all loads on one frame, split into {distributed: [...], point: [...]}. Each entry has
+    pattern, type, direction (name + raw Dir code), coord_sys, extents/distance and values. Empty
+    lists if none."""
+    return get_frame_loads(frame_name)
+
+
+@mcp.tool(name="clear_frame_loads")
+def clear_frame_loads_tool(
+    frame_name: str, pattern_name: Optional[str] = None, load_kind: Optional[str] = None,
+    dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """WRITE (destructive): clear loads on a frame. pattern_name null = all patterns; load_kind
+    'distributed'/'point'/null (null = both). confirm=true mandatory; dry_run reports counts. Use
+    before re-assign to replace (assign accumulates)."""
+    return clear_frame_loads(frame_name, pattern_name, load_kind, dry_run, confirm)
 
 
 @mcp.tool(name="get_load_cases")

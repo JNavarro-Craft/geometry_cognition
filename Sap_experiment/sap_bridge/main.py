@@ -62,6 +62,9 @@ from .contracts import (
     AssignFrameLoadPointResponse,
     AssignFrameLoadsPointBatchRequest,
     AssignFrameLoadsPointBatchResponse,
+    ClearFrameLoadsRequest,
+    ClearFrameLoadsResponse,
+    FrameLoadsResponse,
     CreateFrameRequest,
     CreateFrameResponse,
     CreateFramesRequest,
@@ -646,6 +649,30 @@ def assign_frame_loads_point_batch(request: AssignFrameLoadsPointBatchRequest) -
                   "coord_sys": it.coord_sys, "load_type": it.load_type} for it in request.items]
         return frame_loads_primitive.assign_frame_load_point_batch(
             model, items, request.dry_run, request.confirm)
+
+
+@app.get("/v1/frames/{name}/loads", response_model=FrameLoadsResponse)
+def get_frame_loads(name: str) -> FrameLoadsResponse:
+    """All loads on one frame (read — Fase 1h.4), split into ``distributed`` and ``point`` lists.
+    Each load reports pattern, type, direction (name + raw Dir code), coord_sys, extents/distance
+    and values. Empty lists if none."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return frame_loads_primitive.get_frame_loads(model, name)
+
+
+@app.delete("/v1/frames/{name}/loads", response_model=ClearFrameLoadsResponse)
+def clear_frame_loads(name: str, request: ClearFrameLoadsRequest) -> ClearFrameLoadsResponse:
+    """Clear loads on a frame (write — destructive). ``pattern_name`` null = all patterns;
+    ``load_kind`` 'distributed'/'point'/null (null = both). ``confirm`` mandatory; ``dry_run``
+    reports how many of each kind would clear."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return frame_loads_primitive.clear_frame_loads(
+            model, name, request.pattern_name, request.load_kind, request.dry_run, request.confirm,
+        )
 
 
 @app.get("/v1/joints/{name}/loads/point", response_model=PointLoadsResponse)

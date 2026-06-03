@@ -465,6 +465,43 @@ class AssignFrameLoadsPointBatchResponse(BaseModel):
     not_attempted: list[str] | None = None
 
 
+# --- Load assignment: frame loads clear + get (Fase 1h.4) --------------------
+
+
+class ClearFrameLoadsRequest(BaseModel):
+    """Body for DELETE /v1/frames/{name}/loads. ``pattern_name`` None = all patterns; given =
+    only that pattern. ``load_kind`` 'distributed'/'point'/None (None = both). ``confirm``
+    mandatory; ``dry_run`` previews the counts."""
+
+    pattern_name: str | None = None
+    load_kind: str | None = Field(None, description="'distributed', 'point', or null for both")
+    dry_run: bool = Field(False, description="If true, preview without clearing")
+    confirm: bool = Field(False, description="Must be true to clear")
+
+
+class ClearFrameLoadsResult(BaseModel):
+    frame_name: str
+    pattern_name: str | None = None
+    load_kind: str | None = None
+    cleared_distributed: int = 0
+    cleared_point: int = 0
+
+
+class ClearFrameLoadsResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: ClearFrameLoadsResult | None = None
+    applied: ClearFrameLoadsResult | None = None
+
+
+class FrameLoadsResponse(BaseModel):
+    """Read-only: all loads on one frame (GET /v1/frames/{name}/loads), split by kind."""
+
+    frame_name: str
+    distributed: list[FrameDistributedLoad]
+    point: list[FramePointLoad]
+
+
 class LoadCase(BaseModel):
     """One analysis load case defined in the model: its name and raw SAP case type.
 

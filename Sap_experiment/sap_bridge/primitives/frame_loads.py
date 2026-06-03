@@ -28,9 +28,12 @@ from ..contracts import (
     AssignFrameLoadsDistributedBatchResponse,
     AssignFrameLoadsPointBatchResponse,
     BatchItemFailure,
+    ClearFrameLoadsResponse,
+    ClearFrameLoadsResult,
     DistributedLoad,
     FrameDistributedLoad,
     FrameDistributedLoadApplied,
+    FrameLoadsResponse,
     FramePointLoad,
     FramePointLoadApplied,
 )
@@ -374,3 +377,130 @@ def assign_frame_load_point_batch(
         return AssignFrameLoadsPointBatchResponse(
             dry_run=False, count=len(records), applied=outcome.applied,
             failed_at=failed, not_attempted=not_attempted)
+
+
+# --- Write-side: clear + get (Fase 1h.4) -------------------------------------
+
+
+def _read_distributed(sap_model: Any, frame_name: str) -> list[FrameDistributedLoad]:
+    """Unpack GetLoadDistributed into the named shape."""
+    g = sap_model.FrameObj.GetLoadDistributed(
+        frame_name, 0, None, None, None, None, None, None, None, None, None, None, None,
+        _objects_item(sap_model),
+    )
+    if g[0] != 0:
+        raise SapSessionError(
+            error_codes.OAPI_CALL_FAILED, f"FrameObj.GetLoadDistributed('{frame_name}') returned {g[0]}"
+        )
+    n = g[1]
+    if not n:
+        return []
+    load_pat, my_types, csys, dirs = list(g[3]), list(g[4]), list(g[5]), list(g[6])
+    rd1, rd2, val1, val2 = list(g[7]), list(g[8]), list(g[11]), list(g[12])
+    out = []
+    for i in range(n):
+        dc = int(dirs[i])
+        out.append(FrameDistributedLoad(
+            pattern_name=str(load_pat[i]),
+            load_type=_LOAD_TYPE_NAMES.get(int(my_types[i]), "Unknown"),
+            direction=_DIRECTION_NAMES.get(dc, "Unknown"), dir_code=dc, coord_sys=str(csys[i]),
+            rel_dist1=float(rd1[i]), rel_dist2=float(rd2[i]),
+            value1=float(val1[i]), value2=float(val2[i])))
+    return out
+
+
+def _read_point(sap_model: Any, frame_name: str) -> list[FramePointLoad]:
+    """Unpack GetLoadPoint into the named shape."""
+    g = sap_model.FrameObj.GetLoadPoint(
+        frame_name, 0, None, None, None, None, None, None, None, None, _objects_item(sap_model),
+    )
+    if g[0] != 0:
+        raise SapSessionError(
+            error_codes.OAPI_CALL_FAILED, f"FrameObj.GetLoadPoint('{frame_name}') returned {g[0]}"
+        )
+    n = g[1]
+    if not n:
+        return []
+    load_pat, my_types, csys, dirs = list(g[3]), list(g[4]), list(g[5]), list(g[6])
+    reldist, dist, val = list(g[7]), list(g[8]), list(g[9])
+    out = []
+    for i in range(n):
+        dc = int(dirs[i])
+        out.append(FramePointLoad(
+            pattern_name=str(load_pat[i]),
+            load_type=_LOAD_TYPE_NAMES.get(int(my_types[i]), "Unknown"),
+            direction=_DIRECTION_NAMES.get(dc, "Unknown"), dir_code=dc, coord_sys=str(csys[i]),
+            rel_distance=bool(reldist[i]), distance=float(dist[i]), value=float(val[i])))
+    return out
+
+
+def get_frame_loads(sap_model: Any, frame_name: str) -> FrameLoadsResponse:
+    """All loads on one frame (read-only), split into distributed + point."""
+    _validate_frame(sap_model, frame_name)
+    return FrameLoadsResponse(
+        frame_name=frame_name,
+        distributed=_read_distributed(sap_model, frame_name),
+        point=_read_point(sap_model, frame_name))
+
+
+def clear_frame_loads(
+    sap_model: Any, frame_name: str, pattern_name: str | None, load_kind: str | None,
+    dry_run: bool, confirm: bool,
+) -> ClearFrameLoadsResponse:
+    """Clear distributed and/or point loads on a frame. pattern_name None = all; load_kind None =
+    both. Delete*Load actually clears (≠ §34)."""
+    with audited("clear_frame_loads", {"frame_name": frame_name, "pattern_name": pattern_name,
+                                       "load_kind": load_kind, "dry_run": dry_run, "confirm": confirm}) as ctx:
+        _validate_frame(sap_model, frame_name)
+        if load_kind is not None and load_kind not in ("distributed", "point"):
+            raise SapSessionError(
+                error_codes.INVALID_PATH,  # generic bad-arg; kept client-fixable
+                f"load_kind must be 'distributed', 'point' or null; got '{load_kind}'",
+            )
+        do_dist = load_kind in (None, "distributed")
+        do_point = load_kind in (None, "point")
+
+        dist = _read_distributed(sap_model, frame_name) if do_dist else []
+        pts = _read_point(sap_model, frame_name) if do_point else []
+        n_dist = len([d for d in dist if pattern_name is None or d.pattern_name == pattern_name])
+        n_pt = len([p for p in pts if pattern_name is None or p.pattern_name == pattern_name])
+        result = ClearFrameLoadsResult(
+            frame_name=frame_name, pattern_name=pattern_name, load_kind=load_kind,
+            cleared_distributed=n_dist, cleared_point=n_pt)
+
+        if dry_run:
+            ctx["result"] = "preview_only"
+            ctx["result_details"] = {"frame_name": frame_name, "cleared_distributed": n_dist,
+                                     "cleared_point": n_pt}
+            return ClearFrameLoadsResponse(dry_run=True, would_apply=result)
+
+        if not confirm:
+            raise SapSessionError(
+                error_codes.CONFIRM_REQUIRED,
+                "clear_frame_loads removes loads; pass confirm=true to clear",
+            )
+
+        item = _objects_item(sap_model)
+
+        def _patterns(loads: list) -> list[str]:
+            return [pattern_name] if pattern_name is not None else sorted({l.pattern_name for l in loads})
+
+        if do_dist:
+            for pat in _patterns(dist):
+                ret = sap_model.FrameObj.DeleteLoadDistributed(frame_name, pat, item)
+                rc = ret[0] if isinstance(ret, tuple) else ret
+                if rc != 0:
+                    raise SapSessionError(
+                        error_codes.OAPI_CALL_FAILED,
+                        f"FrameObj.DeleteLoadDistributed('{frame_name}', '{pat}') returned {rc}")
+        if do_point:
+            for pat in _patterns(pts):
+                ret = sap_model.FrameObj.DeleteLoadPoint(frame_name, pat, item)
+                rc = ret[0] if isinstance(ret, tuple) else ret
+                if rc != 0:
+                    raise SapSessionError(
+                        error_codes.OAPI_CALL_FAILED,
+                        f"FrameObj.DeleteLoadPoint('{frame_name}', '{pat}') returned {rc}")
+        ctx["result_details"] = {"frame_name": frame_name, "cleared_distributed": n_dist,
+                                 "cleared_point": n_pt}
+        return ClearFrameLoadsResponse(dry_run=False, applied=result)

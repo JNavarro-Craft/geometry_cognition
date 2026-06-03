@@ -24,6 +24,8 @@ from .bridge_backend import (
     assign_frame_load_point_bridge,
     assign_frame_loads_distributed_batch_bridge,
     assign_frame_loads_point_batch_bridge,
+    clear_frame_loads_bridge,
+    get_frame_loads_bridge,
     assign_joint_load_bridge,
     assign_joint_loads_batch_bridge,
     clear_joint_loads_bridge,
@@ -326,6 +328,32 @@ def assign_frame_loads_point_batch(
     base_url, timeout = bridge_settings()
     try:
         return assign_frame_loads_point_batch_bridge(base_url, timeout, items, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def get_frame_loads(frame_name: str) -> dict[str, Any]:
+    """Read all loads on one frame (READ-ONLY — Fase 1h.4). Returns {distributed: [...], point: [...]}
+    — each entry with pattern, type, direction (name + raw Dir code), coord_sys, extents/distance and
+    values. Empty lists if none."""
+    base_url, timeout = bridge_settings()
+    try:
+        return get_frame_loads_bridge(base_url, timeout, frame_name)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def clear_frame_loads(
+    frame_name: str, pattern_name: str | None = None, load_kind: str | None = None,
+    dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Clear loads on a frame (WRITE — destructive). pattern_name null = all patterns; load_kind
+    'distributed'/'point'/null (null = both). confirm=true mandatory; dry_run reports how many of
+    each kind would clear. Use before re-assigning to replace (assign accumulates)."""
+    base_url, timeout = bridge_settings()
+    try:
+        return clear_frame_loads_bridge(base_url, timeout, frame_name, pattern_name, load_kind,
+                                        dry_run, confirm)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)
 
