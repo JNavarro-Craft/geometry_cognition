@@ -706,6 +706,43 @@ Pre-vuelo de 1h.3 (sesión 18), verificado empíricamente:
 - El bridge NO nombra los patrones (pinned/fixed/roller) — son dominio del cliente (anti-patrón
   #4). Expone los 6 flags crudos; el cliente compone "pinned" = {U1,U2,U3 True}.
 
+## 🔶 Hallazgos OAPI Fase 1h.4 — loads / cargas (resueltos)
+
+Pre-vuelo de 1h.4 (sesión 19) — el más cargado de anti-patrón #5 del ciclo. Verificado empíricamente.
+
+### 35. ⭐ El enum `Dir` de frame loads (Int32 crudo) — mapeo verificado + acoplado a CSys
+`FrameObj.SetLoadDistributed`/`SetLoadPoint` toman `Dir` como **Int32 crudo (no un enum .NET
+nombrado)**. Probado código por código leyendo de vuelta:
+- **`Dir 1,2,3` = ejes LOCALES 1/2/3** — ⚠️ **requieren `CSys="Local"`**; con `CSys="Global"`
+  retornan **ret=1 (fallan)**. El Dir y el CSys están ACOPLADOS.
+- **`Dir 4,5,6` = X, Y, Z** del CSys dado (con `CSys="Global"` → Global X/Y/Z).
+- **`Dir 7,8,9` = X/Y/Z proyectado** (válidos).
+- **`Dir 10` = Gravity** (Global −Z). **`Dir 11` = Gravity projected.**
+- → helper `_resolve_load_direction(direction, coord_sys)` mapea strings del cliente
+  (`"Local1"..`, `"X"/"Y"/"Z"`, `"Gravity"`) a `(Dir, CSys)`, forzando `CSys=Local` para los
+  ejes locales. Un `direction` desconocido → `unknown_load_direction`.
+
+### 36. ✅ Firmas + comportamiento de cargas (varios ≠ lo asumido)
+- **`eLoadPatternType` usa nombres CamelCase, NO `LTYPE_*`**: `Dead=1, SuperDead=2, Live=3,
+  ReduceLive=4, Quake=5, Wind=6, Snow=7, Other=8, Move=9, Temperature=10, ...` (63 miembros). Se
+  resuelve por nombre case-insensitive contra el enum vivo (como `eUnits` en 1g.3), NO se
+  hardcodean ints. El prompt asumía `"DEAD"/"LIVE"` mayúsculas → mapeo flexible.
+- **`LoadPatterns.Add(Name, MyType, SelfWTMultiplier, AddAnalysisCase)` → 0 OK.** ⚠️ A diferencia
+  de SetMaterial/SetRectangle (overwrite silencioso, M1), **`Add` de un nombre existente retorna
+  `1` (RECHAZA, no sobrescribe)**. Igual se pone el guard `name_already_exists` por mensaje claro.
+- **Patterns default en un modelo blank: solo `['DEAD']`** (no LIVE, no MODAL).
+- **`PointObj.SetLoadForce(Name, LoadPat, Value[6], Replace, CSys, eItemType)`**: `Value` orden
+  **`[F1,F2,F3,M1,M2,M3]`** (verificado: seté F3=−1000, leí F3=−1000). `Replace=False` = ACUMULA
+  (semántica acordada). `MyType` de frame loads: **1=Force, 2=Moment**.
+- **Lecturas devuelven ARRAYS PARALELOS** (una entrada por carga): `GetLoadForce → (ret,
+  NumberItems, PointName[], LoadPat[], LcStep[], CSys[], F1[]..M3[])`; `GetLoadDistributed →
+  (..., MyType[], CSys[], Dir[], RD1[], RD2[], Dist1[], Dist2[], Val1[], Val2[])`; `GetLoadPoint →
+  (..., MyType[], CSys[], Dir[], RelDist[], Dist[], Val[])`. ⚠️ `CSys` se devuelve en MAYÚSCULAS
+  (`'GLOBAL'`). Se desempaca por índice.
+- ✅ **A diferencia de §34, los `Delete*Load` SÍ limpian de verdad**: `DeleteLoadForce`/
+  `DeleteLoadDistributed`/`DeleteLoadPoint(Name, LoadPat, eItemType)` → 0 y `NumberItems` baja a 0.
+  Tras un delete no quedan cargas residuales.
+
 ---
 
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
@@ -784,9 +821,14 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
     dominio (pinned/fixed los compone el cliente). **Hecha + validada** (sesión 18). 45 primitivas.
     Validación: apoyar la cercha (pinned + roller), persiste tras save→reopen, liberar con
     all-False (§34). Ver §34 y write_side_design §3f.
-  - ◾ **1h.4+** — cargas (point en joints, distributed/point en frames), validación cercha
-    completa con apoyos+cargas+analyze (1h.5). Fuera de 1h: `launch_sap`, `new_from_template`,
-    `commit_workspace_to_base`, springs/constraints/local-axes, cleanup automático del temp.
+  - 🟡 **1h.4** — cargas: `create_load_pattern`/`list_load_patterns`, `assign_joint_load(_batch)`/
+    `clear_joint_loads`/`get_joint_loads`, `assign_frame_load_distributed(_batch)`/
+    `assign_frame_load_point(_batch)`/`clear_frame_loads`/`get_frame_loads`. Acumular default,
+    clear explícito, coord_sys configurable, Dir enum mapeado (§35). **En curso** (sesión 19).
+    45→57 primitivas. Ver §35, §36 y write_side_design §3g.
+  - ◾ **1h.5** — validación end-to-end cercha completa (apoyos+cargas+analyze) + extras
+    emergentes. Fuera de 1h: `launch_sap`, `new_from_template`, `commit_workspace_to_base`,
+    springs/constraints/local-axes, trapezoidal/temperature loads, load combinations, cleanup temp.
 - ◾ **Fase 1i** — snapshots + diff.
 - ◾ **Fase 1j** — poblar `docs/domains/structural/` (códigos, materiales, factores,
   recetas, casos) — conocimiento del cliente, no tools.

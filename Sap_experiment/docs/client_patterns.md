@@ -204,3 +204,39 @@ Notas:
 - **Delete con cuidado**: `delete_joint` rechaza si el joint tiene frames conectados (`joint_has_connected_frames` con la lista) — borrá los frames primero. `delete_frame` no tiene esa restricción.
 - **`modify_frame` preserva releases** al cambiar endpoints (in-place, §33). `modify_joint` mueve el nudo y afecta a todos sus frames conectados (el preview los lista).
 - **Apoyos son dominio del cliente**: el bridge expone los 6 flags `[U1..R3]`, nunca "pinned"/"fixed"/"roller". "Sin apoyo" = todos False. Liberar un apoyo = `set_joint_restraints` con todo False (no hay un "delete restraint" — §34).
+
+## Patrón 10: Cargar y analizar (load and analyze workflow)
+
+Desde Fase 1h.4, sobre una estructura ya construida (geometría + apoyos, Patrón 9) el cliente asigna cargas y la analiza — cerrando el flujo construir→cargar→analizar desde cero:
+```
+# (a) load pattern — si necesitás uno custom (el blank ya trae DEAD)
+create_load_pattern("AI_LIVE", "Live", self_weight_multiplier=0, confirm=True)
+
+# (b) cargas. assign_*_load ACUMULA (no reemplaza) — semántica SAP-native
+#     joint: fuerza puntual de 1000 kgf hacia abajo en el peak
+assign_joint_load("AI_J002", "AI_LIVE", forces={"F3": -1000.0}, confirm=True)
+#     frame distribuida gravitacional (la dirección "Gravity" = Global -Z proyectada)
+assign_frame_load_distributed("AI_F002", "AI_LIVE", value=-200.0,
+                              direction="Gravity", confirm=True)
+#     frame puntual a media barra, en Global Z
+assign_frame_load_point("AI_F001", "AI_LIVE", value=-500.0, distance=0.5,
+                        direction="Z", coord_sys="Global", rel_distance=True, confirm=True)
+
+# (c) ¿ajustar una carga? como assign ACUMULA, para "reemplazar" hay que limpiar primero:
+clear_frame_loads("AI_F001", pattern_name="AI_LIVE", confirm=True)   # limpia y...
+assign_frame_load_point("AI_F001", "AI_LIVE", value=-800.0, distance=0.5,
+                        direction="Z", confirm=True)                  # ...re-asigna
+
+# (d) analizar (run_analysis lockea el modelo — Patrón 7)
+run_analysis()
+
+# (e) leer resultados (dominio del cliente razonar si son aceptables)
+get_joint_displacements("AI_J002", "AI_LIVE")
+get_frame_forces("AI_F001", "AI_LIVE")
+```
+Notas:
+- **Acumular es el default**: dos `assign` del mismo pattern sobre el mismo objeto SE SUMAN. El bridge no expone un flag `replace`; "set" = `clear_*_loads` + `assign` (el cliente compone). Los `clear_*` sí limpian de verdad.
+- **`direction` de frame loads** (§35): `"X"/"Y"/"Z"` (en el `coord_sys` dado), `"Local1/2/3"` (ejes del frame, el bridge fuerza coord local), `"Gravity"` (Global −Z). Un nombre desconocido → `unknown_load_direction`.
+- **coord_sys**: joint loads y frame loads aceptan `"Global"` (default) o `"Local"`. Para las direcciones locales de frame, el bridge ya fuerza `Local` aunque pases otra cosa.
+- **Frames sin sección admiten cargas** — el bridge no lo impide; si falta algo para analizar, el error sale en `run_analysis`, no en el assign.
+- **Batch**: `assign_joint_loads_batch`, `assign_frame_load_distributed_batch`, `assign_frame_load_point_batch` — atómicos (stop-on-first-failure), igual que el resto.

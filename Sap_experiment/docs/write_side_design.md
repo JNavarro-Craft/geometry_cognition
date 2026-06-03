@@ -138,6 +138,30 @@ Las condiciones de contorno de un joint: qué DOFs están restringidos (apoyo). 
 
 > **Hallazgos del pre-vuelo (§34):** `SetRestraint(Name, bool[6], eItemType)` sobrescribe; `GetRestraint(Name, None) → (0, bool[6])`; orden `[U1,U2,U3,R1,R2,R3]` (= releases); ⚠️ `DeleteRestraint` no limpia los flags (no se usa). Ver brechas §34.
 
+### 3g. Load assignment (cargas) (Fase 1h.4)
+
+Las cargas completan el flujo "construir → cargar → analizar" desde cero. 12 primitivas sobre tres ejes: **patterns** (el contenedor de cargas), **joint loads** (fuerzas/momentos en nudos) y **frame loads** (distribuidas/puntuales en barras), cada uno con su read y su clear.
+
+**Load patterns** (`create_load_pattern`, `list_load_patterns`). Un pattern es un grupo de cargas con un tipo (`Dead`, `Live`, `Wind`…). `create_load_pattern` lleva el prefijo `AI_` (§1), valida no-colisión y resuelve el `pattern_type` por nombre case-insensitive contra el enum vivo `eLoadPatternType` (§36, como units en 1g.3). Un modelo blank trae solo `DEAD`. ⚠️ `LoadPatterns.Add` rechaza un nombre existente (ret=1), no sobrescribe.
+
+**Acumular, no reemplazar** (decisión de scoping #5). Todas las `assign_*_load` usan `Replace=False` en la OAPI: una segunda asignación del mismo pattern sobre el mismo objeto SE SUMA. Para "set" (reemplazar), el cliente compone `clear_*_loads` + `assign`. No hay flag `replace` — el átomo es "acumular", la composición es del cliente. Los `clear_*` SÍ limpian de verdad (a diferencia de §34, los `Delete*Load` funcionan).
+
+**Joint loads** (`assign_joint_load`, `assign_joint_loads_batch`, `clear_joint_loads`, `get_joint_loads`). 6 componentes `{F1,F2,F3,M1,M2,M3}` (flags nombrados, default 0; orden §36 = restraints/releases) en `coord_sys` (`Global`/`Local`). Valida joint + pattern existen antes de aplicar.
+
+**Frame loads** (`assign_frame_load_distributed(_batch)`, `assign_frame_load_point(_batch)`, `clear_frame_loads`, `get_frame_loads`). Distribuida uniforme (Val1=Val2 sobre 0%–100% del frame) o puntual (a una `distance` rel/abs). `load_type` `Force`/`Moment` (MyType 1/2). **El `direction` es el filo** (§35): el helper compartido `_resolve_load_direction(direction, coord_sys) → (Dir, CSys)` mapea los strings del cliente a los códigos OAPI, forzando `CSys=Local` para los ejes locales (que SAP exige):
+
+| `direction` | `Dir` OAPI | `coord_sys` |
+|---|---|---|
+| `Local1/Local2/Local3` | 1/2/3 | forzado `Local` |
+| `X/Y/Z` | 4/5/6 | el dado (default Global) |
+| `XProj/YProj/ZProj` | 7/8/9 | Global |
+| `Gravity` | 10 | Global |
+| `GravityProj` | 11 | Global |
+
+`get_frame_loads` devuelve `{distributed: [...], point: [...]}`, desempaquetando los arrays paralelos de SAP. **Frames sin sección admiten cargas** (decisión #6): el bridge no valida defensivamente — el error, si lo hay, emerge en `run_analysis`, no antes.
+
+> **Hallazgos del pre-vuelo (§35, §36):** Dir enum crudo Int32 mapeado + acoplado a CSys; `eLoadPatternType` CamelCase; `Add` rechaza duplicado (ret=1); blank trae solo DEAD; orden `[F1,F2,F3,M1,M2,M3]`; `Replace=False` acumula; lecturas en arrays paralelos (CSys en MAYÚSCULAS); `Delete*Load` sí limpian. Ver brechas §35/§36.
+
 ### 4. Atomicidad: stop on first failure + pre-validación del cliente
 
 **Regla del bridge**: en operaciones batch, si una sub-operación falla, el bridge se detiene, no revierte lo ya aplicado, retorna reporte detallado:
