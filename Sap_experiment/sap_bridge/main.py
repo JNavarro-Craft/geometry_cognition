@@ -40,6 +40,11 @@ from .contracts import (
     DeleteJointResponse,
     ModifyJointRequest,
     ModifyJointResponse,
+    SetJointRestraintsRequest,
+    SetJointRestraintsResponse,
+    SetJointRestraintsBatchRequest,
+    SetJointRestraintsBatchResponse,
+    JointRestraintsResponse,
     CreateFrameRequest,
     CreateFrameResponse,
     CreateFramesRequest,
@@ -370,6 +375,51 @@ def modify_joint(name: str, request: ModifyJointRequest) -> ModifyJointResponse:
         model = session.sap_model()
         return joints_write_primitive.modify_joint(
             model, name, request.x, request.y, request.z, request.dry_run, request.confirm
+        )
+
+
+@app.get("/v1/joints/{name}/restraints", response_model=JointRestraintsResponse)
+def get_joint_restraints(name: str) -> JointRestraintsResponse:
+    """The 6-DOF restraint flags [U1,U2,U3,R1,R2,R3] of one joint (read). true = restrained.
+    Facts only — no pinned/fixed/roller classification (that is your domain reasoning)."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        from .contracts import RestraintFlags
+        flags = joints_primitive.get_joint_restraints(model, name)
+        return JointRestraintsResponse(
+            name=name,
+            restraints=RestraintFlags(**{d: flags[i] for i, d in enumerate(
+                ("U1", "U2", "U3", "R1", "R2", "R3"))}),
+        )
+
+
+@app.post("/v1/joints/{name}/restraints", response_model=SetJointRestraintsResponse)
+def set_joint_restraints(name: str, request: SetJointRestraintsRequest) -> SetJointRestraintsResponse:
+    """Set a joint's 6-DOF restraints (write — boundary condition). ``restraints`` are named flags
+    [U1,U2,U3,R1,R2,R3], true = restrained; omitted = False; SetRestraint overwrites the whole
+    state. ``confirm`` mandatory; ``dry_run`` previews vs current. No domain naming — the client
+    composes pinned/fixed/roller from the flags."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return joints_write_primitive.set_joint_restraints(
+            model, session.oapi_namespace(), name, request.restraints.model_dump(),
+            request.dry_run, request.confirm,
+        )
+
+
+@app.post("/v1/joints/restraints/batch", response_model=SetJointRestraintsBatchResponse)
+def set_joint_restraints_batch(request: SetJointRestraintsBatchRequest) -> SetJointRestraintsBatchResponse:
+    """Set restraints on many joints atomically (write — stop-on-first-failure). Each {name,
+    restraints}. All joints validated up front. ``confirm`` mandatory; ``dry_run`` previews."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return joints_write_primitive.set_joint_restraints_batch(
+            model, session.oapi_namespace(),
+            [{"name": it.name, "restraints": it.restraints.model_dump()} for it in request.items],
+            request.dry_run, request.confirm,
         )
 
 

@@ -66,6 +66,18 @@ def get_joint_coords(sap_model: Any, name: str) -> tuple[float, float, float]:
     return float(x), float(y), float(z)
 
 
+def get_joint_restraints(sap_model: Any, name: str) -> list[bool]:
+    """The 6 restraint flags [U1,U2,U3,R1,R2,R3] of one joint (Fase 1h.3). GetRestraint(Name,
+    None) → (0, bool[6])."""
+    rret, restraints = sap_model.PointObj.GetRestraint(name, None)
+    if rret != 0:
+        raise SapSessionError(
+            error_codes.OAPI_CALL_FAILED,
+            f"PointObj.GetRestraint('{name}') returned {rret}",
+        )
+    return [bool(v) for v in restraints]
+
+
 def _build_joints(point: Any, names: Any) -> list[Joint]:
     joints: list[Joint] = []
     for name in names:

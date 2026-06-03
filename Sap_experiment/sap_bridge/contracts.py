@@ -1300,3 +1300,83 @@ class SetFrameReleasesResponse(BaseModel):
     validation_passed: bool = True
     would_apply: FrameReleasesChange | None = None
     applied: FrameReleasesChange | None = None
+
+
+# --- Geometry primitives: joint restraints (Fase 1h.3) -----------------------
+# A joint's 6-DOF boundary condition. 6 booleans [U1,U2,U3,R1,R2,R3] (§34, same order as
+# releases); true = restrained. Named flags so the client never tracks positions; no domain
+# pattern names (pinned/fixed/roller is the client's composition, anti-patrón #4).
+
+
+class RestraintFlags(BaseModel):
+    """The 6-DOF restraint flags of a joint. ``true`` = restrained (the support reacts that
+    DOF). Field order matches the SAP order [U1,U2,U3,R1,R2,R3]. All default False = no support
+    (the default state; also how the bridge "frees" a support, since DeleteRestraint is a no-op
+    on the flags, §34)."""
+
+    U1: bool = False
+    U2: bool = False
+    U3: bool = False
+    R1: bool = False
+    R2: bool = False
+    R3: bool = False
+
+
+class SetJointRestraintsRequest(BaseModel):
+    """Body for POST /v1/joints/{name}/restraints. ``restraints`` are the named flags (omitted =
+    False; SetRestraint overwrites the whole state, M1). ``confirm`` mandatory; ``dry_run``
+    previews vs current."""
+
+    restraints: RestraintFlags
+    dry_run: bool = Field(False, description="If true, preview without applying")
+    confirm: bool = Field(False, description="Must be true to apply")
+
+
+class JointRestraintSpec(BaseModel):
+    """One joint in a set_joint_restraints_batch: name + flags."""
+
+    name: str
+    restraints: RestraintFlags
+
+
+class SetJointRestraintsBatchRequest(BaseModel):
+    items: list[JointRestraintSpec]
+    dry_run: bool = Field(False, description="If true, preview without applying")
+    confirm: bool = Field(False, description="Must be true to apply")
+
+
+class JointRestraintsChange(BaseModel):
+    """A restraints change as facts: flags before/after + a readable summary of what changed."""
+
+    name: str
+    previous: RestraintFlags | None = None
+    current: RestraintFlags | None = None
+    new: RestraintFlags | None = None
+    changes: list[str] = Field(default_factory=list)
+
+
+class SetJointRestraintsResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: JointRestraintsChange | None = None
+    applied: JointRestraintsChange | None = None
+
+
+class SetJointRestraintsBatchResponse(BaseModel):
+    """Batch restraints. ``would_apply`` previews each change (dry-run); ``applied`` lists those
+    applied. ``failed_at``/``not_attempted`` follow stop-on-first-failure."""
+
+    dry_run: bool
+    validation_passed: bool = True
+    count: int
+    would_apply: list[JointRestraintsChange] | None = None
+    applied: list[JointRestraintsChange] | None = None
+    failed_at: BatchItemFailure | None = None
+    not_attempted: list[str] | None = None
+
+
+class JointRestraintsResponse(BaseModel):
+    """Read-only: the current restraint flags of one joint (GET /v1/joints/{name}/restraints)."""
+
+    name: str
+    restraints: RestraintFlags

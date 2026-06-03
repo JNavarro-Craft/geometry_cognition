@@ -259,6 +259,36 @@ def set_frame_releases_bridge(
     )
 
 
+# --- Joint restraints (Fase 1h.3) --------------------------------------------
+
+def get_joint_restraints_bridge(
+    base_url: str, timeout_seconds: float, name: str,
+) -> dict[str, Any]:
+    return _bridge_json_request(
+        base_url, f"/v1/joints/{quote(name)}/restraints", timeout_seconds, method="GET",
+    )
+
+
+def set_joint_restraints_bridge(
+    base_url: str, timeout_seconds: float, name: str, restraints: dict, dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"restraints": restraints, "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, f"/v1/joints/{quote(name)}/restraints", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
+def set_joint_restraints_batch_bridge(
+    base_url: str, timeout_seconds: float, items: list[dict], dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"items": items, "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, "/v1/joints/restraints/batch", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
 def create_material_bridge(
     base_url: str, timeout_seconds: float, name: str, material_type: str, dry_run: bool
 ) -> dict[str, Any]:

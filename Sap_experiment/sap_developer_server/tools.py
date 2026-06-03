@@ -26,9 +26,12 @@ from .bridge_backend import (
     create_joints_bridge,
     delete_frame_bridge,
     delete_joint_bridge,
+    get_joint_restraints_bridge,
     modify_frame_bridge,
     modify_joint_bridge,
     set_frame_releases_bridge,
+    set_joint_restraints_bridge,
+    set_joint_restraints_batch_bridge,
     modify_rectangular_section_bridge,
     new_blank_model_bridge,
     open_model_bridge,
@@ -630,6 +633,45 @@ def set_frame_releases(
     try:
         return set_frame_releases_bridge(base_url, timeout, name, releases_i, releases_j,
                                          dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def get_joint_restraints(name: str) -> dict[str, Any]:
+    """Read a joint's 6-DOF restraint flags (READ-ONLY). Returns {U1,U2,U3,R1,R2,R3} named flags,
+    true = restrained. Facts only — no pinned/fixed/roller naming (that is your domain reasoning).
+    get_joints returns restraints for ALL joints; this is the single-joint lookup."""
+    base_url, timeout = bridge_settings()
+    try:
+        return get_joint_restraints_bridge(base_url, timeout, name)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def set_joint_restraints(
+    name: str, restraints: dict, dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Set a joint's 6-DOF restraints (WRITE — boundary condition). restraints = {U1,U2,U3,R1,R2,R3}
+    named flags (true = restrained; omitted keys default False). SetRestraint OVERWRITES the whole
+    state. Compose your support: pinned = {"U1":true,"U2":true,"U3":true}; roller in Z = {"U3":true};
+    fixed = all six true; free = {} (all false). confirm=true mandatory; dry_run previews vs current.
+    To remove a support, set all flags false (there is no separate 'delete restraint')."""
+    base_url, timeout = bridge_settings()
+    try:
+        return set_joint_restraints_bridge(base_url, timeout, name, restraints, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def set_joint_restraints_batch(
+    items: list[dict], dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Set restraints on many joints atomically (WRITE — batch). items = list of {name, restraints}
+    (restraints = named flags dict). All joints validated up front; stop-on-first-failure returns
+    applied/failed_at/not_attempted. dry_run previews. confirm=true mandatory."""
+    base_url, timeout = bridge_settings()
+    try:
+        return set_joint_restraints_batch_bridge(base_url, timeout, items, dry_run, confirm)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)
 

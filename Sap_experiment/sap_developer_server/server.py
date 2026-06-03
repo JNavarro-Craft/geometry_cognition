@@ -50,9 +50,12 @@ from Sap_experiment.sap_developer_server.tools import (
     create_joints,
     delete_frame,
     delete_joint,
+    get_joint_restraints,
     modify_frame,
     modify_joint,
     set_frame_releases,
+    set_joint_restraints,
+    set_joint_restraints_batch,
     modify_rectangular_section,
     new_blank_model,
     open_model,
@@ -492,6 +495,38 @@ def set_frame_releases_tool(
     {"R3": True}. confirm=true mandatory; dry_run previews vs current. SAP may reject an unstable
     combination (oapi_call_failed) — relayed, not reinterpreted."""
     return set_frame_releases(name, releases_i, releases_j, dry_run, confirm)
+
+
+# --- Joint restraints (Fase 1h.3) --------------------------------------------
+
+@mcp.tool(name="get_joint_restraints")
+def get_joint_restraints_tool(name: str) -> dict[str, Any]:
+    """READ: a joint's 6-DOF restraint flags {U1,U2,U3,R1,R2,R3} (true = restrained). Facts only,
+    no pinned/fixed/roller naming. get_joints returns all joints' restraints; this is the
+    single-joint lookup."""
+    return get_joint_restraints(name)
+
+
+@mcp.tool(name="set_joint_restraints")
+def set_joint_restraints_tool(
+    name: str, restraints: dict, dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """WRITE: set a joint's 6-DOF restraints (boundary condition). restraints = {U1,U2,U3,R1,R2,R3}
+    named flags (true = restrained; omitted default False). OVERWRITES the whole state. Compose the
+    support yourself: pinned={U1,U2,U3 true}, roller-Z={U3 true}, fixed=all true, free={} (all
+    false). confirm=true mandatory; dry_run previews. Remove a support by setting all false (no
+    separate delete)."""
+    return set_joint_restraints(name, restraints, dry_run, confirm)
+
+
+@mcp.tool(name="set_joint_restraints_batch")
+def set_joint_restraints_batch_tool(
+    items: list[dict], dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """WRITE: set restraints on many joints atomically. items = list of {name, restraints}. All
+    joints validated up front; stop-on-first-failure (applied/failed_at/not_attempted). dry_run
+    previews. confirm=true mandatory."""
+    return set_joint_restraints_batch(items, dry_run, confirm)
 
 
 if __name__ == "__main__":

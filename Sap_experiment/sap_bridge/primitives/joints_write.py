@@ -20,13 +20,18 @@ from .. import error_codes
 from ..audit_log import audited
 from ..bridge_state import next_joint_name, peek_joint_name
 from ..contracts import (
+    BatchItemFailure,
     CreateJointResponse,
     CreateJointsResponse,
     DeleteJointResponse,
     JointCreated,
     JointDeletion,
     JointMove,
+    JointRestraintsChange,
     ModifyJointResponse,
+    RestraintFlags,
+    SetJointRestraintsBatchResponse,
+    SetJointRestraintsResponse,
 )
 from ..namespace import assert_no_conflict, assert_prefix_required
 from ..sap_session import SapSessionError
@@ -242,3 +247,125 @@ def modify_joint(
             applied=JointMove(name=name, previous_coords=old, current_coords=now,
                               affected_frames=affected),
         )
+
+
+# --- Joint restraints (Fase 1h.3) --------------------------------------------
+# SAP DOF order [U1,U2,U3,R1,R2,R3] (§34). The contract uses named flags; here we map to/from
+# the positional 6-bool array SetRestraint/GetRestraint want.
+_DOF_ORDER = ("U1", "U2", "U3", "R1", "R2", "R3")
+
+
+def _restraints_to_list(flags: RestraintFlags) -> list[bool]:
+    return [getattr(flags, dof) for dof in _DOF_ORDER]
+
+
+def _list_to_restraints(values: Any) -> RestraintFlags:
+    return RestraintFlags(**{dof: bool(values[i]) for i, dof in enumerate(_DOF_ORDER)})
+
+
+def _diff_restraints(prev: RestraintFlags, new: RestraintFlags) -> list[str]:
+    return [f"{dof}: {getattr(prev, dof)} → {getattr(new, dof)}"
+            for dof in _DOF_ORDER if getattr(prev, dof) != getattr(new, dof)]
+
+
+def _apply_restraints(sap_model: Any, oapi_namespace: Any, name: str, new: RestraintFlags) -> RestraintFlags:
+    """SetRestraint then read back (M2). SetRestraint overwrites the whole state (§34)."""
+    item_objects = oapi_namespace.eItemType.Objects
+    ret = sap_model.PointObj.SetRestraint(name, _restraints_to_list(new), item_objects)
+    ret_code = ret[0] if isinstance(ret, tuple) else ret
+    if ret_code != 0:
+        raise SapSessionError(
+            error_codes.OAPI_CALL_FAILED,
+            f"PointObj.SetRestraint('{name}') returned {ret_code}",
+        )
+    return _list_to_restraints(joints_read.get_joint_restraints(sap_model, name))
+
+
+def set_joint_restraints(
+    sap_model: Any, oapi_namespace: Any, name: str, restraints: dict, dry_run: bool, confirm: bool,
+) -> SetJointRestraintsResponse:
+    """Set a joint's 6-DOF restraints. Named flags (omitted = False); SetRestraint OVERWRITES the
+    whole state (M1, §34). confirm mandatory."""
+    with audited("set_joint_restraints", {"name": name, "restraints": restraints,
+                                          "dry_run": dry_run, "confirm": confirm}) as ctx:
+        if name not in set(joints_read.list_joint_names(sap_model)):
+            raise SapSessionError(error_codes.OBJECT_NOT_FOUND, f"joint '{name}' not found")
+        new = RestraintFlags(**restraints)
+        prev = _list_to_restraints(joints_read.get_joint_restraints(sap_model, name))
+        changes = _diff_restraints(prev, new)
+
+        if dry_run:
+            ctx["result"] = "preview_only"
+            ctx["result_details"] = {"name": name, "changes": changes}
+            return SetJointRestraintsResponse(
+                dry_run=True,
+                would_apply=JointRestraintsChange(name=name, previous=prev, new=new, changes=changes),
+            )
+
+        if not confirm:
+            raise SapSessionError(
+                error_codes.CONFIRM_REQUIRED,
+                f"set_joint_restraints modifies joint '{name}'; pass confirm=true to apply",
+            )
+
+        cur = _apply_restraints(sap_model, oapi_namespace, name, new)
+        ctx["result_details"] = {"name": name, "changes": changes}
+        return SetJointRestraintsResponse(
+            dry_run=False,
+            applied=JointRestraintsChange(name=name, previous=prev, current=cur, changes=changes),
+        )
+
+
+def set_joint_restraints_batch(
+    sap_model: Any, oapi_namespace: Any, items: list[dict], dry_run: bool, confirm: bool,
+) -> SetJointRestraintsBatchResponse:
+    """Set restraints on many joints atomically (stop-on-first-failure)."""
+    with audited("set_joint_restraints_batch",
+                 {"count": len(items), "dry_run": dry_run, "confirm": confirm}) as ctx:
+        if not items:
+            raise SapSessionError(error_codes.EMPTY_BATCH, "set_joint_restraints_batch: empty")
+
+        # Strict pre-validation: every joint must exist; resolve change records.
+        existing = set(joints_read.list_joint_names(sap_model))
+        records: list[JointRestraintsChange] = []
+        for spec in items:
+            jname = spec["name"]
+            if jname not in existing:
+                raise SapSessionError(error_codes.OBJECT_NOT_FOUND, f"joint '{jname}' not found")
+            new = RestraintFlags(**spec["restraints"])
+            prev = _list_to_restraints(joints_read.get_joint_restraints(sap_model, jname))
+            records.append(JointRestraintsChange(
+                name=jname, previous=prev, new=new, changes=_diff_restraints(prev, new)))
+
+        if dry_run:
+            ctx["result"] = "preview_only"
+            ctx["result_details"] = {"count": len(records)}
+            return SetJointRestraintsBatchResponse(
+                dry_run=True, count=len(records), would_apply=records)
+
+        if not confirm:
+            raise SapSessionError(
+                error_codes.CONFIRM_REQUIRED,
+                f"set_joint_restraints_batch modifies {len(items)} joint(s); pass confirm=true",
+            )
+
+        def _apply(_idx: int, rec: JointRestraintsChange) -> JointRestraintsChange:
+            cur = _apply_restraints(sap_model, oapi_namespace, rec.name, rec.new)
+            return JointRestraintsChange(name=rec.name, previous=rec.previous, current=cur,
+                                         changes=rec.changes)
+
+        outcome = apply_batch_atomic(records, _apply)
+        failed = None
+        not_attempted = None
+        if outcome.failed_index is not None:
+            rec = outcome.failed_item
+            failed = BatchItemFailure(index=outcome.failed_index,
+                                      item=f"joint '{rec.name}'",
+                                      reason=outcome.failed_reason or "unknown")
+            not_attempted = [r.name for r in outcome.not_attempted]
+        ctx["result"] = "applied" if failed is None else f"error_{error_codes.OAPI_CALL_FAILED}"
+        ctx["result_details"] = {"applied_count": len(outcome.applied),
+                                 "failed_at": failed.index if failed else None}
+        return SetJointRestraintsBatchResponse(
+            dry_run=False, count=len(records), applied=outcome.applied,
+            failed_at=failed, not_attempted=not_attempted)
