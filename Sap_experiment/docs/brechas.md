@@ -605,16 +605,22 @@ culpa del workspace pattern:
   diálogo. El `.sdb` de un blank vacío pesa ~7 KB y **no es un archivo válido para reabrir**.
 - El modelo **no está locked** tras init (`GetModelIsLocked()=False`) — el bloqueo no es la causa.
 - `cFrameObj.AddByCoord` retorna 1 (no agrega geometría) en un blank recién inicializado: poblar
-  un blank requiere setup que es **territorio de 1h.2** (construcción), fuera de 1h.1. Por eso no
-  se pudo verificar aquí si un `.sdb` CON geometría sí reabre (hipótesis pendiente para 1h.2).
+  un blank requiere setup que es **territorio de 1h.2** (construcción), fuera de 1h.1.
 - ⚠️ Sub-hallazgo de firma (anti-patrón #5): **`cPointObj.Count()` no toma args**, pero
   **`cFrameObj.Count(String)` toma un nombre de grupo** (`""` = todos). Verificado por reflexión.
 
+> ✅ **CAUSA RAÍZ RESUELTA en 1h.2 (§32):** el `AddByCoord`/`Save` fallaban porque faltaba
+> `cFile.NewBlank()` tras `InitializeNewModel` — el modelo quedaba inerte. `new_blank_model` ahora
+> lo llama. **Revalidado de raíz** (sesión 17): construir una cercha desde blank → `save_workspace_as`
+> → `open_model` **reabre LIMPIO, sin el diálogo modal** (`.sdb` de 9 KB + `.$2k`, modelo real; la
+> geometría persiste tras reabrir). El guard `empty_model` baja de "tapón del síntoma" a "defensa
+> secundaria" — un blank con NewBlank pero sin geometría sigue sin ser reabrible, y el guard lo cubre.
+
 **Dos riesgos, dos respuestas:**
-1. *Artefacto inválido en silencio*: `save_workspace_as` ahora **rechaza un modelo sin joints ni
-   frames** con `empty_model` (409) ANTES de tocar disco — no produce el `.sdb` irreparable.
-   Validado en vivo: el guard corta, no crea archivo, el bridge sigue sano. El cliente construye
-   geometría primero (1h.2+) y recién entonces guarda.
+1. *Artefacto inválido en silencio*: `save_workspace_as` **rechaza un modelo sin joints ni
+   frames** con `empty_model` (409) ANTES de tocar disco. Defensa secundaria desde 1h.2 (la causa
+   raíz —falta de NewBlank— ya se arregló en `new_blank_model`); sigue siendo válida porque un
+   modelo con NewBlank pero vacío todavía produce un `.sdb` no reabrible. Validado en vivo.
 2. *Diálogo modal que cuelga la OAPI*: riesgo operacional GENERAL del patrón (cualquier
    `OpenFile`/`Save`/re-anchor puede colgar el bridge esperando input humano). El `empty_model`
    guard elimina el disparador conocido; pero queda como **brecha abierta** endurecer el bridge
@@ -751,11 +757,12 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
     (futuro `new_from_template`). Ver §30 y write_side_design §3d. **Fix en 1h.2 (§32):
     `new_blank_model` ahora llama `cFile.NewBlank()` tras `InitializeNewModel` — sin él el modelo
     quedaba inerte (causa raíz de §31).**
-  - 🟡 **1h.2** — primitivas de geometría (joints + frames + releases): `create_joint(s)`,
+  - ✅ **1h.2** — primitivas de geometría (joints + frames + releases): `create_joint(s)`,
     `create_frame(s)`, `delete_joint/frame`, `modify_joint/frame`, `set_frame_releases`.
     Naming híbrido (AI_ o autogen AI_J###/AI_F###), batch atómico, delete con frame-connection
-    check, modify_frame in-place (§33 ChangeConnectivity). **En curso** (sesión 17). 33→42
-    primitivas. Ver §32, §33 y write_side_design "Geometry primitives".
+    check, modify_frame in-place (§33 ChangeConnectivity). **Hecha + validada** (sesión 17). 42
+    primitivas. **§31 resuelto de raíz vía §32 (NewBlank).** Validación: cercha triangular desde
+    blank, 7 fases A-G, save→reopen reabrible. Ver §32, §33 y write_side_design §3e.
   - ◾ **1h.3+** — `set_joint_restraints` (1h.3), cargas (1h.4), validación cercha completa +
     extras (1h.5). Fuera de 1h: `launch_sap`, `new_from_template`, `commit_workspace_to_base`,
     cleanup automático del temp.

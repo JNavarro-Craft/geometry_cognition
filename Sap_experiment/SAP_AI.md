@@ -70,9 +70,16 @@ día uno.
 | 🔶 **set_model_locked (estado global)** | `POST /v1/model/locked` | `set_model_locked` | ✅ unlock tras analyze (cierra loop iterativo); confirm; idempotente; NO auto-unlock |
 | 🔶 **open_model (reemplaza modelo)** | `POST /v1/model/open` | `open_model` | ✅ valida path en fs antes de OpenFile (evita estado fantasma); confirm; el modelo abierto pasa a ser base + workspace fresco |
 | 🔶 **reset_workspace (regenera)** | `POST /v1/workspace/reset` | `reset_workspace` | ✅ regenera workspace desde base inmutable; confirm; base byte-intacto verificado |
-| 🔶 **new_blank_model (modelo vacío)** | `POST /v1/model/new_blank` | `new_blank_model` | ✅ InitializeNewModel(units); DESTRUCTIVO (descarta lo cargado sin guardar)→confirm; workspace temp sin base file; 0 joints/frames |
+| 🔶 **new_blank_model (modelo vacío)** | `POST /v1/model/new_blank` | `new_blank_model` | ✅ InitializeNewModel(units) **+ NewBlank() (§32, lo hace construible)**; DESTRUCTIVO→confirm; workspace temp sin base file; 0 joints/frames |
 | 🔶 **save_workspace_as (materializa)** | `POST /v1/workspace/save_as` | `save_workspace_as` | ✅ guarda workspace→nuevo base inmutable; prohíbe path==base actual (commit futuro); confirm solo si sobrescribe; re-anchora workspace fresco; **rechaza modelo vacío** (`empty_model`, §31) |
-| Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; `case_not_run`, `unsupported_case_type`, `confirm_required`, `savepoint_not_found`, `savepoint_already_exists`, `invalid_path` |
+| 🔶 **create_joint / create_joints** | `POST /v1/joints` `/batch` | `create_joint(s)` | ✅ AddCartesian; naming híbrido (AI_ o autogen AI_J###); confirm; batch atómico; M2 read-back |
+| 🔶 **create_frame / create_frames** | `POST /v1/frames` `/batch` | `create_frame(s)` | ✅ AddByPoint; valida ambos joints; sección opcional; autogen AI_F###; batch atómico |
+| 🔶 **delete_joint** | `DELETE /v1/joints/{name}` | `delete_joint` | ✅ DeleteSpecialPoint (§33); rechaza si tiene frames conectados (`joint_has_connected_frames`, lista); confirm |
+| 🔶 **delete_frame** | `DELETE /v1/frames/{name}` | `delete_frame` | ✅ FrameObj.Delete; sin constraint de cascada; confirm; dry_run reporta endpoints |
+| 🔶 **modify_joint (mueve)** | `PATCH /v1/joints/{name}` | `modify_joint` | ✅ ChangeCoordinates_1; lista frames afectados; confirm; M2 |
+| 🔶 **modify_frame (in-place)** | `PATCH /v1/frames/{name}` | `modify_frame` | ✅ ChangeConnectivity in-place (preserva releases, §33) + SetSection; ≥1 campo; confirm |
+| 🔶 **set_frame_releases** | `POST /v1/frames/{name}/releases` | `set_frame_releases` | ✅ flags nombrados {U1..R3}→array [orden §33]; confirm; dry_run diff; SAP rechaza inestables→oapi_call_failed |
+| Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; `case_not_run`, `confirm_required`, `savepoint_not_found`, `invalid_path`, `empty_model`, `joint_has_connected_frames` |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
 unir frames↔joints por nombre de punto para reconstruir geometría; cruzar
@@ -168,6 +175,28 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 > `empty_model` (rechaza guardar un modelo sin geometría antes de tocar disco); (b) un bug real
 > (`import os` faltante en `workspace.py`) que solo saltaba en el segundo `save_workspace_as`.
 > Ambos invisibles a los tests por-primitiva — exactamente el valor del anti-patrón #6.
+
+> Actualización sesión 17 (Fase 1h.2 — geometry primitives + §31 RESUELTO DE RAÍZ): el bridge
+> ya **construye wireframe estructural desde cero**. 9 primitivas nuevas (**42 en total**):
+> `create_joint(s)`, `create_frame(s)`, `delete_joint`, `delete_frame`, `modify_joint`,
+> `modify_frame`, `set_frame_releases`. Tres patrones propios: **naming híbrido** (name explícito
+> con prefijo AI_, o autogen `AI_J###`/`AI_F###` por contador de sesión reseteable en
+> reset_workspace), **batch atómico** (`apply_batch_atomic`, stop-on-first-failure generalizado de
+> 1g.7, reusable por 1h.3-1h.4), y **delete con frame-connection check** (`delete_joint` rechaza un
+> joint con frames conectados, listándolos). `modify_frame` cambia endpoints **in-place** con
+> `EditFrame.ChangeConnectivity` (§33, preserva releases). **El pre-vuelo (anti-patrón #5)
+> descubrió la CAUSA RAÍZ de §31**: `InitializeNewModel` deja el modelo INERTE — falta
+> `cFile.NewBlank()` para que `AddCartesian`/`AddByPoint` funcionen y el `Save` produzca un `.sdb`
+> reabrible (§32). Se arregló `new_blank_model` (lo llama ahora); el guard `empty_model` queda como
+> defensa secundaria. Otras firmas verificadas (§33): joints se borran con `DeleteSpecialPoint` (NO
+> `.Delete`), releases en orden `[U1,U2,U3,R1,R2,R3]`. **Validación end-to-end: construir una cercha
+> triangular desde blank (3 joints + 3 frames + releases + material + sección), las 7 fases A-G
+> PASARON**, incluido el test crítico: `save_workspace_as` → `open_model` **reabre limpio, sin el
+> diálogo modal de §31** (con geometría el `.sdb` pesa 9 KB + `.$2k`, es un modelo real); la
+> geometría persiste tras reabrir. **§31 resuelto de raíz, no solo con el guard.** La validación NO
+> reveló bugs nuevos — las 9 primitivas funcionaron a la primera. Future-aware: `apply_batch_atomic`
+> y `get_frames_connected_to_joint` (patrón "referencias a X") listos para 1h.3 (restraints) /
+> 1h.4 (cargas). Fuera de fase: restraints, cargas, `launch_sap`, `commit_workspace_to_base`.
 
 > Actualización sesión 14 (Fase 1g.8 — workflow iterativo robusto + tercer bloqueante):
 > resuelve los 2 bloqueantes de §26: `set_model_locked` (unlock tras analyze → cierra el loop
