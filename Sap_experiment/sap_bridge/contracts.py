@@ -211,6 +211,114 @@ class CreateLoadPatternResponse(BaseModel):
     applied: LoadPatternCreation | None = None
 
 
+# --- Load assignment: joint loads (Fase 1h.4) --------------------------------
+# forces {F1,F2,F3} + moments {M1,M2,M3}, named (default 0), order [F1,F2,F3,M1,M2,M3] (§36).
+# Assignment ACCUMULATES (Replace=False); clear_* removes. coord_sys Global/Local.
+
+
+class JointForces(BaseModel):
+    F1: float = 0.0
+    F2: float = 0.0
+    F3: float = 0.0
+
+
+class JointMoments(BaseModel):
+    M1: float = 0.0
+    M2: float = 0.0
+    M3: float = 0.0
+
+
+class AssignJointLoadRequest(BaseModel):
+    """Body for POST /v1/joints/{name}/loads. ``forces``/``moments`` named (default 0).
+    ``coord_sys`` 'Global'/'Local'. Accumulates (Replace=False). Validates joint + pattern exist.
+    ``confirm`` mandatory; ``dry_run`` previews."""
+
+    pattern_name: str
+    forces: JointForces = Field(default_factory=JointForces)
+    moments: JointMoments = Field(default_factory=JointMoments)
+    coord_sys: str = Field("Global", description="'Global' or 'Local'")
+    dry_run: bool = Field(False, description="If true, preview without applying")
+    confirm: bool = Field(False, description="Must be true to apply")
+
+
+class JointLoadSpec(BaseModel):
+    joint_name: str
+    pattern_name: str
+    forces: JointForces = Field(default_factory=JointForces)
+    moments: JointMoments = Field(default_factory=JointMoments)
+    coord_sys: str = "Global"
+
+
+class AssignJointLoadsBatchRequest(BaseModel):
+    items: list[JointLoadSpec]
+    dry_run: bool = Field(False, description="If true, preview without applying")
+    confirm: bool = Field(False, description="Must be true to apply")
+
+
+class JointLoad(BaseModel):
+    """One joint load as facts: the pattern, the 6 components, the coord system."""
+
+    pattern_name: str
+    forces: JointForces
+    moments: JointMoments
+    coord_sys: str
+
+
+class JointLoadApplied(BaseModel):
+    """The applied (or to-be-applied) joint load: joint + the load. ``note`` flags accumulation."""
+
+    joint_name: str
+    load: JointLoad
+    note: str = Field("", description="e.g. 'accumulated (added to existing)'")
+
+
+class AssignJointLoadResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: JointLoadApplied | None = None
+    applied: JointLoadApplied | None = None
+
+
+class AssignJointLoadsBatchResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    count: int
+    would_apply: list[JointLoadApplied] | None = None
+    applied: list[JointLoadApplied] | None = None
+    failed_at: BatchItemFailure | None = None
+    not_attempted: list[str] | None = None
+
+
+class ClearJointLoadsRequest(BaseModel):
+    """Body for DELETE /v1/joints/{name}/loads. ``pattern_name`` None = clear ALL patterns on the
+    joint; given = only that pattern. ``confirm`` mandatory; ``dry_run`` previews."""
+
+    pattern_name: str | None = None
+    dry_run: bool = Field(False, description="If true, preview without clearing")
+    confirm: bool = Field(False, description="Must be true to clear")
+
+
+class ClearJointLoadsResult(BaseModel):
+    joint_name: str
+    pattern_name: str | None = Field(None, description="The pattern cleared, or None for all")
+    cleared_count: int = Field(..., description="Number of load entries removed")
+
+
+class ClearJointLoadsResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: ClearJointLoadsResult | None = None
+    applied: ClearJointLoadsResult | None = None
+
+
+class JointLoadsResponse(BaseModel):
+    """Read-only: the loads on one joint (GET /v1/joints/{name}/loads), one entry per pattern."""
+
+    joint_name: str
+    count: int
+    loads: list[JointLoad]
+
+
 class LoadCase(BaseModel):
     """One analysis load case defined in the model: its name and raw SAP case type.
 

@@ -275,6 +275,50 @@ def create_load_pattern_bridge(
     )
 
 
+# --- Joint loads (Fase 1h.4) -------------------------------------------------
+
+def assign_joint_load_bridge(
+    base_url: str, timeout_seconds: float, joint_name: str, pattern_name: str,
+    forces: dict | None, moments: dict | None, coord_sys: str, dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"pattern_name": pattern_name, "forces": forces or {},
+                       "moments": moments or {}, "coord_sys": coord_sys,
+                       "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, f"/v1/joints/{quote(joint_name)}/loads", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
+def assign_joint_loads_batch_bridge(
+    base_url: str, timeout_seconds: float, items: list[dict], dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"items": items, "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, "/v1/joints/loads/batch", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
+def clear_joint_loads_bridge(
+    base_url: str, timeout_seconds: float, joint_name: str, pattern_name: str | None,
+    dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"pattern_name": pattern_name, "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, f"/v1/joints/{quote(joint_name)}/loads", timeout_seconds,
+        method="DELETE", body=body, content_type="application/json",
+    )
+
+
+def get_joint_loads_bridge(
+    base_url: str, timeout_seconds: float, joint_name: str,
+) -> dict[str, Any]:
+    return _bridge_json_request(
+        base_url, f"/v1/joints/{quote(joint_name)}/loads", timeout_seconds, method="GET",
+    )
+
+
 # --- Joint restraints (Fase 1h.3) --------------------------------------------
 
 def get_joint_restraints_bridge(

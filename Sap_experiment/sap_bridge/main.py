@@ -47,6 +47,13 @@ from .contracts import (
     SetJointRestraintsBatchRequest,
     SetJointRestraintsBatchResponse,
     JointRestraintsResponse,
+    AssignJointLoadRequest,
+    AssignJointLoadResponse,
+    AssignJointLoadsBatchRequest,
+    AssignJointLoadsBatchResponse,
+    ClearJointLoadsRequest,
+    ClearJointLoadsResponse,
+    JointLoadsResponse,
     CreateFrameRequest,
     CreateFrameResponse,
     CreateFramesRequest,
@@ -425,6 +432,54 @@ def set_joint_restraints_batch(request: SetJointRestraintsBatchRequest) -> SetJo
             [{"name": it.name, "restraints": it.restraints.model_dump()} for it in request.items],
             request.dry_run, request.confirm,
         )
+
+
+@app.get("/v1/joints/{name}/loads", response_model=JointLoadsResponse)
+def get_joint_loads(name: str) -> JointLoadsResponse:
+    """All loads on one joint (read — Fase 1h.4), one entry per pattern: pattern, the 6
+    components {F1..M3} and coord_sys. Empty if none. (See also /loads/point for the 1c.2 shape.)"""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return joint_loads_primitive.get_joint_loads(model, name)
+
+
+@app.post("/v1/joints/{name}/loads", response_model=AssignJointLoadResponse)
+def assign_joint_load(name: str, request: AssignJointLoadRequest) -> AssignJointLoadResponse:
+    """Assign a point load to a joint (write — ACCUMULATES). ``forces``/``moments`` named (default
+    0); ``coord_sys`` Global/Local. Validates joint + pattern exist. ``confirm`` mandatory."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return joint_loads_primitive.assign_joint_load(
+            model, name, request.pattern_name, request.forces.model_dump(),
+            request.moments.model_dump(), request.coord_sys, request.dry_run, request.confirm,
+        )
+
+
+@app.post("/v1/joints/loads/batch", response_model=AssignJointLoadsBatchResponse)
+def assign_joint_loads_batch(request: AssignJointLoadsBatchRequest) -> AssignJointLoadsBatchResponse:
+    """Assign point loads to many joints atomically (write — stop-on-first-failure). Each
+    {joint_name, pattern_name, forces?, moments?, coord_sys?}. ``confirm`` mandatory."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        items = [{"joint_name": it.joint_name, "pattern_name": it.pattern_name,
+                  "forces": it.forces.model_dump(), "moments": it.moments.model_dump(),
+                  "coord_sys": it.coord_sys} for it in request.items]
+        return joint_loads_primitive.assign_joint_loads_batch(
+            model, items, request.dry_run, request.confirm)
+
+
+@app.delete("/v1/joints/{name}/loads", response_model=ClearJointLoadsResponse)
+def clear_joint_loads(name: str, request: ClearJointLoadsRequest) -> ClearJointLoadsResponse:
+    """Clear loads on a joint (write — destructive). ``pattern_name`` given = only that pattern;
+    omitted/null = ALL patterns. ``confirm`` mandatory; ``dry_run`` reports how many would clear."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return joint_loads_primitive.clear_joint_loads(
+            model, name, request.pattern_name, request.dry_run, request.confirm)
 
 
 @app.get("/v1/frames", response_model=FramesResponse)

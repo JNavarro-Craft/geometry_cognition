@@ -20,9 +20,13 @@ from .bridge_backend import (
     get_combinations_bridge,
     get_model_settings_bridge,
     list_savepoints_bridge,
+    assign_joint_load_bridge,
+    assign_joint_loads_batch_bridge,
+    clear_joint_loads_bridge,
     create_frame_bridge,
     create_frames_bridge,
     create_load_pattern_bridge,
+    get_joint_loads_bridge,
     create_joint_bridge,
     create_joints_bridge,
     delete_frame_bridge,
@@ -201,6 +205,59 @@ def create_load_pattern(
     try:
         return create_load_pattern_bridge(base_url, timeout, name, pattern_type,
                                           self_weight_multiplier, add_load_case, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def assign_joint_load(
+    joint_name: str, pattern_name: str, forces: dict | None = None, moments: dict | None = None,
+    coord_sys: str = "Global", dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Assign a point load to a joint (WRITE — Fase 1h.4). forces = {F1,F2,F3}, moments = {M1,M2,M3}
+    (named, missing keys default 0). coord_sys 'Global'/'Local'. ACCUMULATES (a second assign of the
+    same pattern ADDS to the existing load — use clear_joint_loads first to replace). Validates the
+    joint and the pattern exist. confirm=true mandatory; dry_run previews. Example: a 1000 kgf
+    downward point load → forces={"F3": -1000.0}."""
+    base_url, timeout = bridge_settings()
+    try:
+        return assign_joint_load_bridge(base_url, timeout, joint_name, pattern_name, forces,
+                                        moments, coord_sys, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def assign_joint_loads_batch(
+    items: list[dict], dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Assign point loads to many joints atomically (WRITE — batch). items = list of {joint_name,
+    pattern_name, forces?, moments?, coord_sys?}. Stop-on-first-failure (applied/failed_at/
+    not_attempted). All joints+patterns validated up front. confirm=true mandatory; dry_run previews."""
+    base_url, timeout = bridge_settings()
+    try:
+        return assign_joint_loads_batch_bridge(base_url, timeout, items, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def clear_joint_loads(
+    joint_name: str, pattern_name: str | None = None, dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Clear loads on a joint (WRITE — destructive). pattern_name given = only that pattern's loads;
+    omitted/null = ALL patterns on the joint. confirm=true mandatory; dry_run reports how many would
+    clear. Use before re-assigning to 'replace' (assign accumulates by default)."""
+    base_url, timeout = bridge_settings()
+    try:
+        return clear_joint_loads_bridge(base_url, timeout, joint_name, pattern_name, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def get_joint_loads(joint_name: str) -> dict[str, Any]:
+    """Read all loads on one joint (READ-ONLY — Fase 1h.4). Returns one entry per pattern with the 6
+    components {F1..M3} and coord_sys. Empty list if the joint has no loads."""
+    base_url, timeout = bridge_settings()
+    try:
+        return get_joint_loads_bridge(base_url, timeout, joint_name)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)
 

@@ -44,11 +44,15 @@ from Sap_experiment.sap_developer_server.tools import (
     get_section_properties,
     get_sections,
     list_savepoints,
+    assign_joint_load,
+    assign_joint_loads_batch,
+    clear_joint_loads,
     create_frame,
     create_frames,
     create_joint,
     create_joints,
     create_load_pattern,
+    get_joint_loads,
     delete_frame,
     delete_joint,
     get_joint_restraints,
@@ -138,6 +142,46 @@ def create_load_pattern_tool(
     blank model starts with only DEAD; existing name → name_already_exists."""
     return create_load_pattern(name, pattern_type, self_weight_multiplier, add_load_case,
                                dry_run, confirm)
+
+
+# --- Joint loads (Fase 1h.4) -------------------------------------------------
+
+@mcp.tool(name="assign_joint_load")
+def assign_joint_load_tool(
+    joint_name: str, pattern_name: str, forces: Optional[dict] = None, moments: Optional[dict] = None,
+    coord_sys: str = "Global", dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """WRITE: assign a point load to a joint. forces={F1,F2,F3}, moments={M1,M2,M3} (named, missing
+    default 0). coord_sys Global/Local. ACCUMULATES (re-assign of same pattern ADDS; clear first to
+    replace). Validates joint+pattern exist. confirm=true mandatory; dry_run previews. Downward 1000:
+    forces={"F3": -1000.0}."""
+    return assign_joint_load(joint_name, pattern_name, forces, moments, coord_sys, dry_run, confirm)
+
+
+@mcp.tool(name="assign_joint_loads_batch")
+def assign_joint_loads_batch_tool(
+    items: list[dict], dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """WRITE: assign point loads to many joints atomically. items = list of {joint_name, pattern_name,
+    forces?, moments?, coord_sys?}. Stop-on-first-failure. confirm=true mandatory; dry_run previews."""
+    return assign_joint_loads_batch(items, dry_run, confirm)
+
+
+@mcp.tool(name="clear_joint_loads")
+def clear_joint_loads_tool(
+    joint_name: str, pattern_name: Optional[str] = None, dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """WRITE (destructive): clear loads on a joint. pattern_name given = only that pattern; omitted =
+    ALL patterns. confirm=true mandatory; dry_run reports the count. Use before re-assign to replace
+    (assign accumulates)."""
+    return clear_joint_loads(joint_name, pattern_name, dry_run, confirm)
+
+
+@mcp.tool(name="get_joint_loads")
+def get_joint_loads_tool(joint_name: str) -> dict[str, Any]:
+    """READ: all loads on one joint, one entry per pattern with the 6 components {F1..M3} and
+    coord_sys. Empty if none."""
+    return get_joint_loads(joint_name)
 
 
 @mcp.tool(name="get_load_cases")
