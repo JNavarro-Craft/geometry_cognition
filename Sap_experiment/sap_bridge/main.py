@@ -48,6 +48,8 @@ from .contracts import (
     DeleteFrameResponse,
     ModifyFrameRequest,
     ModifyFrameResponse,
+    SetFrameReleasesRequest,
+    SetFrameReleasesResponse,
     ModelSettingsResponse,
     NewBlankModelRequest,
     NewBlankModelResponse,
@@ -436,6 +438,21 @@ def modify_frame(name: str, request: ModifyFrameRequest) -> ModifyFrameResponse:
         return frames_write_primitive.modify_frame(
             model, session.oapi_namespace(), name, request.joint_i_name, request.joint_j_name,
             request.section, request.dry_run, request.confirm,
+        )
+
+
+@app.post("/v1/frames/{name}/releases", response_model=SetFrameReleasesResponse)
+def set_frame_releases(name: str, request: SetFrameReleasesRequest) -> SetFrameReleasesResponse:
+    """Set a frame's 6-DOF end releases (write). ``releases_i``/``releases_j`` are named flags
+    [U1,U2,U3,R1,R2,R3], true = released. ``confirm`` mandatory; ``dry_run`` previews vs current.
+    SAP may reject an unstable combination → oapi_call_failed (not reinterpreted)."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return frames_write_primitive.set_frame_releases(
+            model, session.oapi_namespace(), name,
+            request.releases_i.model_dump(), request.releases_j.model_dump(),
+            request.dry_run, request.confirm,
         )
 
 

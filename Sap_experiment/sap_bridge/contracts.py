@@ -1250,3 +1250,53 @@ class ModifyFrameResponse(BaseModel):
     validation_passed: bool = True
     would_apply: FrameModification | None = None
     applied: FrameModification | None = None
+
+
+# --- Geometry primitives: frame releases (Fase 1h.2) -------------------------
+# Releases free internal force/moment transfer at a frame end. 6 booleans per end in the SAP
+# order [U1, U2, U3, R1, R2, R3] (verified §33); true = released (no transfer).
+
+
+class ReleaseFlags(BaseModel):
+    """The 6-DOF release flags at one frame end. ``true`` = released. Field order matches the
+    SAP DOF order [U1,U2,U3,R1,R2,R3]; reported/accepted as named booleans (no positional list)
+    so the client never has to remember the order."""
+
+    U1: bool = False
+    U2: bool = False
+    U3: bool = False
+    R1: bool = False
+    R2: bool = False
+    R3: bool = False
+
+
+class SetFrameReleasesRequest(BaseModel):
+    """Body for POST /v1/frames/{name}/releases. ``releases_i``/``releases_j`` are the flags at
+    the i/j ends. ``confirm`` mandatory (modifies the frame); ``dry_run`` previews vs current."""
+
+    releases_i: ReleaseFlags
+    releases_j: ReleaseFlags
+    dry_run: bool = Field(False, description="If true, preview without applying")
+    confirm: bool = Field(False, description="Must be true to apply")
+
+
+class FrameReleasesChange(BaseModel):
+    """A releases change as facts: the flags at each end before/after, plus a readable summary
+    of what changed. SAP may REJECT some combinations as unstable — surfaced as oapi_call_failed,
+    not reinterpreted."""
+
+    name: str
+    previous_i: ReleaseFlags | None = None
+    previous_j: ReleaseFlags | None = None
+    current_i: ReleaseFlags | None = None
+    current_j: ReleaseFlags | None = None
+    new_i: ReleaseFlags | None = None
+    new_j: ReleaseFlags | None = None
+    changes: list[str] = Field(default_factory=list)
+
+
+class SetFrameReleasesResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: FrameReleasesChange | None = None
+    applied: FrameReleasesChange | None = None

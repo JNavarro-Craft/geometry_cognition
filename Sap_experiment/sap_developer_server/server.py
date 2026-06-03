@@ -52,6 +52,7 @@ from Sap_experiment.sap_developer_server.tools import (
     delete_joint,
     modify_frame,
     modify_joint,
+    set_frame_releases,
     modify_rectangular_section,
     new_blank_model,
     open_model,
@@ -480,6 +481,17 @@ def modify_frame_tool(
     nothing_to_modify). Endpoint changes are IN-PLACE and PRESERVE releases (§33). section='' sets
     the default section. confirm=true mandatory; dry_run previews the changes."""
     return modify_frame(name, joint_i_name, joint_j_name, section, dry_run, confirm)
+
+
+@mcp.tool(name="set_frame_releases")
+def set_frame_releases_tool(
+    name: str, releases_i: dict, releases_j: dict, dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """WRITE: set a frame's 6-DOF end releases. releases_i/releases_j = {U1,U2,U3,R1,R2,R3} named
+    flags (true = released; omitted keys default False). Pin example (2D truss): both ends
+    {"R3": True}. confirm=true mandatory; dry_run previews vs current. SAP may reject an unstable
+    combination (oapi_call_failed) — relayed, not reinterpreted."""
+    return set_frame_releases(name, releases_i, releases_j, dry_run, confirm)
 
 
 if __name__ == "__main__":

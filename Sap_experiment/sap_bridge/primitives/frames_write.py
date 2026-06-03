@@ -29,7 +29,10 @@ from ..contracts import (
     FrameCreated,
     FrameDeletion,
     FrameModification,
+    FrameReleasesChange,
     ModifyFrameResponse,
+    ReleaseFlags,
+    SetFrameReleasesResponse,
 )
 from ..namespace import assert_no_conflict, assert_prefix_required
 from ..sap_session import SapSessionError
@@ -314,5 +317,94 @@ def modify_frame(
                 name=name, previous_point_i=cur_i, previous_point_j=cur_j,
                 previous_section=cur_section, current_point_i=str(f_i), current_point_j=str(f_j),
                 current_section=f_section, changes=changes,
+            ),
+        )
+
+
+# SAP DOF order for releases (verified §33). The contract uses named flags; here we map to/from
+# the positional 6-bool arrays the OAPI wants.
+_DOF_ORDER = ("U1", "U2", "U3", "R1", "R2", "R3")
+
+
+def _flags_to_list(flags: ReleaseFlags) -> list[bool]:
+    return [getattr(flags, dof) for dof in _DOF_ORDER]
+
+
+def _list_to_flags(values: Any) -> ReleaseFlags:
+    return ReleaseFlags(**{dof: bool(values[i]) for i, dof in enumerate(_DOF_ORDER)})
+
+
+def _read_releases(sap_model: Any, name: str) -> tuple[ReleaseFlags, ReleaseFlags]:
+    """Current releases at both ends. GetReleases(Name, None×4) → (ret, II, JJ, SV, EV)."""
+    ret = sap_model.FrameObj.GetReleases(name, None, None, None, None)
+    ret_code = ret[0] if isinstance(ret, tuple) else ret
+    if ret_code != 0:
+        raise SapSessionError(
+            error_codes.OAPI_CALL_FAILED, f"FrameObj.GetReleases('{name}') returned {ret_code}"
+        )
+    return _list_to_flags(ret[1]), _list_to_flags(ret[2])
+
+
+def _diff_releases(end: str, prev: ReleaseFlags, new: ReleaseFlags) -> list[str]:
+    out = []
+    for dof in _DOF_ORDER:
+        if getattr(prev, dof) != getattr(new, dof):
+            out.append(f"{end}.{dof}: {getattr(prev, dof)} → {getattr(new, dof)}")
+    return out
+
+
+def set_frame_releases(
+    sap_model: Any, oapi_namespace: Any, name: str, releases_i: dict, releases_j: dict,
+    dry_run: bool, confirm: bool,
+) -> SetFrameReleasesResponse:
+    """Set the 6-DOF end releases of a frame. ``releases_i``/``releases_j`` are dicts of named
+    flags. confirm mandatory. SAP may reject unstable combinations (→ oapi_call_failed)."""
+    with audited("set_frame_releases", {"name": name, "releases_i": releases_i,
+                                        "releases_j": releases_j,
+                                        "dry_run": dry_run, "confirm": confirm}) as ctx:
+        if name not in set(frames_read.list_frame_names(sap_model)):
+            raise SapSessionError(error_codes.OBJECT_NOT_FOUND, f"frame '{name}' not found")
+        new_i = ReleaseFlags(**releases_i)
+        new_j = ReleaseFlags(**releases_j)
+        prev_i, prev_j = _read_releases(sap_model, name)
+        changes = _diff_releases("i", prev_i, new_i) + _diff_releases("j", prev_j, new_j)
+
+        if dry_run:
+            ctx["result"] = "preview_only"
+            ctx["result_details"] = {"name": name, "changes": changes}
+            return SetFrameReleasesResponse(
+                dry_run=True,
+                would_apply=FrameReleasesChange(
+                    name=name, previous_i=prev_i, previous_j=prev_j, new_i=new_i, new_j=new_j,
+                    changes=changes,
+                ),
+            )
+
+        if not confirm:
+            raise SapSessionError(
+                error_codes.CONFIRM_REQUIRED,
+                f"set_frame_releases modifies frame '{name}'; pass confirm=true to apply",
+            )
+
+        ii = _flags_to_list(new_i)
+        jj = _flags_to_list(new_j)
+        sv = [0.0] * 6
+        ev = [0.0] * 6
+        item_objects = oapi_namespace.eItemType.Objects
+        ret = sap_model.FrameObj.SetReleases(name, ii, jj, sv, ev, item_objects)
+        ret_code = ret[0] if isinstance(ret, tuple) else ret
+        if ret_code != 0:
+            raise SapSessionError(
+                error_codes.OAPI_CALL_FAILED,
+                f"FrameObj.SetReleases('{name}') returned {ret_code} (SAP may reject an "
+                "unstable release combination)",
+            )
+        cur_i, cur_j = _read_releases(sap_model, name)  # read back (M2)
+        ctx["result_details"] = {"name": name, "changes": changes}
+        return SetFrameReleasesResponse(
+            dry_run=False,
+            applied=FrameReleasesChange(
+                name=name, previous_i=prev_i, previous_j=prev_j, current_i=cur_i, current_j=cur_j,
+                changes=changes,
             ),
         )

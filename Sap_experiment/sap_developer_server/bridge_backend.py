@@ -247,6 +247,18 @@ def modify_frame_bridge(
     )
 
 
+def set_frame_releases_bridge(
+    base_url: str, timeout_seconds: float, name: str, releases_i: dict, releases_j: dict,
+    dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"releases_i": releases_i, "releases_j": releases_j,
+                       "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, f"/v1/frames/{quote(name)}/releases", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
 def create_material_bridge(
     base_url: str, timeout_seconds: float, name: str, material_type: str, dry_run: bool
 ) -> dict[str, Any]:

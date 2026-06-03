@@ -28,6 +28,7 @@ from .bridge_backend import (
     delete_joint_bridge,
     modify_frame_bridge,
     modify_joint_bridge,
+    set_frame_releases_bridge,
     modify_rectangular_section_bridge,
     new_blank_model_bridge,
     open_model_bridge,
@@ -612,6 +613,23 @@ def modify_frame(
     try:
         return modify_frame_bridge(base_url, timeout, name, joint_i_name, joint_j_name, section,
                                    dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def set_frame_releases(
+    name: str, releases_i: dict, releases_j: dict, dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Set a frame's 6-DOF end releases (WRITE). releases_i / releases_j are dicts of named flags
+    {U1,U2,U3,R1,R2,R3} (true = released, i.e. that DOF transfers no force/moment). Omitted keys
+    default to False. Example pin (M3 free both ends, typical 2D truss): releases_i={"R3": True},
+    releases_j={"R3": True}. confirm=true mandatory; dry_run previews vs current. SAP may REJECT
+    an unstable combination (e.g. all DOFs released both ends) with oapi_call_failed — the bridge
+    relays that, it does not reinterpret stability."""
+    base_url, timeout = bridge_settings()
+    try:
+        return set_frame_releases_bridge(base_url, timeout, name, releases_i, releases_j,
+                                         dry_run, confirm)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)
 
