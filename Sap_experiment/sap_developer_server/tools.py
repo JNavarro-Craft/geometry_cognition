@@ -22,6 +22,7 @@ from .bridge_backend import (
     list_savepoints_bridge,
     create_frame_bridge,
     create_frames_bridge,
+    create_load_pattern_bridge,
     create_joint_bridge,
     create_joints_bridge,
     delete_frame_bridge,
@@ -181,6 +182,25 @@ def get_load_patterns() -> dict[str, Any]:
     base_url, timeout = bridge_settings()
     try:
         return get_load_patterns_bridge(base_url, timeout)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def create_load_pattern(
+    name: str, pattern_type: str, self_weight_multiplier: float = 0.0,
+    add_load_case: bool = True, dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Create a load pattern (WRITE — Fase 1h.4). name MUST start with the bridge prefix (AI_).
+    pattern_type is an eLoadPatternType name, CASE-INSENSITIVE: 'Dead','SuperDead','Live',
+    'ReduceLive','Quake','Wind','Snow','Other','Move','Temperature',... (else
+    unknown_load_pattern_type, message lists all). self_weight_multiplier: 0 = no auto self-weight
+    (DEAD typically 1.0). add_load_case=True also creates the analysis case. confirm=true mandatory;
+    dry_run previews. A blank model starts with only DEAD; an existing name is refused
+    (name_already_exists)."""
+    base_url, timeout = bridge_settings()
+    try:
+        return create_load_pattern_bridge(base_url, timeout, name, pattern_type,
+                                          self_weight_multiplier, add_load_case, dry_run, confirm)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)
 

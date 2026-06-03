@@ -102,6 +102,15 @@ calling OpenFile (SAP would otherwise leave the session pointing at a phantom fi
 INVALID_PATH = "invalid_path"
 """open_model was given a path that is not absolute or does not end in .sdb."""
 
+UNKNOWN_LOAD_PATTERN_TYPE = "unknown_load_pattern_type"
+"""create_load_pattern was given a pattern-type name that is not a member of eLoadPatternType
+(case-insensitive). The message lists the supported names. Client-fixable (Fase 1h.4)."""
+
+UNKNOWN_LOAD_DIRECTION = "unknown_load_direction"
+"""A frame-load primitive was given a direction string the bridge does not map (not one of
+Local1/2/3, X/Y/Z, XProj/YProj/ZProj, Gravity, GravityProj). The message lists the supported
+names. Client-fixable (Fase 1h.4, §35)."""
+
 JOINT_HAS_CONNECTED_FRAMES = "joint_has_connected_frames"
 """delete_joint was called on a joint that still has frames connected to it (as i or j end).
 SAP only deletes points with no connected objects (§33); the bridge refuses and lists the

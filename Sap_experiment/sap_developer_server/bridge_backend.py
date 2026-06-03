@@ -259,6 +259,22 @@ def set_frame_releases_bridge(
     )
 
 
+# --- Load patterns (Fase 1h.4) -----------------------------------------------
+
+def create_load_pattern_bridge(
+    base_url: str, timeout_seconds: float, name: str, pattern_type: str,
+    self_weight_multiplier: float, add_load_case: bool, dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"name": name, "pattern_type": pattern_type,
+                       "self_weight_multiplier": self_weight_multiplier,
+                       "add_load_case": add_load_case,
+                       "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, "/v1/load_patterns", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
 # --- Joint restraints (Fase 1h.3) --------------------------------------------
 
 def get_joint_restraints_bridge(

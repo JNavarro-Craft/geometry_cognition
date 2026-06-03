@@ -48,6 +48,7 @@ from Sap_experiment.sap_developer_server.tools import (
     create_frames,
     create_joint,
     create_joints,
+    create_load_pattern,
     delete_frame,
     delete_joint,
     get_joint_restraints,
@@ -123,6 +124,20 @@ def get_load_patterns_tool() -> dict[str, Any]:
     Snow/…) and self_weight_multiplier. Names relayed verbatim ('PESO PROPIO' not
     translated); the MCP never assumes which patterns a model should have."""
     return get_load_patterns()
+
+
+@mcp.tool(name="create_load_pattern")
+def create_load_pattern_tool(
+    name: str, pattern_type: str, self_weight_multiplier: float = 0.0,
+    add_load_case: bool = True, dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """WRITE: create a load pattern. name MUST start with the bridge prefix (AI_). pattern_type is
+    an eLoadPatternType name, CASE-INSENSITIVE ('Dead','Live','Wind','Snow','Other','Temperature',
+    ...; else unknown_load_pattern_type). self_weight_multiplier 0 = none (DEAD usually 1.0).
+    add_load_case=True also creates the analysis case. confirm=true mandatory; dry_run previews. A
+    blank model starts with only DEAD; existing name → name_already_exists."""
+    return create_load_pattern(name, pattern_type, self_weight_multiplier, add_load_case,
+                               dry_run, confirm)
 
 
 @mcp.tool(name="get_load_cases")

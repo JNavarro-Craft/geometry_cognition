@@ -31,6 +31,8 @@ from .contracts import (
     LoadCaseDetailsResponse,
     LoadCasesResponse,
     LoadPatternsResponse,
+    CreateLoadPatternRequest,
+    CreateLoadPatternResponse,
     MaterialsResponse,
     CreateJointRequest,
     CreateJointResponse,
@@ -170,6 +172,8 @@ async def _session_error_handler(_request, exc: SapSessionError) -> JSONResponse
         error_codes.INVALID_PATH,
         error_codes.EMPTY_MODEL,
         error_codes.JOINT_HAS_CONNECTED_FRAMES,
+        error_codes.UNKNOWN_LOAD_PATTERN_TYPE,
+        error_codes.UNKNOWN_LOAD_DIRECTION,
     }
     status = 409 if exc.code in precondition else 502
     logger.warning("session error [%s]: %s", exc.code, exc.message)
@@ -698,6 +702,20 @@ def get_load_patterns() -> LoadPatternsResponse:
         present_units = units_primitive.get_present_units(model)
         rows = load_patterns_primitive.get_load_patterns(model, session.oapi_namespace())
         return LoadPatternsResponse(units=present_units, count=len(rows), load_patterns=rows)
+
+
+@app.post("/v1/load_patterns", response_model=CreateLoadPatternResponse)
+def create_load_pattern(request: CreateLoadPatternRequest) -> CreateLoadPatternResponse:
+    """Create a load pattern (write — Fase 1h.4). ``name`` must carry the bridge prefix;
+    ``pattern_type`` is an eLoadPatternType name, case-insensitive (else unknown_load_pattern_type).
+    ``confirm`` mandatory; ``dry_run`` previews. A blank model starts with only DEAD."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return load_patterns_primitive.create_load_pattern(
+            model, session.oapi_namespace(), request.name, request.pattern_type,
+            request.self_weight_multiplier, request.add_load_case, request.dry_run, request.confirm,
+        )
 
 
 @app.get("/v1/load_cases", response_model=LoadCasesResponse)

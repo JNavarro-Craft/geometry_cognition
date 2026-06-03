@@ -178,6 +178,39 @@ class LoadPatternsResponse(BaseModel):
     load_patterns: list[LoadPattern]
 
 
+# --- Write-side: create_load_pattern (Fase 1h.4) -----------------------------
+
+
+class CreateLoadPatternRequest(BaseModel):
+    """Body for POST /v1/load-patterns. ``name`` must carry the bridge prefix (else
+    prefix_required). ``pattern_type`` is an eLoadPatternType member NAME, case-insensitive
+    (e.g. 'Dead','Live','Wind'; else unknown_load_pattern_type). ``add_load_case`` creates the
+    matching analysis case. ``confirm`` mandatory (modifies the model); ``dry_run`` previews."""
+
+    name: str = Field(..., description="New pattern name; must start with the bridge prefix")
+    pattern_type: str = Field(..., description="eLoadPatternType member name (e.g. 'Live')")
+    self_weight_multiplier: float = Field(0.0, description="Self-weight factor (DEAD often 1.0)")
+    add_load_case: bool = Field(True, description="Also create the analysis load case")
+    dry_run: bool = Field(False, description="If true, preview without creating")
+    confirm: bool = Field(False, description="Must be true to create")
+
+
+class LoadPatternCreation(BaseModel):
+    """The created (or to-be-created) load pattern as facts."""
+
+    name: str
+    pattern_type: str = Field(..., description="eLoadPatternType member name")
+    self_weight_multiplier: float
+    add_load_case: bool
+
+
+class CreateLoadPatternResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: LoadPatternCreation | None = None
+    applied: LoadPatternCreation | None = None
+
+
 class LoadCase(BaseModel):
     """One analysis load case defined in the model: its name and raw SAP case type.
 
