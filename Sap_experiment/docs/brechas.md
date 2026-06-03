@@ -583,12 +583,48 @@ Pre-vuelo de 1h.1 contra SAP26, confirmando empíricamente (anti-patrón #5) ant
   absoluta) y el modelo tiene **0 joints / 0 frames**. Por eso `_loaded_path_or_none` mapea
   `''` y `'(Untitled)'` (todo lo no-absoluto) → `None` = "no hay base file".
 - Las **units NO quedan ancladas**: `set_present_units` las cambia después sin fricción.
-- `cFile.Save(path)` sobre el modelo en memoria **funciona** (crea el archivo), ret=0. Confirma
-  de nuevo (§18, §29) que **`Save_2` NO existe**: el prompt de 1h.1 lo asumía; se usó `Save`.
+- `cFile.Save(path)` sobre el modelo en memoria **retorna 0 y crea el archivo** — pero ⚠️ ver
+  §31: ese `.sdb` (si el modelo está vacío) NO es reabrible. Confirma de nuevo (§18, §29) que
+  **`Save_2` NO existe**: el prompt de 1h.1 lo asumía; se usó `Save`.
 - Implicación de diseño: el attach debe tolerar "SAP abierto sin modelo" — `GetModelFilename`
   no-absoluto → base/workspace `None`, esperando `new_blank_model` u `open_model` (antes el
   attach asumía siempre un modelo on-disk). El workspace de un blank vive en un temp dir por
   `session_id` (UUID), no al lado de un base que no existe.
+
+### 31. 🚫 `cFile.Save` sobre un modelo VACÍO produce un `.sdb` que `OpenFile` RECHAZA (y cuelga la OAPI con un diálogo modal)
+**Descubierto por validación por uso real (anti-patrón #6), no por el pre-vuelo por-primitiva.**
+La batería end-to-end de 1h.1 (sesión 16) ejecutó `new_blank_model` → `save_workspace_as` →
+`open_model` sobre el archivo guardado. El `open_model` **colgó todo el bridge**: SAP mostró un
+diálogo modal *"Error opening file. May not be a valid [file]"* esperando un clic humano, y la
+llamada COM `OpenFile` no retornó hasta cerrarlo (con el lock global tomado → toda petición,
+incluso `/health`, se encoló).
+
+Aislado **sin el bridge** (pre-vuelo OAPI directo, una sola conexión) para descartar que fuera
+culpa del workspace pattern:
+- `InitializeNewModel` → `Save(p)` → `OpenFile(p)`: **`OpenFile` retorna 1** y dispara el
+  diálogo. El `.sdb` de un blank vacío pesa ~7 KB y **no es un archivo válido para reabrir**.
+- El modelo **no está locked** tras init (`GetModelIsLocked()=False`) — el bloqueo no es la causa.
+- `cFrameObj.AddByCoord` retorna 1 (no agrega geometría) en un blank recién inicializado: poblar
+  un blank requiere setup que es **territorio de 1h.2** (construcción), fuera de 1h.1. Por eso no
+  se pudo verificar aquí si un `.sdb` CON geometría sí reabre (hipótesis pendiente para 1h.2).
+- ⚠️ Sub-hallazgo de firma (anti-patrón #5): **`cPointObj.Count()` no toma args**, pero
+  **`cFrameObj.Count(String)` toma un nombre de grupo** (`""` = todos). Verificado por reflexión.
+
+**Dos riesgos, dos respuestas:**
+1. *Artefacto inválido en silencio*: `save_workspace_as` ahora **rechaza un modelo sin joints ni
+   frames** con `empty_model` (409) ANTES de tocar disco — no produce el `.sdb` irreparable.
+   Validado en vivo: el guard corta, no crea archivo, el bridge sigue sano. El cliente construye
+   geometría primero (1h.2+) y recién entonces guarda.
+2. *Diálogo modal que cuelga la OAPI*: riesgo operacional GENERAL del patrón (cualquier
+   `OpenFile`/`Save`/re-anchor puede colgar el bridge esperando input humano). El `empty_model`
+   guard elimina el disparador conocido; pero queda como **brecha abierta** endurecer el bridge
+   contra diálogos modales de SAP en general (¿`SapModel.SetModelIsLocked`? ¿timeout + watchdog?
+   ¿`cOAPI` flag para suprimir prompts?). Candidato a investigación futura.
+
+> Bug colateral encontrado y arreglado en la misma sesión: `_save_to_path_and_update_state`
+> usaba `os.path.normcase` sin `import os` en `workspace.py` → `NameError`/500 en el segundo
+> `save_workspace_as` (el primero, desde blank con base=None, cortaba por el `and` antes de
+> evaluar `os`). No saltó en los tests por-primitiva; sí en el uso iterativo. Otra evidencia de §26/§28.
 
 ---
 

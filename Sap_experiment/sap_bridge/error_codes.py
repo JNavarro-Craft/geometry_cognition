@@ -102,6 +102,13 @@ calling OpenFile (SAP would otherwise leave the session pointing at a phantom fi
 INVALID_PATH = "invalid_path"
 """open_model was given a path that is not absolute or does not end in .sdb."""
 
+EMPTY_MODEL = "empty_model"
+"""save_workspace_as was asked to materialize a model with no joints and no frames.
+Verified empirically (brechas.md §31): cFile.Save on an empty model produces a .sdb that
+cFile.OpenFile then REJECTS (ret=1) AND that pops a modal SAP dialog blocking the OAPI.
+The bridge refuses to write that irreparable artifact rather than producing it silently.
+Build geometry first (1h.2+ primitives), then save. Client-fixable."""
+
 # Bridge internals
 PYTHONNET_UNAVAILABLE = "pythonnet_unavailable"
 """pythonnet / the SAP2000v1 assembly could not be loaded. The bridge cannot talk

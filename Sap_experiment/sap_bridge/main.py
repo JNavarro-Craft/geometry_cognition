@@ -143,6 +143,7 @@ async def _session_error_handler(_request, exc: SapSessionError) -> JSONResponse
         error_codes.EMPTY_BATCH,
         error_codes.FILE_NOT_FOUND,
         error_codes.INVALID_PATH,
+        error_codes.EMPTY_MODEL,
     }
     status = 409 if exc.code in precondition else 502
     logger.warning("session error [%s]: %s", exc.code, exc.message)

@@ -71,7 +71,7 @@ día uno.
 | 🔶 **open_model (reemplaza modelo)** | `POST /v1/model/open` | `open_model` | ✅ valida path en fs antes de OpenFile (evita estado fantasma); confirm; el modelo abierto pasa a ser base + workspace fresco |
 | 🔶 **reset_workspace (regenera)** | `POST /v1/workspace/reset` | `reset_workspace` | ✅ regenera workspace desde base inmutable; confirm; base byte-intacto verificado |
 | 🔶 **new_blank_model (modelo vacío)** | `POST /v1/model/new_blank` | `new_blank_model` | ✅ InitializeNewModel(units); DESTRUCTIVO (descarta lo cargado sin guardar)→confirm; workspace temp sin base file; 0 joints/frames |
-| 🔶 **save_workspace_as (materializa)** | `POST /v1/workspace/save_as` | `save_workspace_as` | ✅ guarda workspace→nuevo base inmutable; prohíbe path==base actual (eso es commit futuro); confirm solo si sobrescribe; re-anchora workspace fresco |
+| 🔶 **save_workspace_as (materializa)** | `POST /v1/workspace/save_as` | `save_workspace_as` | ✅ guarda workspace→nuevo base inmutable; prohíbe path==base actual (commit futuro); confirm solo si sobrescribe; re-anchora workspace fresco; **rechaza modelo vacío** (`empty_model`, §31) |
 | Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; `case_not_run`, `unsupported_case_type`, `confirm_required`, `savepoint_not_found`, `savepoint_already_exists`, `invalid_path` |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
@@ -159,6 +159,15 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 > new_blank_model u open_model). Fuera de esta fase: `launch_sap`, `new_from_template`,
 > `commit_workspace_to_base`, cleanup automático del temp, y las primitivas de **construcción**
 > (create_joint/frame, restraints — 1h.2+) que poblarán el modelo vacío.
+>
+> **Validado end-to-end en vivo** (SAP26, attach sin modelo): fases attach-graceful, new_blank
+> (dry_run + gate confirm + apply), operar sobre el blank (0 joints/frames, 3 materiales default),
+> save_workspace_as (dry_run + apply + los 3 gates de path + overwrite con/sin confirm). La
+> validación por uso real **descubrió** (§31): (a) `Save` sobre un modelo vacío crea un `.sdb`
+> que `OpenFile` rechaza y que **cuelga la OAPI con un diálogo modal** → se agregó el guard
+> `empty_model` (rechaza guardar un modelo sin geometría antes de tocar disco); (b) un bug real
+> (`import os` faltante en `workspace.py`) que solo saltaba en el segundo `save_workspace_as`.
+> Ambos invisibles a los tests por-primitiva — exactamente el valor del anti-patrón #6.
 
 > Actualización sesión 14 (Fase 1g.8 — workflow iterativo robusto + tercer bloqueante):
 > resuelve los 2 bloqueantes de §26: `set_model_locked` (unlock tras analyze → cierra el loop

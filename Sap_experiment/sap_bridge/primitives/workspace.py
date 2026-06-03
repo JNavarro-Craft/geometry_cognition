@@ -7,6 +7,7 @@ base, Save into the workspace, re-anchor. The base file is never written (write_
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from .. import error_codes

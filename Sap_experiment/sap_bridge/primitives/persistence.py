@@ -11,7 +11,10 @@ calls it with ``allow_base_overwrite=False`` and explicitly PROHIBITS ``path == 
 — writing the base is a different primitive (commit_workspace_to_base, future), built on the
 same helper with the flag inverted. Policy checks (path validity, overwrite confirm) live here.
 
-OAPI note: cFile.Save(path) → 0 OK, creates the file (verified §30). There is no Save_2 (§18).
+OAPI notes: cFile.Save(path) → 0 OK, creates the file (verified §30); there is no Save_2 (§18).
+⚠️ But on a model with NO geometry, that .sdb is NOT reopenable — OpenFile rejects it (ret=1)
+and pops a modal SAP dialog that blocks the whole OAPI until dismissed (§31). So this primitive
+guards: a model with 0 joints and 0 frames is refused with EMPTY_MODEL before any disk write.
 """
 from __future__ import annotations
 
@@ -56,6 +59,21 @@ def save_workspace_as(
             raise SapSessionError(
                 error_codes.INVALID_PATH,
                 f"path '{path}' is the bridge's own workspace file; choose a real base path",
+            )
+
+        # Empty-model guard (§31): cFile.Save on a model with no geometry produces a .sdb that
+        # OpenFile then REJECTS (ret=1) and that pops a modal SAP dialog blocking the OAPI. Refuse
+        # to write that irreparable artifact rather than producing it silently. Checked here (not
+        # just on the real run) so dry_run reports it too — the client learns before committing.
+        # NB (anti-patrón #5): cPointObj.Count() takes no args, but cFrameObj.Count(String) takes
+        # a group name — "" means all frames. Verified by reflection against SAP26.
+        n_joints = sap_model.PointObj.Count()
+        n_frames = sap_model.FrameObj.Count("")
+        if n_joints == 0 and n_frames == 0:
+            raise SapSessionError(
+                error_codes.EMPTY_MODEL,
+                "the model has no joints and no frames; cFile.Save would produce a .sdb that SAP "
+                "cannot reopen (verified §31). Build geometry first (1h.2+ primitives), then save.",
             )
 
         overwrote_existing = os.path.isfile(path)
