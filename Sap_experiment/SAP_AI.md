@@ -68,7 +68,8 @@ día uno.
 | 🔶 **assign_section_to_frames (BATCH)** | `POST /v1/sections/{name}/assign-to-frames` | `assign_section_to_frames` | ✅ 1 sección→N frames; pre-validación estricta; confirm; hint >10; applied/failed_at/not_attempted |
 | 🔶 **assign_sections_to_frames (BATCH het.)** | `POST /v1/sections/assign-batch` | `assign_sections_to_frames` | ✅ mapping frame→sección; loop interno (sin batch nativo OAPI); mismo shape |
 | 🔶 **set_model_locked (estado global)** | `POST /v1/model/locked` | `set_model_locked` | ✅ unlock tras analyze (cierra loop iterativo); confirm; idempotente; NO auto-unlock |
-| 🔶 **open_model (reemplaza modelo)** | `POST /v1/model/open` | `open_model` | ✅ valida path en fs antes de OpenFile (evita estado fantasma); confirm; recupera base tras restore |
+| 🔶 **open_model (reemplaza modelo)** | `POST /v1/model/open` | `open_model` | ✅ valida path en fs antes de OpenFile (evita estado fantasma); confirm; el modelo abierto pasa a ser base + workspace fresco |
+| 🔶 **reset_workspace (regenera)** | `POST /v1/workspace/reset` | `reset_workspace` | ✅ regenera workspace desde base inmutable; confirm; base byte-intacto verificado |
 | Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; `case_not_run`, `unsupported_case_type`, `confirm_required`, `savepoint_not_found`, `savepoint_already_exists` |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
@@ -126,6 +127,19 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 > Hecho, no juicio: un displacement grande es un número, no "falla" (anti-patrón #4); las
 > reacciones equilibran las cargas pero ese cross-check lo compone el cliente, no el bridge.
 > Sigue fuera: stresses (1e.2), envelope (1e.3), modal/spectrum (1f).
+
+> Actualización sesión 15 (Fase 1g.9 — workspace pattern, §28 RESUELTO): el bridge hace
+> auto-`Save(workspace)` al primer attach y opera SIEMPRE sobre el `<base>__workspace.sdb`;
+> el modelo base del usuario **nunca se escribe** en el flujo default (verificado: md5 del
+> base byte-idéntico tras una iteración doble completa). `reset_workspace` regenera el
+> workspace desde el base limpio; savepoints y open_model **re-anchoran** al workspace tras
+> cada operación (resuelve el filo §19 proactivamente). **31 primitivas.** El test crítico
+> de §28 PASA: dos iteraciones del caso real (cuerda 33x73→41x95) dan baseline y resultados
+> IDÉNTICOS (-0.66363 / -0.68435 mm), donde en 1g.8 la iteración 2 leía estado contaminado.
+> Diseñado future-aware: helpers genéricos (`ensure_workspace_from_current_model`,
+> `reanchor_to_workspace`, `_compute_workspace_path`), `base_model_path` mutable+Optional,
+> `sap_instance_origin` para un futuro `launch_sap`. El loop de verificación iterativo del
+> Objetivo 1 queda completo y robusto.
 
 > Actualización sesión 14 (Fase 1g.8 — workflow iterativo robusto + tercer bloqueante):
 > resuelve los 2 bloqueantes de §26: `set_model_locked` (unlock tras analyze → cierra el loop

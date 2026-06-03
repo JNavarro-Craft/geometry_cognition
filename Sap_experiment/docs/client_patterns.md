@@ -96,19 +96,20 @@ Notas:
 
 ## Patrón 7: Loop completo de verificación (crear → asignar → analizar → leer → restaurar)
 
-Desde Fase 1g.8 este flujo end-to-end es **ejecutable y robusto para iteración** — el caso de uso central de un cliente que prueba hipótesis de diseño. El orden importa: `run_analysis` **lockea** el modelo, y SAP rechaza modificar la definición mientras está locked, así que hay que **desbloquear entre analizar y modificar**:
+Desde Fase 1g.9 este flujo end-to-end es **ejecutable, robusto e iterable** — el caso de uso central de un cliente que prueba hipótesis de diseño. Dos cosas a saber: (1) el bridge opera sobre un **workspace transitorio** (el modelo base del usuario nunca se toca), y (2) `run_analysis` **lockea** el modelo, así que hay que **desbloquear entre analizar y modificar**:
 ```
-# 0. (recomendado al inicio de cada iteración) asegurar el modelo base limpio
-open_model("<base>/TEST_01.sdb", confirm=True)
+# 0. (implícito) al primer attach el bridge ya hizo auto-workspace.
+#    Al inicio de CADA iteración, volver al baseline limpio:
+reset_workspace(confirm=True)              # regenera el workspace desde el base inmutable
 
-# 1. red de seguridad — del modelo LIMPIO, antes de cualquier cambio
+# 1. red de seguridad opcional (alternativa a reset entre iteraciones)
 create_savepoint("hypothesis_X")
 
 # 2. analizar el baseline y leer la referencia
 run_analysis()                             # esto LOCKEA el modelo
 ref = get_joint_displacements("1966", "MUERTA")   # u3 de referencia
 
-# 3. DESBLOQUEAR para poder modificar (bloqueante #1 de §26, resuelto)
+# 3. DESBLOQUEAR para poder modificar (bloqueante de §26, resuelto en 1g.8)
 set_model_locked(False, confirm=True)
 
 # 4. crear la pieza nueva (prefijada) y asignarla (dry_run primero, client_patterns #1)
@@ -121,11 +122,10 @@ run_analysis()
 mod = get_joint_displacements("1966", "MUERTA")
 # razonar el delta (dominio del cliente, no del bridge)
 
-# 6. restaurar + desbloquear; tras restore la sesión queda en el savepoint
-set_model_locked(False, confirm=True)
-restore_savepoint("hypothesis_X", confirm=True)
-# para volver al modelo base: open_model("<base>/TEST_01.sdb", confirm=True)
+# 6. siguiente iteración: reset_workspace(confirm=True) vuelve al baseline limpio
+#    (o restore_savepoint("hypothesis_X", confirm=True)). El bridge re-anchora al
+#    workspace solo; no hace falta open_model manual.
 ```
-El bridge provee los átomos (crear, asignar, analizar, leer, lock/unlock, restaurar, open); el **cliente compone el experimento y razona sobre los resultados**. El bridge no decide si la sección "mejora" la estructura — eso es dominio del cliente (anti-patrón #4).
+El bridge provee los átomos (crear, asignar, analizar, leer, lock/unlock, savepoint, reset_workspace); el **cliente compone el experimento y razona sobre los resultados**. El bridge no decide si la sección "mejora" la estructura — eso es dominio del cliente (anti-patrón #4).
 
-> ⚠️ **Limitación conocida (brechas §28).** El modelo del usuario y el workspace del bridge son el **mismo archivo**. `restore_savepoint` restaura la memoria, no el archivo base en disco, y `create_savepoint` puede dejar modificaciones asociadas al base. **Iterar el loop puede contaminar el `.sdb` base.** Hasta que exista un workspace base-inmutable: tomar un savepoint del baseline limpio ANTES de cualquier cambio, y recuperar desde ahí si el base se ensucia. El cliente solo no se recupera de una contaminación del base sin ese savepoint limpio.
+> ✅ **§28 resuelto (Fase 1g.9, workspace pattern).** El modelo base del usuario es **inmutable**: el bridge trabaja sobre `<base>__workspace.sdb` y nunca escribe el base en el flujo default. `reset_workspace` y `restore_savepoint` ambos dejan la sesión en el workspace, listo para la siguiente iteración. Validado: dos iteraciones del caso real dan baseline y resultados idénticos, y el `.sdb` base queda byte-intacto.

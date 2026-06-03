@@ -86,6 +86,7 @@ Match on either; the bridge does not interpret the system.
 | **`POST`** `/v1/model/settings/present_units` | `set_present_units` | **write**: set present units (global setting) |
 | **`POST`** `/v1/model/locked` | `set_model_locked` | **write**: lock/unlock the model (global state) |
 | **`POST`** `/v1/model/open` | `open_model` | **write**: open/replace the loaded model |
+| **`POST`** `/v1/workspace/reset` | `reset_workspace` | **write**: regenerate workspace from immutable base |
 | `GET /v1/joints` | `get_joints` | points: name, coords, 6-DOF restraints |
 | `GET /v1/frames` | `get_frames` | frames: name, i/j connectivity, section |
 | `GET /v1/sections` | `get_sections` | section catalogue: name + type |
@@ -740,8 +741,33 @@ with `oapi_call_failed` — so to keep modifying, **unlock first**:
 > ⚠️ **Known limitation (brechas §28).** The user's model and the bridge's workspace are the
 > **same file**. `restore_savepoint` restores in-memory state, not the base file on disk, and
 > `create_savepoint`'s Save can leave modifications associated with the base `.sdb`. Iterating
-> (open base → modify → analyze → restore) **can contaminate** the base file. Until a base-
-> immutable workspace exists, keep an untouched savepoint of the clean baseline to recover.
+> (open base → modify → analyze → restore) **can contaminate** the base file. **Resolved in
+> Fase 1g.9 by the workspace pattern** (below): the bridge no longer writes the base.
+
+### Workspace pattern  ·  `POST /v1/workspace/reset`  *(write)*
+
+To keep the user's base model immutable (resolving §28), the bridge **operates on a transient
+workspace copy**. At the first attach it `Save`s the loaded model to
+`<base_dir>/<base_name>__workspace.sdb` and works on that; **the base file is never written in
+the default flow** (verified: its md5 is byte-identical across a full iterative session). The
+savepoint/`open_model` primitives **re-anchor** the session to the workspace after each
+operation, so the loaded model is always the workspace (resolving the §19 edge proactively).
+
+`reset_workspace` regenerates the workspace from the clean base — a way back to a known
+baseline without savepoints:
+
+```json
+{ "dry_run": false, "confirm": true }
+```
+
+- `confirm` mandatory (discards workspace edits); `dry_run` previews. Returns the
+  `base_model_path`, `workspace_path` and `sap_instance_origin` (always `attached` this phase).
+- The base is only **read** (`OpenFile`), never written. `open_model` sets a new base and
+  re-derives a fresh workspace from it.
+
+> Reserved names: `__sp_` (savepoints) and `__workspace` are bridge-reserved suffixes; a model
+> legitimately named with them would be misread (known limitation). The workspace is transient
+> and overwritten silently between sessions. Single-client, single-process.
 
 ### `POST /v1/materials`  *(write — new object)*
 
