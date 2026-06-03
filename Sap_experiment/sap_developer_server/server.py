@@ -44,6 +44,8 @@ from Sap_experiment.sap_developer_server.tools import (
     get_section_properties,
     get_sections,
     list_savepoints,
+    assign_frame_load_distributed,
+    assign_frame_loads_distributed_batch,
     assign_joint_load,
     assign_joint_loads_batch,
     clear_joint_loads,
@@ -182,6 +184,32 @@ def get_joint_loads_tool(joint_name: str) -> dict[str, Any]:
     """READ: all loads on one joint, one entry per pattern with the 6 components {F1..M3} and
     coord_sys. Empty if none."""
     return get_joint_loads(joint_name)
+
+
+# --- Frame distributed loads (Fase 1h.4) -------------------------------------
+
+@mcp.tool(name="assign_frame_load_distributed")
+def assign_frame_load_distributed_tool(
+    frame_name: str, pattern_name: str, value: float, direction: str, coord_sys: str = "Global",
+    load_type: str = "Force", dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """WRITE: assign a UNIFORM distributed load to a frame. value = magnitude/length over the whole
+    frame. direction: 'X'/'Y'/'Z' (in coord_sys), 'Local1/2/3' (bridge forces Local), 'Gravity'
+    (Global -Z), 'XProj/YProj/ZProj', 'GravityProj' (else unknown_load_direction). load_type
+    'Force'/'Moment'. ACCUMULATES (clear first to replace). confirm=true mandatory; dry_run previews.
+    200 kgf/m gravity → value=-200, direction='Gravity'."""
+    return assign_frame_load_distributed(frame_name, pattern_name, value, direction, coord_sys,
+                                         load_type, dry_run, confirm)
+
+
+@mcp.tool(name="assign_frame_loads_distributed_batch")
+def assign_frame_loads_distributed_batch_tool(
+    items: list[dict], dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """WRITE: assign uniform distributed loads to many frames atomically. items = list of
+    {frame_name, pattern_name, value, direction, coord_sys?, load_type?}. Stop-on-first-failure.
+    confirm=true mandatory; dry_run previews."""
+    return assign_frame_loads_distributed_batch(items, dry_run, confirm)
 
 
 @mcp.tool(name="get_load_cases")

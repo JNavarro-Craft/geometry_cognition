@@ -20,6 +20,8 @@ from .bridge_backend import (
     get_combinations_bridge,
     get_model_settings_bridge,
     list_savepoints_bridge,
+    assign_frame_load_distributed_bridge,
+    assign_frame_loads_distributed_batch_bridge,
     assign_joint_load_bridge,
     assign_joint_loads_batch_bridge,
     clear_joint_loads_bridge,
@@ -258,6 +260,38 @@ def get_joint_loads(joint_name: str) -> dict[str, Any]:
     base_url, timeout = bridge_settings()
     try:
         return get_joint_loads_bridge(base_url, timeout, joint_name)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def assign_frame_load_distributed(
+    frame_name: str, pattern_name: str, value: float, direction: str, coord_sys: str = "Global",
+    load_type: str = "Force", dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Assign a UNIFORM distributed load to a frame (WRITE — Fase 1h.4). value = magnitude (per
+    length) constant over the whole frame. direction: 'X'/'Y'/'Z' (in coord_sys), 'Local1/2/3'
+    (frame axes — bridge forces Local), 'Gravity' (Global -Z), 'XProj'/'YProj'/'ZProj',
+    'GravityProj' (else unknown_load_direction). coord_sys 'Global'/'Local'. load_type
+    'Force'/'Moment'. ACCUMULATES (clear first to replace). Validates frame+pattern. confirm=true
+    mandatory; dry_run previews. Example: 200 kgf/m gravity → value=-200, direction='Gravity'."""
+    base_url, timeout = bridge_settings()
+    try:
+        return assign_frame_load_distributed_bridge(base_url, timeout, frame_name, pattern_name,
+                                                    value, direction, coord_sys, load_type,
+                                                    dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def assign_frame_loads_distributed_batch(
+    items: list[dict], dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Assign uniform distributed loads to many frames atomically (WRITE — batch). items = list of
+    {frame_name, pattern_name, value, direction, coord_sys?, load_type?}. Stop-on-first-failure.
+    confirm=true mandatory; dry_run previews."""
+    base_url, timeout = bridge_settings()
+    try:
+        return assign_frame_loads_distributed_batch_bridge(base_url, timeout, items, dry_run, confirm)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)
 

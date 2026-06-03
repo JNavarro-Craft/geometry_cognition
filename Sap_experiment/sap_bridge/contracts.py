@@ -319,6 +319,79 @@ class JointLoadsResponse(BaseModel):
     loads: list[JointLoad]
 
 
+# --- Load assignment: frame distributed loads (Fase 1h.4) --------------------
+# Uniform (Val1=Val2 over 0%-100%). direction string → (Dir, CSys) via §35 helper. load_type
+# Force/Moment. Accumulates (Replace=False).
+
+
+class AssignFrameLoadDistributedRequest(BaseModel):
+    """Body for POST /v1/frames/{name}/loads/distributed. ``value`` is the uniform magnitude;
+    ``direction`` one of Local1/2/3, X/Y/Z, XProj/YProj/ZProj, Gravity, GravityProj (§35);
+    ``coord_sys`` Global/Local (forced for some directions); ``load_type`` Force/Moment.
+    Accumulates. ``confirm`` mandatory."""
+
+    pattern_name: str
+    value: float
+    direction: str
+    coord_sys: str = Field("Global", description="'Global' or 'Local' (forced for some directions)")
+    load_type: str = Field("Force", description="'Force' or 'Moment'")
+    dry_run: bool = Field(False, description="If true, preview without applying")
+    confirm: bool = Field(False, description="Must be true to apply")
+
+
+class FrameDistributedLoadSpec(BaseModel):
+    frame_name: str
+    pattern_name: str
+    value: float
+    direction: str
+    coord_sys: str = "Global"
+    load_type: str = "Force"
+
+
+class AssignFrameLoadsDistributedBatchRequest(BaseModel):
+    items: list[FrameDistributedLoadSpec]
+    dry_run: bool = Field(False, description="If true, preview without applying")
+    confirm: bool = Field(False, description="Must be true to apply")
+
+
+class FrameDistributedLoad(BaseModel):
+    """One distributed load as facts: pattern, type, direction (string + raw Dir), coord_sys,
+    the relative extents (0..1) and the two end values (equal for uniform)."""
+
+    pattern_name: str
+    load_type: str
+    direction: str = Field(..., description="Resolved direction name (raw Dir in dir_code)")
+    dir_code: int
+    coord_sys: str
+    rel_dist1: float
+    rel_dist2: float
+    value1: float
+    value2: float
+
+
+class FrameDistributedLoadApplied(BaseModel):
+    frame_name: str
+    load: FrameDistributedLoad
+    note: str = "accumulated (added to existing distributed loads for this pattern)"
+
+
+class AssignFrameLoadDistributedResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: FrameDistributedLoadApplied | None = None
+    applied: FrameDistributedLoadApplied | None = None
+
+
+class AssignFrameLoadsDistributedBatchResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    count: int
+    would_apply: list[FrameDistributedLoadApplied] | None = None
+    applied: list[FrameDistributedLoadApplied] | None = None
+    failed_at: BatchItemFailure | None = None
+    not_attempted: list[str] | None = None
+
+
 class LoadCase(BaseModel):
     """One analysis load case defined in the model: its name and raw SAP case type.
 

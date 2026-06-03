@@ -92,3 +92,52 @@ def validate_joint_exists(sap_model: Any, name: str) -> None:
             error_codes.OBJECT_NOT_FOUND,
             f"joint '{name}' not found (list with GET /v1/joints)",
         )
+
+
+# --- Frame-load direction mapping (Fase 1h.4, §35) ---------------------------
+# The OAPI `Dir` is a raw Int32, NOT a named enum, and it is COUPLED to CSys: local axes (1-3)
+# require CSys="Local" (with "Global" SAP returns ret=1). Verified code-by-code in pre-flight.
+# This helper maps the client's direction string → (Dir, CSys), forcing Local for local axes.
+# A future trapezoidal-load primitive reuses it (same Dir/CSys semantics).
+
+# direction name → (Dir code, forced CSys or None to use the caller's coord_sys)
+_DIRECTION_MAP: dict[str, tuple[int, str | None]] = {
+    "Local1": (1, "Local"), "Local2": (2, "Local"), "Local3": (3, "Local"),
+    "X": (4, None), "Y": (5, None), "Z": (6, None),
+    "XProj": (7, "Global"), "YProj": (8, "Global"), "ZProj": (9, "Global"),
+    "Gravity": (10, "Global"), "GravityProj": (11, "Global"),
+}
+
+
+def load_direction_names() -> list[str]:
+    """The accepted frame-load direction names."""
+    return list(_DIRECTION_MAP.keys())
+
+
+def resolve_load_direction(direction: str, coord_sys: str) -> tuple[int, str]:
+    """Map a direction string + requested coord_sys to the OAPI ``(Dir, CSys)`` pair (§35).
+
+    Case-insensitive on the direction name. For local axes the CSys is FORCED to 'Local' (SAP
+    rejects them otherwise); for projected/gravity it is forced to the system SAP expects; for
+    X/Y/Z the caller's coord_sys is used. Raises UNKNOWN_LOAD_DIRECTION for an unmapped name.
+    """
+    match = next((k for k in _DIRECTION_MAP if k.lower() == direction.lower()), None)
+    if match is None:
+        raise SapSessionError(
+            error_codes.UNKNOWN_LOAD_DIRECTION,
+            f"unknown load direction '{direction}'; supported: {', '.join(_DIRECTION_MAP)}",
+        )
+    dir_code, forced_csys = _DIRECTION_MAP[match]
+    return dir_code, (forced_csys if forced_csys is not None else coord_sys)
+
+
+def resolve_load_type(load_type: str) -> int:
+    """Map 'Force'/'Moment' (case-insensitive) to the OAPI MyType (1/2). §36."""
+    table = {"force": 1, "moment": 2}
+    code = table.get(load_type.lower())
+    if code is None:
+        raise SapSessionError(
+            error_codes.UNKNOWN_LOAD_DIRECTION,  # reuse: a bad load_type is the same client-fix class
+            f"unknown load type '{load_type}'; supported: Force, Moment",
+        )
+    return code

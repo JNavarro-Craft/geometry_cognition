@@ -54,6 +54,10 @@ from .contracts import (
     ClearJointLoadsRequest,
     ClearJointLoadsResponse,
     JointLoadsResponse,
+    AssignFrameLoadDistributedRequest,
+    AssignFrameLoadDistributedResponse,
+    AssignFrameLoadsDistributedBatchRequest,
+    AssignFrameLoadsDistributedBatchResponse,
     CreateFrameRequest,
     CreateFrameResponse,
     CreateFramesRequest,
@@ -581,6 +585,34 @@ def get_distributed_loads_on_frame(name: str) -> DistributedLoadsResponse:
         return DistributedLoadsResponse(
             units=present_units, frame=name, count=len(rows), loads=rows
         )
+
+
+@app.post("/v1/frames/{name}/loads/distributed", response_model=AssignFrameLoadDistributedResponse)
+def assign_frame_load_distributed(name: str, request: AssignFrameLoadDistributedRequest) -> AssignFrameLoadDistributedResponse:
+    """Assign a uniform distributed load to a frame (write — ACCUMULATES). ``value`` over 0%-100%;
+    ``direction`` (Local1/2/3, X/Y/Z, XProj.., Gravity, GravityProj — §35); ``coord_sys`` (forced
+    for some directions); ``load_type`` Force/Moment. Validates frame + pattern. ``confirm`` mandatory."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return frame_loads_primitive.assign_frame_load_distributed(
+            model, name, request.pattern_name, request.value, request.direction,
+            request.coord_sys, request.load_type, request.dry_run, request.confirm,
+        )
+
+
+@app.post("/v1/frames/loads/distributed/batch", response_model=AssignFrameLoadsDistributedBatchResponse)
+def assign_frame_loads_distributed_batch(request: AssignFrameLoadsDistributedBatchRequest) -> AssignFrameLoadsDistributedBatchResponse:
+    """Assign uniform distributed loads to many frames atomically (write — stop-on-first-failure).
+    Each {frame_name, pattern_name, value, direction, coord_sys?, load_type?}. ``confirm`` mandatory."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        items = [{"frame_name": it.frame_name, "pattern_name": it.pattern_name, "value": it.value,
+                  "direction": it.direction, "coord_sys": it.coord_sys, "load_type": it.load_type}
+                 for it in request.items]
+        return frame_loads_primitive.assign_frame_load_distributed_batch(
+            model, items, request.dry_run, request.confirm)
 
 
 @app.get("/v1/joints/{name}/loads/point", response_model=PointLoadsResponse)

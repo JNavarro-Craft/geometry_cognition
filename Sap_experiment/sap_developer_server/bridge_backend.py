@@ -319,6 +319,31 @@ def get_joint_loads_bridge(
     )
 
 
+# --- Frame distributed loads (Fase 1h.4) -------------------------------------
+
+def assign_frame_load_distributed_bridge(
+    base_url: str, timeout_seconds: float, frame_name: str, pattern_name: str, value: float,
+    direction: str, coord_sys: str, load_type: str, dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"pattern_name": pattern_name, "value": value, "direction": direction,
+                       "coord_sys": coord_sys, "load_type": load_type,
+                       "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, f"/v1/frames/{quote(frame_name)}/loads/distributed", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
+def assign_frame_loads_distributed_batch_bridge(
+    base_url: str, timeout_seconds: float, items: list[dict], dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"items": items, "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, "/v1/frames/loads/distributed/batch", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
 # --- Joint restraints (Fase 1h.3) --------------------------------------------
 
 def get_joint_restraints_bridge(
