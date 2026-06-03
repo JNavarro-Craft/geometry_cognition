@@ -46,6 +46,7 @@ from Sap_experiment.sap_developer_server.tools import (
     list_savepoints,
     modify_rectangular_section,
     open_model,
+    reset_workspace,
     restore_savepoint,
     run_analysis,
     set_active_dof,
@@ -354,9 +355,19 @@ def set_model_locked_tool(locked: bool, dry_run: bool = False, confirm: bool = F
 def open_model_tool(path: str, dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
     """WRITE: open a model, REPLACING the loaded one. path must be an ABSOLUTE .sdb that exists
     (else invalid_path / file_not_found — checked before opening). confirm=true mandatory
-    (discards unsaved changes); dry_run previews. Main use: after restore_savepoint the session
-    is on the savepoint file — call open_model(<base model path>) to return to the original."""
+    (discards unsaved changes); dry_run previews. The opened model becomes the new base and the
+    bridge re-anchors to a fresh workspace derived from it."""
     return open_model(path, dry_run, confirm)
+
+
+@mcp.tool(name="reset_workspace")
+def reset_workspace_tool(dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """WRITE: reset the bridge's transient workspace to a clean copy of the immutable BASE
+    model. The bridge works on a workspace copy so the user's base file is never written; this
+    regenerates that copy from the clean base, returning you to a known baseline without using
+    savepoints. confirm=true mandatory (discards workspace changes); dry_run previews. Use
+    between iterations of a what-if experiment to start each from the same clean baseline."""
+    return reset_workspace(dry_run, confirm)
 
 
 if __name__ == "__main__":

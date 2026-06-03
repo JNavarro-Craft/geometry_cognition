@@ -22,6 +22,7 @@ from .bridge_backend import (
     list_savepoints_bridge,
     modify_rectangular_section_bridge,
     open_model_bridge,
+    reset_workspace_bridge,
     restore_savepoint_bridge,
     set_model_locked_bridge,
     set_active_dof_bridge,
@@ -456,6 +457,21 @@ def open_model(path: str, dry_run: bool = False, confirm: bool = False) -> dict[
     base_url, timeout = bridge_settings()
     try:
         return open_model_bridge(base_url, timeout, path, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def reset_workspace(dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """Reset the bridge's transient workspace to a clean copy of the immutable BASE model
+    (WRITE). The bridge operates on a workspace copy so the user's base file is never written;
+    this regenerates that workspace from the clean base, returning you to a known baseline —
+    without relying on savepoints. ``confirm=true`` mandatory (discards workspace changes);
+    ``dry_run=true`` previews. Use between iterations of a what-if experiment to start each one
+    from the same clean baseline.
+    """
+    base_url, timeout = bridge_settings()
+    try:
+        return reset_workspace_bridge(base_url, timeout, dry_run, confirm)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)
 

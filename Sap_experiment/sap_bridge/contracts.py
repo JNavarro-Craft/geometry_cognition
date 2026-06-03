@@ -923,3 +923,31 @@ class OpenModelResponse(BaseModel):
     validation_passed: bool = True
     would_apply: ModelOpenChange | None = None
     applied: ModelOpenChange | None = None
+
+
+# --- Workspace pattern (Fase 1g.9) -------------------------------------------
+# The bridge operates on a transient workspace copy; the base model stays immutable.
+
+
+class WorkspaceInfo(BaseModel):
+    """The session's workspace facts: the immutable base, the transient workspace, and how
+    the SAP instance was obtained (always 'attached' this phase)."""
+
+    base_model_path: str = Field(..., description="Immutable base model path")
+    workspace_path: str = Field(..., description="Transient workspace path (where the bridge writes)")
+    sap_instance_origin: str = Field(..., description="'attached' (this phase) or 'launched' (future)")
+
+
+class ResetWorkspaceRequest(BaseModel):
+    """Body for POST /v1/workspace/reset. ``confirm`` mandatory (discards workspace edits);
+    ``dry_run`` previews."""
+
+    dry_run: bool = Field(False, description="If true, preview without resetting")
+    confirm: bool = Field(False, description="Mandatory: discards workspace changes")
+
+
+class ResetWorkspaceResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: WorkspaceInfo | None = None
+    applied: WorkspaceInfo | None = None
