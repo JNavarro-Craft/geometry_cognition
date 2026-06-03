@@ -690,6 +690,22 @@ idioma pythonnet del proyecto):
   CONFIRMADO: `[U1, U2, U3, R1, R2, R3]`** (seté índice 5 = R3/M3, leí índice 5 = True).
   `SetReleases` con R3 en ambos extremos (pin de cercha 2D) NO dispara error de inestabilidad.
 
+## 🔶 Hallazgos OAPI Fase 1h.3 — joint restraints (resueltos)
+
+### 34. ✅ Firmas de restraints + ⚠️ `DeleteRestraint` no limpia los flags
+Pre-vuelo de 1h.3 (sesión 18), verificado empíricamente:
+- `PointObj.SetRestraint(Name, Value[6], eItemType)` → 0 OK. `Value` = 6 booleanos. **SOBRESCRIBE**
+  el estado completo (no mergea) — coherente con M1 (overwrite silencioso por nombre).
+- `PointObj.GetRestraint(Name, None)` → `(0, Value[6])`. Ya lo usa el read-side (`joints.py`).
+- ✅ **Orden de los 6 flags = `[U1, U2, U3, R1, R2, R3]`** (= releases §33): pinned `[T,T,T,F,F,F]`
+  y fixed `[T,T,T,T,T,T]` se leyeron idénticos. Consistente entre restraints y releases.
+- ⚠️ **`DeleteRestraint(Name, eItemType)` retorna 0 pero NO limpia los flags** (un joint pinned
+  siguió `[T,T,T,F,F,F]` tras el delete). Comportamiento OAPI inesperado. → para "liberar" un
+  apoyo el bridge usa **`SetRestraint(name, [F,F,F,F,F,F])`**, no `DeleteRestraint`. (El bridge no
+  expone DeleteRestraint; "sin apoyo" = todos los flags en False, que es el estado por defecto.)
+- El bridge NO nombra los patrones (pinned/fixed/roller) — son dominio del cliente (anti-patrón
+  #4). Expone los 6 flags crudos; el cliente compone "pinned" = {U1,U2,U3 True}.
+
 ---
 
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
@@ -763,9 +779,13 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
     check, modify_frame in-place (§33 ChangeConnectivity). **Hecha + validada** (sesión 17). 42
     primitivas. **§31 resuelto de raíz vía §32 (NewBlank).** Validación: cercha triangular desde
     blank, 7 fases A-G, save→reopen reabrible. Ver §32, §33 y write_side_design §3e.
-  - ◾ **1h.3+** — `set_joint_restraints` (1h.3), cargas (1h.4), validación cercha completa +
-    extras (1h.5). Fuera de 1h: `launch_sap`, `new_from_template`, `commit_workspace_to_base`,
-    cleanup automático del temp.
+  - 🟡 **1h.3** — joint restraints (apoyos 6-DOF): `set_joint_restraints` + `_batch` +
+    `get_joint_restraints`. Flags nombrados {U1..R3}, batch atómico, confirm; sin patrones de
+    dominio (pinned/fixed los compone el cliente). **En curso** (sesión 18). 42→45 primitivas.
+    Ver §34 y write_side_design §3f.
+  - ◾ **1h.4+** — cargas (point en joints, distributed/point en frames), validación cercha
+    completa con apoyos+cargas+analyze (1h.5). Fuera de 1h: `launch_sap`, `new_from_template`,
+    `commit_workspace_to_base`, springs/constraints/local-axes, cleanup automático del temp.
 - ◾ **Fase 1i** — snapshots + diff.
 - ◾ **Fase 1j** — poblar `docs/domains/structural/` (códigos, materiales, factores,
   recetas, casos) — conocimiento del cliente, no tools.

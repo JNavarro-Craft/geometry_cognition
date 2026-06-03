@@ -124,6 +124,20 @@ Las primitivas que **pueblan** un modelo (blank o existente) con geometría wire
 
 > **Hallazgos del pre-vuelo (§32, §33):** `NewBlank()` obligatorio para construir; `AddCartesian(X,Y,Z, Name="", UserName, CSys)` usa UserName si Name vacío; joints se borran con `PointObj.DeleteSpecialPoint` (NO existe `.Delete`); releases en orden `[U1,U2,U3,R1,R2,R3]`; `ChangeConnectivity` preserva releases. Ver brechas §32/§33.
 
+### 3f. Joint restraints (apoyos 6-DOF) (Fase 1h.3)
+
+Las condiciones de contorno de un joint: qué DOFs están restringidos (apoyo). Tres primitivas que completan "construir una estructura analizable" junto con geometría (1h.2) y cargas (1h.4):
+
+- **`set_joint_restraints(name, restraints, confirm)`**: fija los 6 flags `[U1,U2,U3,R1,R2,R3]` de un joint. La API usa **flags nombrados** (igual que `set_frame_releases`): `{U1:bool, ..., R3:bool}`, omitidos = False. El bridge mapea al array posicional que `SetRestraint` espera (orden §34). `SetRestraint` **sobrescribe** el estado completo (M1), así que el contrato es "set", no "merge". confirm obligatorio (modifica el modelo).
+- **`set_joint_restraints_batch(items, confirm)`**: batch atómico sobre `apply_batch_atomic` (mismo motor que joints/frames, stop-on-first-failure), reusable para las cargas de 1h.4.
+- **`get_joint_restraints(name)`**: lookup puntual de los 6 flags de UN joint (read-only, sin confirm). Simétrico con el resto del read-side; `get_joints` ya trae los restraints de TODOS, este es el lookup individual.
+
+**Sin patrones de dominio.** El bridge NO expone `pinned`/`fixed`/`roller` — esa es interpretación del cliente (anti-patrón #4). Expone los 6 flags crudos; el cliente compone "pinned" = `{U1,U2,U3: true}`, "roller en Z" = `{U3: true}`, etc.
+
+**"Sin apoyo" = todos los flags en False** (estado por defecto). El bridge NO usa `DeleteRestraint` para liberar un apoyo, porque (§34) `DeleteRestraint` retorna 0 pero no limpia los flags; liberar = `set_joint_restraints` con todo False.
+
+> **Hallazgos del pre-vuelo (§34):** `SetRestraint(Name, bool[6], eItemType)` sobrescribe; `GetRestraint(Name, None) → (0, bool[6])`; orden `[U1,U2,U3,R1,R2,R3]` (= releases); ⚠️ `DeleteRestraint` no limpia los flags (no se usa). Ver brechas §34.
+
 ### 4. Atomicidad: stop on first failure + pre-validación del cliente
 
 **Regla del bridge**: en operaciones batch, si una sub-operación falla, el bridge se detiene, no revierte lo ya aplicado, retorna reporte detallado:

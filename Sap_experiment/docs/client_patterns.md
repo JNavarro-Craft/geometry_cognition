@@ -183,9 +183,19 @@ create_frames([
 pin = {"U1": False, "U2": False, "U3": False, "R1": False, "R2": False, "R3": True}
 set_frame_releases("AI_F002", releases_i=pin, releases_j=pin, confirm=True)
 
-# 6. materializar (requiere geometría — el guard empty_model rechazaría un blank vacío)
+# 6. apoyos (1h.3) — el cliente compone el patrón de dominio a partir de los 6 flags crudos
+#    "pinned" = U1,U2,U3 restringidos; "roller en Z" = solo U3 (deja U1 libre)
+set_joint_restraints("AI_J001",  {"U1": True, "U2": True, "U3": True}, confirm=True)   # pinned
+set_joint_restraints("AI_apoyo", {"U3": True}, confirm=True)                            # roller Z
+#    o en batch atómico:
+# set_joint_restraints_batch([
+#     {"name": "AI_J001",  "restraints": {"U1": True, "U2": True, "U3": True}},
+#     {"name": "AI_apoyo", "restraints": {"U3": True}},
+# ], confirm=True)
+
+# 7. materializar (requiere geometría — el guard empty_model rechazaría un blank vacío)
 save_workspace_as("C:/models/cercha.sdb", confirm=True)
-# 1h.3+ añadirá restraints en los apoyos y cargas, luego run_analysis.
+# 1h.4+ añadirá cargas, luego run_analysis sobre la estructura completa.
 ```
 Notas:
 - **Naming híbrido**: dejá que el bridge numere (`AI_J###`/`AI_F###`) salvo cuando un nombre semántico ayude (`AI_apoyo`). Un name explícito NO incrementa el contador. Los contadores se resetean con `reset_workspace`.
@@ -193,3 +203,4 @@ Notas:
 - **Batch atómico**: si un elemento del batch falla, el bridge para ahí y reporta `applied`/`failed_at`/`not_attempted` — el cliente decide reintentar el resto o restaurar.
 - **Delete con cuidado**: `delete_joint` rechaza si el joint tiene frames conectados (`joint_has_connected_frames` con la lista) — borrá los frames primero. `delete_frame` no tiene esa restricción.
 - **`modify_frame` preserva releases** al cambiar endpoints (in-place, §33). `modify_joint` mueve el nudo y afecta a todos sus frames conectados (el preview los lista).
+- **Apoyos son dominio del cliente**: el bridge expone los 6 flags `[U1..R3]`, nunca "pinned"/"fixed"/"roller". "Sin apoyo" = todos False. Liberar un apoyo = `set_joint_restraints` con todo False (no hay un "delete restraint" — §34).
