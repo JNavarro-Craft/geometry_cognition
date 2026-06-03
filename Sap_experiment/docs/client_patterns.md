@@ -129,3 +129,27 @@ mod = get_joint_displacements("1966", "MUERTA")
 El bridge provee los átomos (crear, asignar, analizar, leer, lock/unlock, savepoint, reset_workspace); el **cliente compone el experimento y razona sobre los resultados**. El bridge no decide si la sección "mejora" la estructura — eso es dominio del cliente (anti-patrón #4).
 
 > ✅ **§28 resuelto (Fase 1g.9, workspace pattern).** El modelo base del usuario es **inmutable**: el bridge trabaja sobre `<base>__workspace.sdb` y nunca escribe el base en el flujo default. `reset_workspace` y `restore_savepoint` ambos dejan la sesión en el workspace, listo para la siguiente iteración. Validado: dos iteraciones del caso real dan baseline y resultados idénticos, y el `.sdb` base queda byte-intacto.
+
+## Patrón 8: Construir desde cero (build-from-blank)
+
+Desde Fase 1h.1 el cliente puede arrancar de un modelo vacío en vez de un base preexistente. El flujo: inicializar vacío → construir (geometría, secciones, cargas — primitivas de fases 1h.2+) → materializar en disco como nuevo base.
+```
+# 1. modelo vacío con las units de trabajo (DESTRUCTIVO: descarta lo cargado)
+new_blank_model(units="kgf_m_C", confirm=True)
+#    -> base_model_path = None; workspace en %TEMP%/sap_bridge_sessions/<id>/blank_workspace.sdb
+#    -> 0 joints, 0 frames, materiales default de SAP
+
+# 2. construir el modelo (estas primitivas llegan en 1h.2-1h.4)
+#    create_material(...), create_rectangular_section(...),
+#    create_joint(...), create_frame(...), set_joint_restraints(...), ...
+#    Todo opera sobre el workspace temporal, como siempre.
+
+# 3. materializar en disco: el workspace se promueve a nuevo base
+save_workspace_as("C:/models/mi_cercha.sdb", confirm=True)
+#    -> base_model_path = mi_cercha.sdb; workspace fresco = mi_cercha__workspace.sdb al lado
+#    -> a partir de aquí, el patrón normal: reset_workspace, savepoints, etc. funcionan
+```
+Notas:
+- `new_blank_model` es **destructivo** (descarta lo cargado, sin guardar) → `confirm` obligatorio. Las units NO quedan ancladas: `set_present_units` las cambia luego.
+- `save_workspace_as` **prohíbe** `path == base actual` (eso sería un commit al base, primitiva separada futura) y exige `confirm` para sobrescribir un archivo existente.
+- Tras `save_workspace_as`, el modelo construido es un base normal: reabrible en otra sesión, con su workspace inmutable. Es el puente entre "construir desde cero" y el patrón workspace del Objetivo 1.

@@ -88,9 +88,23 @@ Implementación: `cFile.Save` y `cFile.OpenFile(path)` (NO `Save_2` — no exist
 
 > **Visión futura (no implementada).** El patrón anticipa orígenes alternativos de base:
 > un `new_from_template` que ancle el workspace a un `.sdb` de template; un `launch_sap` que
-> arranque SAP y luego haga auto-workspace; un `new_blank_model` sin archivo base
-> (`base_model_path = None`, workspace en dir de sesión). El helper de auto-workspace y el
-> cómputo del workspace path se diseñaron genéricos para que esas extensiones sean naturales.
+> arranque SAP y luego haga auto-workspace. El helper de auto-workspace y el cómputo del
+> workspace path se diseñaron genéricos para que esas extensiones sean naturales.
+
+### 3d. Building from blank (Fase 1h.1)
+
+El ciclo 1h.* arranca modelos **desde cero**, no desde un base preexistente. Dos primitivas habilitan esto sobre el workspace pattern:
+
+- **`new_blank_model(units, confirm)`**: `InitializeNewModel(eUnits)` crea un modelo vacío en memoria (descarta lo cargado — de ahí el `confirm`). Como no hay archivo base, `base_model_path = None` y el workspace va a un **dir de sesión** (`%TEMP%/sap_bridge_sessions/<session_id>/blank_workspace.sdb`). Tras esto el bridge opera sobre ese workspace temporal como siempre.
+- **`save_workspace_as(path, confirm)`**: guarda el contenido actual en `path` y lo **promueve a nuevo base** (`base_model_path = path`), derivando un workspace fresco a su lado. Es cómo un modelo construido desde blank se "materializa" en disco. Prohíbe `path == base_model_path` (eso sería un commit, primitiva separada futura) y exige `confirm` para sobrescribir un `path` existente.
+
+**`_compute_workspace_path(base_path)` es una función pura** que ahora maneja ambos casos: con base → `<base_dir>/<base_name>__workspace.sdb`; sin base (`None`) → dir de sesión temp. El `session_id` (UUID) se asigna al primer attach y vive en el bridge state (permite cleanup por sesión y diferenciar bridges simultáneos a futuro).
+
+**Attach sin modelo.** Si SAP está abierto sin modelo (o tras `InitializeNewModel`), `GetModelFilename` retorna un path NO absoluto (`''` o `'(Untitled)'`, §30). El attach lo maneja con gracia: **no** crea workspace, deja `base/workspace = None`, y espera un `new_blank_model` u `open_model`.
+
+> **Hallazgos del pre-vuelo (§30):** `InitializeNewModel(eUnits)` descarta el modelo cargado en silencio (→ confirm); deja `GetModelFilename = '(Untitled)'` (placeholder, no path); `Save` sobre el modelo en memoria funciona; las units NO quedan ancladas (se pueden cambiar luego con `set_present_units`).
+>
+> **Future-aware:** `save_workspace_as` se construyó sobre `_save_to_path_and_update_state(path, allow_base_overwrite)` — un futuro `commit_workspace_to_base` reusa el helper con `allow_base_overwrite=True` y la restricción inversa (path == base). `new_blank_model` deja el seam para `new_from_template` (OpenFile del template + Save a workspace, base sigue None).
 
 ### 4. Atomicidad: stop on first failure + pre-validación del cliente
 
