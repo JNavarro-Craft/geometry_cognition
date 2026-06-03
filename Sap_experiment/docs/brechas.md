@@ -742,6 +742,10 @@ nombrado)**. Probado código por código leyendo de vuelta:
 - ✅ **A diferencia de §34, los `Delete*Load` SÍ limpian de verdad**: `DeleteLoadForce`/
   `DeleteLoadDistributed`/`DeleteLoadPoint(Name, LoadPat, eItemType)` → 0 y `NumberItems` baja a 0.
   Tras un delete no quedan cargas residuales.
+- ℹ️ **La acumulación crea entradas SEPARADAS** (verificado en validación, sesión 19): dos
+  `SetLoadForce(Replace=False)` del mismo pattern sobre el mismo joint → `GetLoadForce` devuelve
+  DOS entradas (no una consolidada). SAP las suma en el análisis; el bridge las relaya como hechos
+  separados (agnóstico — no consolida). El cliente que quiere "una sola" usa `clear_*` + `assign`.
 
 ---
 
@@ -821,14 +825,15 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
     dominio (pinned/fixed los compone el cliente). **Hecha + validada** (sesión 18). 45 primitivas.
     Validación: apoyar la cercha (pinned + roller), persiste tras save→reopen, liberar con
     all-False (§34). Ver §34 y write_side_design §3f.
-  - 🟡 **1h.4** — cargas: `create_load_pattern`/`list_load_patterns`, `assign_joint_load(_batch)`/
-    `clear_joint_loads`/`get_joint_loads`, `assign_frame_load_distributed(_batch)`/
+  - ✅ **1h.4** — cargas: `create_load_pattern` (+ `get_load_patterns` de 1c), `assign_joint_load
+    (_batch)`/`clear_joint_loads`/`get_joint_loads`, `assign_frame_load_distributed(_batch)`/
     `assign_frame_load_point(_batch)`/`clear_frame_loads`/`get_frame_loads`. Acumular default,
-    clear explícito, coord_sys configurable, Dir enum mapeado (§35). **En curso** (sesión 19).
-    45→57 primitivas. Ver §35, §36 y write_side_design §3g.
-  - ◾ **1h.5** — validación end-to-end cercha completa (apoyos+cargas+analyze) + extras
-    emergentes. Fuera de 1h: `launch_sap`, `new_from_template`, `commit_workspace_to_base`,
-    springs/constraints/local-axes, trapezoidal/temperature loads, load combinations, cleanup temp.
+    clear explícito, coord_sys configurable, Dir enum mapeado (§35). **Hecha + validada** (sesión
+    19). **56 tools MCP.** **CIERRA el ciclo construir-cargar-analizar**: cercha desde blank →
+    analyze → resultados coherentes (u3=-0.485mm, axial -833kgf). Ver §35, §36 y write_side_design §3g.
+  - ◾ **1h.5** — validación end-to-end cercha multi-panel + extras emergentes. Fuera de 1h:
+    `launch_sap`, `new_from_template`, `commit_workspace_to_base`, springs/constraints/local-axes,
+    trapezoidal/temperature loads, load combinations, cleanup temp.
 - ◾ **Fase 1i** — snapshots + diff.
 - ◾ **Fase 1j** — poblar `docs/domains/structural/` (códigos, materiales, factores,
   recetas, casos) — conocimiento del cliente, no tools.

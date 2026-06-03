@@ -81,6 +81,14 @@ día uno.
 | 🔶 **set_frame_releases** | `POST /v1/frames/{name}/releases` | `set_frame_releases` | ✅ flags nombrados {U1..R3}→array [orden §33]; confirm; dry_run diff; SAP rechaza inestables→oapi_call_failed |
 | 🔶 **set_joint_restraints / _batch** | `POST /v1/joints/{name}/restraints` `/restraints/batch` | `set_joint_restraints(_batch)` | ✅ apoyos 6-DOF, flags nombrados {U1..R3}; SetRestraint sobrescribe (M1); confirm; batch atómico; sin dominio (pinned/fixed los compone el cliente) |
 | Restraints de UN joint | `GET /v1/joints/{name}/restraints` | `get_joint_restraints` | ✅ los 6 flags crudos; lookup puntual (get_joints trae los de todos) |
+| 🔶 **create_load_pattern** | `POST /v1/load_patterns` | `create_load_pattern` | ✅ prefijo AI_; tipo case-insensitive off el enum (§36); confirm; blank trae solo DEAD; Add rechaza duplicado |
+| 🔶 **assign_joint_load / _batch** | `POST /v1/joints/{name}/loads` `/loads/batch` | `assign_joint_load(s_batch)` | ✅ {F1..M3} nombrados; ACUMULA (Replace=False); valida joint+pattern; confirm; batch atómico |
+| 🔶 **clear_joint_loads** | `DELETE /v1/joints/{name}/loads` | `clear_joint_loads` | ✅ por pattern o todos; DeleteLoadForce limpia de verdad (≠§34); confirm |
+| Cargas de UN joint | `GET /v1/joints/{name}/loads` | `get_joint_loads` | ✅ una entrada por carga (acumula como entradas separadas); 6 componentes + coord_sys |
+| 🔶 **assign_frame_load_distributed / _batch** | `POST /v1/frames/{name}/loads/distributed` `/batch` | `assign_frame_load_distributed(_batch)` | ✅ uniforme; direction→(Dir,CSys) §35; Force/Moment; ACUMULA; confirm |
+| 🔶 **assign_frame_load_point / _batch** | `POST /v1/frames/{name}/loads/point` `/batch` | `assign_frame_load_point(_batch)` | ✅ distancia rel/abs; mismo mapeo direction §35; ACUMULA; confirm |
+| 🔶 **clear_frame_loads** | `DELETE /v1/frames/{name}/loads` | `clear_frame_loads` | ✅ por pattern/kind (distributed/point/ambos); Delete*Load limpian de verdad; confirm |
+| Cargas de UN frame | `GET /v1/frames/{name}/loads` | `get_frame_loads` | ✅ {distributed:[...], point:[...]}; direction (nombre+Dir code), extents/distancia, valores |
 | Errores estructurados `{error,code,message}` | todos | envelope `bridge_unavailable` | ✅ 409/502 honestos; `case_not_run`, `confirm_required`, `savepoint_not_found`, `invalid_path`, `empty_model`, `joint_has_connected_frames` |
 
 **Lo que el cliente puede componer sobre estos hechos** (sin que el bridge lo haga):
@@ -214,6 +222,27 @@ No es deuda: es alcance acotado deliberadamente (ver el PROMPT MAESTRO de la ses
 > refleja los apoyos, **persisten tras save→reopen**, y liberar (all-False) limpia correctamente
 > (§34 confirmado). Sin bugs nuevos — las 3 primitivas a la primera. Reusó `apply_batch_atomic` de
 > 1h.2. Fuera de fase: cargas (1h.4), springs/constraints/local-axes.
+
+> Actualización sesión 19 (Fase 1h.4 — loads / cargas; CIERRE del ciclo construir-cargar-analizar):
+> **el prompt aspiracional del ciclo 1h.* es ejecutable**: una cercha construida ÍNTEGRAMENTE desde
+> un blank (geometría + sección + apoyos + cargas) se ANALIZA y da resultados físicamente correctos.
+> 12 primitivas (**56 tools MCP** — el `list_load_patterns` ya era `get_load_patterns` de 1c):
+> `create_load_pattern`; `assign_joint_load(_batch)`/`clear_joint_loads`/`get_joint_loads`;
+> `assign_frame_load_distributed(_batch)`/`assign_frame_load_point(_batch)`/`clear_frame_loads`/
+> `get_frame_loads`. **Semántica ACUMULAR** (`Replace=False`, decisión de scoping): re-asignar suma;
+> "set" = `clear_*` + `assign` (el cliente compone). El pre-vuelo (el más cargado de anti-patrón #5
+> del ciclo) mapeó el **enum `Dir` de frame loads** (§35): Int32 crudo ACOPLADO a CSys (1-3 ejes
+> locales exigen CSys=Local; 4-6 X/Y/Z; 10 Gravity), resuelto por `resolve_load_direction(direction,
+> coord_sys)→(Dir,CSys)`. Otros hallazgos (§36): `eLoadPatternType` CamelCase (Dead/Live, NO LTYPE_*),
+> `Add` rechaza duplicado, blank trae solo DEAD, orden `[F1,F2,F3,M1,M2,M3]`, `Delete*Load` SÍ
+> limpian (≠§34). **Validación A-G**: cercha completa, `create_load_pattern` + gate
+> unknown_load_pattern_type, joint/frame loads assign/get/clear/batch, y el test culminante:
+> **`run_analysis` → Finished; AI_J002 u3=-0.485 mm; AI_F002 axial -833 kgf constante (cercha:
+> axial dominante, momentos ~0), coherente con el equilibrio del nudo a 37°**; cargas persisten tras
+> save→reopen; 12 ops auditadas. **Sin bugs nuevos — 3a fase consecutiva a la primera.** Nota: la
+> acumulación de joint loads crea entradas SEPARADAS (el `get` las reporta múltiples; SAP las suma en
+> el análisis; el bridge relaya, no consolida — agnóstico). Fuera de fase: trapezoidal/temperature
+> loads, load combinations, springs, 1h.5 (validación multi-panel + extras).
 
 > Actualización sesión 14 (Fase 1g.8 — workflow iterativo robusto + tercer bloqueante):
 > resuelve los 2 bloqueantes de §26: `set_model_locked` (unlock tras analyze → cierra el loop
