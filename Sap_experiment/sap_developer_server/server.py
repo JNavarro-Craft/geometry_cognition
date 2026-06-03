@@ -44,9 +44,13 @@ from Sap_experiment.sap_developer_server.tools import (
     get_section_properties,
     get_sections,
     list_savepoints,
+    create_frame,
+    create_frames,
     create_joint,
     create_joints,
+    delete_frame,
     delete_joint,
+    modify_frame,
     modify_joint,
     modify_rectangular_section,
     new_blank_model,
@@ -435,6 +439,47 @@ def modify_joint_tool(
     """WRITE: move a joint to new coords. Affects EVERY connected frame → confirm=true mandatory;
     dry_run previews old/new coords + affected frames. The connected frames follow the joint."""
     return modify_joint(name, x, y, z, dry_run, confirm)
+
+
+# --- Geometry: frames (Fase 1h.2) --------------------------------------------
+
+@mcp.tool(name="create_frame")
+def create_frame_tool(
+    joint_i_name: str, joint_j_name: str, section: Optional[str] = None,
+    name: Optional[str] = None, dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """WRITE: create one frame between two EXISTING joints. Both validated first. section OPTIONAL
+    (validated if given; omit to leave SAP's default). name OPTIONAL (autogen AI_F###). confirm=true
+    mandatory; dry_run previews. Create the joints (and section) before the frame."""
+    return create_frame(joint_i_name, joint_j_name, section, name, dry_run, confirm)
+
+
+@mcp.tool(name="create_frames")
+def create_frames_tool(
+    frames: list[dict], dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """WRITE: create many frames atomically. frames = list of {joint_i, joint_j, section?, name?}.
+    All joints+sections validated up front; stop-on-first-failure (applied/failed_at/
+    not_attempted). dry_run previews resolved names. confirm=true mandatory."""
+    return create_frames(frames, dry_run, confirm)
+
+
+@mcp.tool(name="delete_frame")
+def delete_frame_tool(name: str, dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """WRITE (destructive): delete a frame. No cascade constraints (unlike delete_joint, never
+    refuses for connections). confirm=true mandatory; dry_run confirms existence + endpoints."""
+    return delete_frame(name, dry_run, confirm)
+
+
+@mcp.tool(name="modify_frame")
+def modify_frame_tool(
+    name: str, joint_i_name: Optional[str] = None, joint_j_name: Optional[str] = None,
+    section: Optional[str] = None, dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """WRITE: modify a frame's endpoints and/or section. At least one field required (else
+    nothing_to_modify). Endpoint changes are IN-PLACE and PRESERVE releases (§33). section='' sets
+    the default section. confirm=true mandatory; dry_run previews the changes."""
+    return modify_frame(name, joint_i_name, joint_j_name, section, dry_run, confirm)
 
 
 if __name__ == "__main__":

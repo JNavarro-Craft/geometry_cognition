@@ -40,6 +40,14 @@ from .contracts import (
     DeleteJointResponse,
     ModifyJointRequest,
     ModifyJointResponse,
+    CreateFrameRequest,
+    CreateFrameResponse,
+    CreateFramesRequest,
+    CreateFramesResponse,
+    DeleteFrameRequest,
+    DeleteFrameResponse,
+    ModifyFrameRequest,
+    ModifyFrameResponse,
     ModelSettingsResponse,
     NewBlankModelRequest,
     NewBlankModelResponse,
@@ -91,6 +99,7 @@ from .primitives import load_cases as load_cases_primitive
 from .primitives import load_patterns as load_patterns_primitive
 from .primitives import materials as materials_primitive
 from .primitives import materials_write as materials_write_primitive
+from .primitives import frames_write as frames_write_primitive
 from .primitives import joints_write as joints_write_primitive
 from .primitives import model_initialization as model_initialization_primitive
 from .primitives import persistence as persistence_primitive
@@ -373,6 +382,61 @@ def get_frames() -> FramesResponse:
         present_units = units_primitive.get_present_units(model)
         rows = frames_primitive.get_frames(model)
         return FramesResponse(units=present_units, count=len(rows), frames=rows)
+
+
+@app.post("/v1/frames", response_model=CreateFrameResponse)
+def create_frame(request: CreateFrameRequest) -> CreateFrameResponse:
+    """Create one frame between two EXISTING joints (write — geometry). ``section`` optional
+    (validated if given); ``name`` optional (autogen AI_F###). Both joints validated before
+    create (else object_not_found). ``confirm`` mandatory; ``dry_run`` previews."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return frames_write_primitive.create_frame(
+            model, session.oapi_namespace(), session.workspace,
+            request.joint_i_name, request.joint_j_name, request.section,
+            request.name, request.dry_run, request.confirm,
+        )
+
+
+@app.post("/v1/frames/batch", response_model=CreateFramesResponse)
+def create_frames(request: CreateFramesRequest) -> CreateFramesResponse:
+    """Create many frames atomically (write — stop-on-first-failure). Each {joint_i, joint_j,
+    section?, name?}. All joints/sections validated up front; ``dry_run`` previews resolved
+    names. ``confirm`` mandatory."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return frames_write_primitive.create_frames(
+            model, session.oapi_namespace(), session.workspace,
+            [f.model_dump() for f in request.frames], request.dry_run, request.confirm,
+        )
+
+
+@app.delete("/v1/frames/{name}", response_model=DeleteFrameResponse)
+def delete_frame(name: str, request: DeleteFrameRequest) -> DeleteFrameResponse:
+    """Delete a frame (write — destructive). No cascade constraints. ``confirm`` mandatory;
+    ``dry_run`` confirms the frame exists and reports its endpoints."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return frames_write_primitive.delete_frame(
+            model, name, request.dry_run, request.confirm
+        )
+
+
+@app.patch("/v1/frames/{name}", response_model=ModifyFrameResponse)
+def modify_frame(name: str, request: ModifyFrameRequest) -> ModifyFrameResponse:
+    """Modify a frame's endpoints and/or section (write). Endpoints change in-place
+    (ChangeConnectivity — releases preserved, §33). At least one field required (else
+    nothing_to_modify). ``confirm`` mandatory; ``dry_run`` previews the changes."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return frames_write_primitive.modify_frame(
+            model, session.oapi_namespace(), name, request.joint_i_name, request.joint_j_name,
+            request.section, request.dry_run, request.confirm,
+        )
 
 
 @app.get("/v1/frames/{name}/loads/distributed", response_model=DistributedLoadsResponse)

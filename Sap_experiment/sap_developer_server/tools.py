@@ -20,9 +20,13 @@ from .bridge_backend import (
     get_combinations_bridge,
     get_model_settings_bridge,
     list_savepoints_bridge,
+    create_frame_bridge,
+    create_frames_bridge,
     create_joint_bridge,
     create_joints_bridge,
+    delete_frame_bridge,
     delete_joint_bridge,
+    modify_frame_bridge,
     modify_joint_bridge,
     modify_rectangular_section_bridge,
     new_blank_model_bridge,
@@ -552,6 +556,62 @@ def modify_joint(
     base_url, timeout = bridge_settings()
     try:
         return modify_joint_bridge(base_url, timeout, name, x, y, z, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def create_frame(
+    joint_i_name: str, joint_j_name: str, section: str | None = None, name: str | None = None,
+    dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Create one frame between two EXISTING joints (WRITE — geometry). Both joints are validated
+    first (else object_not_found). ``section`` OPTIONAL (validated if given; omit to leave SAP's
+    default — a frame always has some property). ``name`` OPTIONAL (autogen AI_F###). confirm=true
+    mandatory; dry_run previews. Create the joints (and the section) before the frame."""
+    base_url, timeout = bridge_settings()
+    try:
+        return create_frame_bridge(base_url, timeout, joint_i_name, joint_j_name, section, name,
+                                   dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def create_frames(
+    frames: list[dict], dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Create many frames atomically (WRITE — batch). frames = list of {joint_i, joint_j,
+    section?, name?}. All joints + sections validated up front; stop-on-first-failure returns
+    applied/failed_at/not_attempted. dry_run previews resolved names. confirm=true mandatory."""
+    base_url, timeout = bridge_settings()
+    try:
+        return create_frames_bridge(base_url, timeout, frames, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def delete_frame(name: str, dry_run: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """Delete a frame (WRITE — destructive). No cascade constraints (frames have no sub-objects),
+    so unlike delete_joint this never refuses for connections. confirm=true mandatory; dry_run
+    confirms the frame exists and reports its endpoints."""
+    base_url, timeout = bridge_settings()
+    try:
+        return delete_frame_bridge(base_url, timeout, name, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def modify_frame(
+    name: str, joint_i_name: str | None = None, joint_j_name: str | None = None,
+    section: str | None = None, dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Modify a frame's endpoints and/or section (WRITE). At least one of joint_i_name /
+    joint_j_name / section required (else nothing_to_modify). Endpoint changes are IN-PLACE
+    (ChangeConnectivity) and PRESERVE the frame's releases (§33) — no delete+recreate. section=''
+    sets the default section. confirm=true mandatory; dry_run previews the specific changes."""
+    base_url, timeout = bridge_settings()
+    try:
+        return modify_frame_bridge(base_url, timeout, name, joint_i_name, joint_j_name, section,
+                                   dry_run, confirm)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)
 

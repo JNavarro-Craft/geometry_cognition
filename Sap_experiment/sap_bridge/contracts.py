@@ -1140,3 +1140,113 @@ class ModifyJointResponse(BaseModel):
     validation_passed: bool = True
     would_apply: JointMove | None = None
     applied: JointMove | None = None
+
+
+# --- Geometry primitives: frames (Fase 1h.2) ---------------------------------
+
+
+class CreateFrameRequest(BaseModel):
+    """Body for POST /v1/frames. Connects two existing joints. ``section`` optional (a frame
+    with no section is valid in SAP — assign later). ``name`` optional (autogen AI_F###).
+    ``confirm`` mandatory; ``dry_run`` previews."""
+
+    joint_i_name: str
+    joint_j_name: str
+    section: str | None = Field(None, description="Section to assign on create (optional)")
+    name: str | None = Field(None, description="Optional frame name; prefix-enforced if given")
+    dry_run: bool = Field(False, description="If true, preview without creating")
+    confirm: bool = Field(False, description="Must be true to create")
+
+
+class FrameSpec(BaseModel):
+    """One frame in a create_frames batch: two joints + optional section/name."""
+
+    joint_i: str
+    joint_j: str
+    section: str | None = None
+    name: str | None = None
+
+
+class CreateFramesRequest(BaseModel):
+    frames: list[FrameSpec]
+    dry_run: bool = Field(False, description="If true, preview without creating")
+    confirm: bool = Field(False, description="Must be true to create")
+
+
+class FrameCreated(BaseModel):
+    """A created (or to-be-created) frame as facts: name, endpoints, section ('' if none)."""
+
+    name: str
+    point_i: str
+    point_j: str
+    section: str = Field("", description="Assigned section, '' if none")
+
+
+class CreateFrameResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: FrameCreated | None = None
+    applied: FrameCreated | None = None
+
+
+class CreateFramesResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    count: int
+    would_apply: list[FrameCreated] | None = None
+    applied: list[FrameCreated] | None = None
+    failed_at: BatchItemFailure | None = None
+    not_attempted: list[str] | None = None
+
+
+class DeleteFrameRequest(BaseModel):
+    dry_run: bool = Field(False, description="If true, preview without deleting")
+    confirm: bool = Field(False, description="Must be true to delete (destructive)")
+
+
+class FrameDeletion(BaseModel):
+    """A frame delete as facts: name + its endpoints (no cascade constraints for frames)."""
+
+    name: str
+    point_i: str
+    point_j: str
+
+
+class DeleteFrameResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: FrameDeletion | None = None
+    applied: FrameDeletion | None = None
+
+
+class ModifyFrameRequest(BaseModel):
+    """Body for PATCH /v1/frames/{name}. At least one of joint_i_name/joint_j_name/section must
+    be given. Changing endpoints is in-place (ChangeConnectivity, §33 — releases preserved).
+    ``section`` may be '' to UNASSIGN. ``confirm`` mandatory; ``dry_run`` previews."""
+
+    joint_i_name: str | None = None
+    joint_j_name: str | None = None
+    section: str | None = Field(None, description="New section; '' to unassign; None to leave")
+    dry_run: bool = Field(False, description="If true, preview without modifying")
+    confirm: bool = Field(False, description="Must be true to modify")
+
+
+class FrameModification(BaseModel):
+    """A frame modify as facts: name, endpoints/section before and after (only changed fields
+    differ). ``changes`` is a readable summary list."""
+
+    name: str
+    previous_point_i: str | None = None
+    previous_point_j: str | None = None
+    previous_section: str | None = None
+    current_point_i: str | None = None
+    current_point_j: str | None = None
+    current_section: str | None = None
+    changes: list[str] = Field(default_factory=list)
+
+
+class ModifyFrameResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: FrameModification | None = None
+    applied: FrameModification | None = None

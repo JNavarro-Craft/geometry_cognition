@@ -200,6 +200,53 @@ def modify_joint_bridge(
     )
 
 
+# --- Geometry: frames (Fase 1h.2) --------------------------------------------
+
+def create_frame_bridge(
+    base_url: str, timeout_seconds: float, joint_i_name: str, joint_j_name: str,
+    section: str | None, name: str | None, dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"joint_i_name": joint_i_name, "joint_j_name": joint_j_name,
+                       "section": section, "name": name,
+                       "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, "/v1/frames", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
+def create_frames_bridge(
+    base_url: str, timeout_seconds: float, frames: list[dict], dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"frames": frames, "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, "/v1/frames/batch", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
+def delete_frame_bridge(
+    base_url: str, timeout_seconds: float, name: str, dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, f"/v1/frames/{quote(name)}", timeout_seconds,
+        method="DELETE", body=body, content_type="application/json",
+    )
+
+
+def modify_frame_bridge(
+    base_url: str, timeout_seconds: float, name: str, joint_i_name: str | None,
+    joint_j_name: str | None, section: str | None, dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"joint_i_name": joint_i_name, "joint_j_name": joint_j_name,
+                       "section": section, "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, f"/v1/frames/{quote(name)}", timeout_seconds,
+        method="PATCH", body=body, content_type="application/json",
+    )
+
+
 def create_material_bridge(
     base_url: str, timeout_seconds: float, name: str, material_type: str, dry_run: bool
 ) -> dict[str, Any]:
