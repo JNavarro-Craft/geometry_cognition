@@ -69,6 +69,29 @@ Implementación: `cFile.Save` y `cFile.OpenFile(path)` (NO `Save_2` — no exist
 - `set_model_locked(locked, confirm)` → toggle del lock state (setting global → confirm; idempotente). Permite escapar del locked tras `run_analysis` para seguir modificando.
 - `open_model(path, confirm)` → reemplaza el modelo cargado (recupera el base tras restore, cambia de modelo). El handle OAPI sobrevive a `OpenFile` (§18). `OpenFile` **descarta cambios no guardados** sin avisar — el cliente debe haber tomado savepoint si los quería.
 
+### 3c. Workspace pattern: base inmutable + workspace transitorio (Fase 1g.9)
+
+**Problema (§28).** El modelo del usuario y el área de trabajo del bridge eran el **mismo archivo** `.sdb`. `restore_savepoint` restauraba la memoria, no el disco base; e iterar el loop (modificar→analizar→restaurar) **contaminaba** el archivo base del usuario. Era el bloqueante que rompía el caso de uso iterativo real.
+
+**Decisión arquitectónica.** Al primer attach (o cuando se establece/cambia el base), el bridge **inmediatamente hace `Save` a un archivo workspace separado** (`<base_dir>/<base_name>__workspace.sdb`) y opera **exclusivamente** sobre ese. El archivo base queda **congelado, inmutable, recuperable siempre** — el bridge nunca lo escribe en el flujo default.
+
+**Cómo funciona:**
+- **Auto-workspace al attach** (`_ensure_workspace_from_current_model`): lee el loaded, lo registra como `base_model_path`, computa `workspace_path`, hace `Save(workspace)` → loaded pasa a ser el workspace.
+- **Re-anchor** (`_reanchor_to_workspace`): toda primitiva que mueve el loaded fuera del workspace (savepoint Save/OpenFile, open_model) vuelve el loaded al workspace al terminar. Así el filo §19 queda resuelto proactivamente: el loaded SIEMPRE es el workspace tras cualquier operación.
+- **`reset_workspace(confirm)`**: regenera el workspace desde el base limpio (`OpenFile(base)` + `Save(workspace)`). Vuelve a un baseline conocido sin depender de savepoints.
+
+**Garantía.** En el flujo default el bridge **nunca escribe al base**. Verificado en pre-vuelo: el md5 del base es idéntico antes y después de un `Save(workspace)` (§29). El base solo cambiaría vía una futura primitiva explícita `commit_workspace_to_base` (no existe).
+
+**Implementación**: `cFile.Save` (NO `Save_2` — no existe en SAP26, §18). El `workspace_path` se computa en `_compute_workspace_path(base_path)` (función aislada, sustituible a futuro por p.ej. un dir de sesión en `%TEMP%`). `base_model_path` es **mutable** (`open_model` la mueve) y **Optional** (a futuro un modelo en blanco no tendría base). `sap_instance_origin` ∈ {`attached`, `launched`} — hoy siempre `attached`.
+
+**Limitaciones conocidas.** El `__workspace` se sobrescribe en silencio entre sesiones (es transitorio del bridge). Single-cliente, single-proceso (multi-cliente fuera de scope). Si el directorio del base es read-only, el `Save(workspace)` falla — a futuro un dir de sesión dedicado lo resolvería.
+
+> **Visión futura (no implementada).** El patrón anticipa orígenes alternativos de base:
+> un `new_from_template` que ancle el workspace a un `.sdb` de template; un `launch_sap` que
+> arranque SAP y luego haga auto-workspace; un `new_blank_model` sin archivo base
+> (`base_model_path = None`, workspace en dir de sesión). El helper de auto-workspace y el
+> cómputo del workspace path se diseñaron genéricos para que esas extensiones sean naturales.
+
 ### 4. Atomicidad: stop on first failure + pre-validación del cliente
 
 **Regla del bridge**: en operaciones batch, si una sub-operación falla, el bridge se detiene, no revierte lo ya aplicado, retorna reporte detallado:

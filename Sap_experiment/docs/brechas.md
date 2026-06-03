@@ -551,8 +551,26 @@ write-side necesita un **modelo base inmutable** o un **workspace separado**. Op
 
 Mitigación usada en la validación: recuperar `TEST_01.sdb` desde un savepoint que se creó del
 modelo limpio ANTES de cualquier modificación. Funciona pero es manual — el cliente solo no se
-recupera. **Esto es el siguiente bloqueante real a resolver** (candidato a 1g.9), más urgente
-que deletes o assign-material.
+recupera. **Esto es el siguiente bloqueante real a resolver** (candidato a 1g.9, más urgente
+que deletes o assign-material).
+
+> ✅ **RESUELTO en Fase 1g.9 vía el workspace pattern** (opción (a) refinada): el bridge hace
+> `Save(workspace)` al primer attach y opera SIEMPRE sobre el workspace; el base nunca se
+> escribe en el flujo default. Re-anchor automático en savepoints/open_model. `reset_workspace`
+> regenera desde el base limpio. Ver write_side_design.md §3c.
+
+## 🔶 Hallazgos OAPI Fase 1g.9 — workspace pattern (resueltos)
+
+### 29. `Save` (no `Save_2`) repunta el loaded; el base queda BYTE-INTACTO
+- Confirmado de nuevo (§18): **`cFile.Save_2` NO existe en SAP26**, solo `cFile.Save(String
+  FileName)`. El prompt de 1g.9 asumía `Save_2`; se usó `Save`.
+- `Save(workspace)` → `GetModelFilename` pasa a ser el workspace (comportamiento "Save As"),
+  ret=0. Colisión: `Save` sobre un workspace existente **sobrescribe en silencio** (ret=0) —
+  ideal para el workspace transitorio.
+- 🔑 **Garantía del patrón verificada en pre-vuelo**: el **md5 del base es IDÉNTICO** antes y
+  después de `Save(workspace)`. Una vez que la sesión está en el workspace, todo `Save`
+  posterior va al workspace, nunca al base → **§28 resuelto por construcción**, no por
+  convención. El base solo cambiaría vía un futuro `commit_workspace_to_base` explícito.
 
 ---
 
@@ -605,11 +623,14 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
   - 🔬 **1g.7.5** — validación por uso real (§26). Reveló 2 bloqueantes de USO → reordenó el roadmap.
   - ✅ **1g.8** — lock management + savepoint reflow + open_model (`set_model_locked`,
     `open_model`, fix de naming de savepoints). **Resuelve los bloqueantes de §26**. Hace el
-    workflow iterativo robusto. **Hecha** (sesión 14). 30 primitivas.
-  - ◾ **1g.9+** (prioridad bajada tras §26) — otros tipos de sección (Circle, I…),
-    `assign_material_to_sections`, modify masivo, delete. Evitar el delete-all-then-recreate
-    peligroso de `RhinoSAP/SapFrameSynchronizer`. También `get_combination_results` (gap menor
-    de §26).
+    workflow iterativo robusto. **Hecha** (sesión 14). 30 primitivas. Reveló §28.
+  - ✅ **1g.9** — workspace pattern (base inmutable + workspace transitorio + `reset_workspace`).
+    **Resuelve §28 por construcción.** Auto-workspace al attach, re-anchor en savepoints/
+    open_model. **Hecha** (sesión 15). 31 primitivas. Diseñado future-aware (orígenes de base
+    alternativos).
+  - ◾ **1g.10+** — otros tipos de sección (Circle, I…), `assign_material_to_sections`, modify
+    masivo, delete. Evitar el delete-all-then-recreate peligroso de
+    `RhinoSAP/SapFrameSynchronizer`. También `get_combination_results` (gap menor de §26).
 - ◾ **Fase 1h** — snapshots + diff.
 - ◾ **Fase 1i** — poblar `docs/domains/structural/` (códigos, materiales, factores,
   recetas, casos) — conocimiento del cliente, no tools.
