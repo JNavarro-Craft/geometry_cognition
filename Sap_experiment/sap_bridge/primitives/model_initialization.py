@@ -27,9 +27,14 @@ from . import units as units_primitive
 
 
 def _initialize_from(sap_model: Any, source: str, units_member: Any) -> None:
-    """Initialize the model from ``source``. Today source='blank' (InitializeNewModel);
-    a future new_from_template would pass a template path here (OpenFile + keep base None).
-    The seam keeps that extension natural (write_side_design §3d)."""
+    """Initialize the model from ``source``. Today source='blank' (InitializeNewModel +
+    File.NewBlank); a future new_from_template would pass a template path here (OpenFile + keep
+    base None). The seam keeps that extension natural (write_side_design §3d).
+
+    ⚠️ §32: InitializeNewModel ALONE does NOT leave a buildable model — AddCartesian/AddByPoint
+    return 1 and nothing is added, and Save produces a .sdb that OpenFile rejects (§31). The
+    model becomes buildable only after cFile.NewBlank(). This is the root cause of §31; the
+    empty_model guard in save_workspace_as stays as a secondary defense."""
     if source == "blank":
         ret = sap_model.InitializeNewModel(units_member)
         ret_code = ret[0] if isinstance(ret, tuple) else ret
@@ -37,6 +42,15 @@ def _initialize_from(sap_model: Any, source: str, units_member: Any) -> None:
             raise SapSessionError(
                 error_codes.OAPI_CALL_FAILED,
                 f"cSapModel.InitializeNewModel returned {ret_code}",
+            )
+        # NewBlank() is what makes the model actually buildable (§32). Without it the model is
+        # initialized-but-inert: geometry adds fail and Save yields an unreopenable .sdb.
+        nret = sap_model.File.NewBlank()
+        nret_code = nret[0] if isinstance(nret, tuple) else nret
+        if nret_code != 0:
+            raise SapSessionError(
+                error_codes.OAPI_CALL_FAILED,
+                f"cFile.NewBlank returned {nret_code}",
             )
     else:  # pragma: no cover - future new_from_template
         raise SapSessionError(error_codes.OAPI_UNEXPECTED_SHAPE, f"unknown init source '{source}'")

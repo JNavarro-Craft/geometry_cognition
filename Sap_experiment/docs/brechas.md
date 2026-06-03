@@ -643,6 +643,47 @@ Hasta entonces, **el guard `empty_model` + atención humana durante las validaci
 suficiente** — no endurecer especulativamente (anti-patrón #6 inverso). Esta nota es el criterio
 de escalada: el 2º trigger real convierte la brecha abierta en fase.
 
+## 🔶 Hallazgos OAPI Fase 1h.2 — geometry primitives (resueltos)
+
+Pre-vuelo por reflexión + comportamiento real ANTES de codificar (anti-patrón #5), sesión 17.
+
+### 32. ✅ CAUSA RAÍZ de §31: `InitializeNewModel` NO deja el modelo construible — falta `cFile.NewBlank()`
+El bloqueante que §30/§31 olieron pero no aislaron del todo. Verificado en pre-vuelo:
+- Tras `InitializeNewModel(eUnits)` SOLO: `PointObj.AddCartesian(...)` retorna **`(1, '')`** y
+  `PointObj.Count()` queda en **0** — nada se agrega. El modelo está "initialized-but-inert".
+  (Por eso `AddByCoord` falló en el pre-vuelo de 1h.1, §31, y por eso el `Save` daba un `.sdb`
+  irreabrible: el modelo nunca estuvo realmente listo.)
+- Tras `InitializeNewModel(eUnits)` **+ `cFile.NewBlank()`**: `AddCartesian` retorna `(0, 'J1')`,
+  `Count()` sube. El modelo es construible. `NewBlank()` → 0 OK, sin args.
+- **Fix aplicado a `new_blank_model` (1h.1)**: `_initialize_from` ahora llama `NewBlank()` tras
+  `InitializeNewModel`. Es la resolución de RAÍZ de §31; el guard `empty_model` queda como
+  defensa secundaria (un modelo con NewBlank pero sin geometría sigue dando un `.sdb` no
+  reabrible — el guard lo cubre). Revalidación de raíz: en la cercha de 1h.2 (build → save →
+  reabrir reabrible).
+
+### 33. ✅ Firmas reales de las primitivas de geometría (varias ≠ lo asumido)
+Tabla verificada por reflexión .NET + comportamiento real (placeholder `""`/`None` → tupla, el
+idioma pythonnet del proyecto):
+- **Crear joint**: `PointObj.AddCartesian(X, Y, Z, Name&, UserName, CSys, MergeOff, MergeNumber)`
+  → `(0, name)`. Con `Name=""`, SAP usa el `UserName` como nombre del punto.
+- **Crear frame**: `FrameObj.AddByPoint(Point1, Point2, Name&, PropName, UserName)` → `(0, name)`.
+  `PropName="Default"` (o un nombre de sección). `Name=""` → usa UserName.
+- ⚠️ **Borrar joint**: `cPointObj` **NO tiene `.Delete`** (AttributeError). Se usa
+  **`PointObj.DeleteSpecialPoint(Name, eItemType)`** → 0 OK. SAP solo borra "special points"
+  (sin objetos conectados) — coherente con el guard de frames-conectados de `delete_joint`
+  (un joint con frames no es borrable; el check lo intercepta antes, mensaje claro).
+- **Borrar frame**: `FrameObj.Delete(Name, eItemType)` → 0 OK.
+- **Mover joint**: `EditPoint.ChangeCoordinates_1(Name, X, Y, Z, NoRefresh)` (también existe
+  `ChangeCoordinates` sin NoRefresh).
+- ⭐ **Cambiar endpoints de un frame IN-PLACE**: `EditFrame.ChangeConnectivity(Name, Point1,
+  Point2)` → 0 OK. Verificado: `GetPoints` pasó de `(A,B)` a `(A,C)` **y los releases
+  SOBREVIVIERON** al cambio. → `modify_frame` NO necesita delete+recreate; preserva name y
+  releases solo. (Resuelve la duda abierta del prompt de 1h.2.)
+- **Releases**: `FrameObj.SetReleases(Name, II[6], JJ[6], StartValue[6], EndValue[6], eItemType)`
+  + `GetReleases(Name, None×4)` → `(ret, II, JJ, SV, EV)`. ✅ **Orden de los 6 booleanos
+  CONFIRMADO: `[U1, U2, U3, R1, R2, R3]`** (seté índice 5 = R3/M3, leí índice 5 = True).
+  `SetReleases` con R3 en ambos extremos (pin de cercha 2D) NO dispara error de inestabilidad.
+
 ---
 
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
@@ -707,10 +748,17 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
     sin base file) + `save_workspace_as` (materializa el workspace a nuevo base inmutable).
     **Hecha** (sesión 16). 33 primitivas. Future-aware: `_save_to_path_and_update_state`
     compartido (futuro `commit_workspace_to_base`), `session_id`, seam `_initialize_from`
-    (futuro `new_from_template`). Ver §30 y write_side_design §3d.
-  - ◾ **1h.2+** — primitivas de **construcción** que pueblan el modelo vacío: `create_joint`,
-    `create_frame`, `set_joint_restraints`, etc. Fuera de 1h.1: `launch_sap`,
-    `new_from_template`, `commit_workspace_to_base`, cleanup automático del temp.
+    (futuro `new_from_template`). Ver §30 y write_side_design §3d. **Fix en 1h.2 (§32):
+    `new_blank_model` ahora llama `cFile.NewBlank()` tras `InitializeNewModel` — sin él el modelo
+    quedaba inerte (causa raíz de §31).**
+  - 🟡 **1h.2** — primitivas de geometría (joints + frames + releases): `create_joint(s)`,
+    `create_frame(s)`, `delete_joint/frame`, `modify_joint/frame`, `set_frame_releases`.
+    Naming híbrido (AI_ o autogen AI_J###/AI_F###), batch atómico, delete con frame-connection
+    check, modify_frame in-place (§33 ChangeConnectivity). **En curso** (sesión 17). 33→42
+    primitivas. Ver §32, §33 y write_side_design "Geometry primitives".
+  - ◾ **1h.3+** — `set_joint_restraints` (1h.3), cargas (1h.4), validación cercha completa +
+    extras (1h.5). Fuera de 1h: `launch_sap`, `new_from_template`, `commit_workspace_to_base`,
+    cleanup automático del temp.
 - ◾ **Fase 1i** — snapshots + diff.
 - ◾ **Fase 1j** — poblar `docs/domains/structural/` (códigos, materiales, factores,
   recetas, casos) — conocimiento del cliente, no tools.

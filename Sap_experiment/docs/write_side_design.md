@@ -106,6 +106,24 @@ El ciclo 1h.* arranca modelos **desde cero**, no desde un base preexistente. Dos
 >
 > **Future-aware:** `save_workspace_as` se construyó sobre `_save_to_path_and_update_state(path, allow_base_overwrite)` — un futuro `commit_workspace_to_base` reusa el helper con `allow_base_overwrite=True` y la restricción inversa (path == base). `new_blank_model` deja el seam para `new_from_template` (OpenFile del template + Save a workspace, base sigue None).
 
+> ⚠️ **Corrección de raíz (§32, Fase 1h.2):** `InitializeNewModel(eUnits)` por sí solo deja el modelo **inerte** — `AddCartesian`/`AddByPoint` retornan 1 y no agregan nada, y `Save` produce un `.sdb` irreabrible (causa raíz de §31). El modelo es construible solo tras **`cFile.NewBlank()`**. `new_blank_model` ahora lo llama. El guard `empty_model` queda como defensa secundaria (un modelo con NewBlank pero sin geometría sigue dando un `.sdb` no reabrible).
+
+### 3e. Geometry primitives (Fase 1h.2)
+
+Las primitivas que **pueblan** un modelo (blank o existente) con geometría wireframe: joints, frames y releases. Nueve en total, sobre dos object types nuevos (point/line). Todas siguen las cinco decisiones; tres patrones propios de geometría:
+
+**Naming híbrido.** Cada `create_*` acepta `name` **opcional**:
+- Si se pasa: enforcement del prefijo `AI_` (igual que materiales/secciones, §1) + chequeo de no-colisión.
+- Si no se pasa: el bridge **autogenera** `AI_J{n:03d}` (joints) / `AI_F{n:03d}` (frames) con un contador por sesión. El autogen resuelve el nombre ANTES del preview (dry_run muestra el nombre real que se asignaría). Los contadores viven en `bridge_state` y se **resetean en `reset_workspace`** (un workspace limpio reinicia la numeración). Un `name` explícito NO incrementa el contador. Este patrón es la **plantilla** para futuros `create_area`/`create_link`.
+
+**Batch atómico.** Cada `create_*` tiene su par batch (`create_joints`/`create_frames`) que itera sobre el single con `_apply_batch_atomic` (helper generalizable a restraints/cargas de 1h.3-1h.4): pre-validación estricta → loop stop-on-first-failure → `{applied, failed_at, not_attempted}` (decisión #4). El batch se audita como UN evento con `count`.
+
+**Delete con frame-connection check.** `delete_joint` (confirm obligatorio, §5.2) **rechaza** si el joint tiene frames conectados — pre-scan vía `_get_frames_connected_to_joint` (itera `FrameObj` + `GetPoints`, filtra por el joint). Devuelve `joint_has_connected_frames` con la lista, instruyendo "borrá los frames primero" (no cascada automática — el cliente decide). Esto además respeta la OAPI: SAP solo borra "special points" sin objetos conectados (§33), así que el check es correctness, no solo cortesía. `delete_frame` no tiene constraint de cascada (un frame no tiene sub-objetos).
+
+**`modify_frame` in-place.** Cambiar endpoints de un frame usa `EditFrame.ChangeConnectivity` (§33), que es **in-place**: preserva el name y los releases sin delete+recreate (verificado en pre-vuelo). `modify_joint` mueve un joint con `EditPoint.ChangeCoordinates_1`; afecta a todos los frames conectados (de ahí el confirm + el preview que los lista).
+
+> **Hallazgos del pre-vuelo (§32, §33):** `NewBlank()` obligatorio para construir; `AddCartesian(X,Y,Z, Name="", UserName, CSys)` usa UserName si Name vacío; joints se borran con `PointObj.DeleteSpecialPoint` (NO existe `.Delete`); releases en orden `[U1,U2,U3,R1,R2,R3]`; `ChangeConnectivity` preserva releases. Ver brechas §32/§33.
+
 ### 4. Atomicidad: stop on first failure + pre-validación del cliente
 
 **Regla del bridge**: en operaciones batch, si una sub-operación falla, el bridge se detiene, no revierte lo ya aplicado, retorna reporte detallado:

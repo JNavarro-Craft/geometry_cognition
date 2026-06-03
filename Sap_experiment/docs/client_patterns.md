@@ -153,3 +153,43 @@ Notas:
 - `new_blank_model` es **destructivo** (descarta lo cargado, sin guardar) → `confirm` obligatorio. Las units NO quedan ancladas: `set_present_units` las cambia luego.
 - `save_workspace_as` **prohíbe** `path == base actual` (eso sería un commit al base, primitiva separada futura) y exige `confirm` para sobrescribir un archivo existente.
 - Tras `save_workspace_as`, el modelo construido es un base normal: reabrible en otra sesión, con su workspace inmutable. Es el puente entre "construir desde cero" y el patrón workspace del Objetivo 1.
+
+## Patrón 9: Construir una cercha desde blank (build truss from blank)
+
+Desde Fase 1h.2, el cliente compone geometría real sobre el ciclo build-from-blank. El flujo concreto (cercha triangular de 3 nudos / 3 frames como ejemplo mínimo):
+```
+# 1. modelo vacío y construible
+new_blank_model(units="kgf_m_C", confirm=True)
+
+# 2. nudos — batch (autogen AI_J001.. o name explícito por elemento)
+create_joints([
+    {"x": 0, "y": 0, "z": 0},                       # -> AI_J001
+    {"x": 4, "y": 0, "z": 0, "name": "AI_apoyo"},   # name explícito
+    {"x": 2, "y": 0, "z": 1.5},                     # -> AI_J002
+], confirm=True)
+
+# 3. material + sección (para tener algo asignable; átomos de 1g.4/1g.5)
+create_material("AI_MGP10", "NoDesign")
+create_rectangular_section("AI_45x95", "AI_MGP10", depth=0.045, width=0.095)
+
+# 4. frames — validan que los joints existen ANTES de crear
+create_frames([
+    {"joint_i": "AI_J001",  "joint_j": "AI_apoyo", "section": "AI_45x95"},  # -> AI_F001
+    {"joint_i": "AI_J001",  "joint_j": "AI_J002",  "section": "AI_45x95"},  # -> AI_F002
+    {"joint_i": "AI_apoyo", "joint_j": "AI_J002",  "section": "AI_45x95"},  # -> AI_F003
+], confirm=True)
+
+# 5. releases — comportamiento de cercha 2D (pin: M3 libre en ambos extremos)
+pin = {"U1": False, "U2": False, "U3": False, "R1": False, "R2": False, "R3": True}
+set_frame_releases("AI_F002", releases_i=pin, releases_j=pin, confirm=True)
+
+# 6. materializar (requiere geometría — el guard empty_model rechazaría un blank vacío)
+save_workspace_as("C:/models/cercha.sdb", confirm=True)
+# 1h.3+ añadirá restraints en los apoyos y cargas, luego run_analysis.
+```
+Notas:
+- **Naming híbrido**: dejá que el bridge numere (`AI_J###`/`AI_F###`) salvo cuando un nombre semántico ayude (`AI_apoyo`). Un name explícito NO incrementa el contador. Los contadores se resetean con `reset_workspace`.
+- **Orden importa**: los joints antes que los frames (un frame valida sus dos joints al crearse); el material+sección antes de asignarla a un frame. El bridge da los átomos; el cliente ordena.
+- **Batch atómico**: si un elemento del batch falla, el bridge para ahí y reporta `applied`/`failed_at`/`not_attempted` — el cliente decide reintentar el resto o restaurar.
+- **Delete con cuidado**: `delete_joint` rechaza si el joint tiene frames conectados (`joint_has_connected_frames` con la lista) — borrá los frames primero. `delete_frame` no tiene esa restricción.
+- **`modify_frame` preserva releases** al cambiar endpoints (in-place, §33). `modify_joint` mueve el nudo y afecta a todos sus frames conectados (el preview los lista).
