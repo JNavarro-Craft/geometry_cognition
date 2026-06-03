@@ -83,6 +83,10 @@ class SapSession:
         self._sap_object: Any | None = None
         self._sap_model: Any | None = None
         self._lock = threading.RLock()
+        # Workspace state (Fase 1g.9). Imported lazily to avoid a circular import.
+        from .bridge_state import WorkspaceState
+
+        self.workspace = WorkspaceState()
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -115,6 +119,7 @@ class SapSession:
                         "attached to SAP2000 but no SapModel is available",
                     )
                 logger.info("Attached to running SAP2000 instance")
+                self.workspace.sap_instance_origin = "attached"
             except SapSessionError:
                 raise
             except Exception as exc:  # COM failures surface here
@@ -123,6 +128,13 @@ class SapSession:
                     error_codes.SAP_NOT_RUNNING,
                     f"failed to attach to SAP2000: {type(exc).__name__}: {exc}",
                 ) from exc
+
+            # Auto-workspace: immediately move the session onto a transient workspace copy
+            # so the user's base model is never written in the default flow (§28, §3c). Done
+            # inside the same lock, right after a successful attach. Imported lazily.
+            from .bridge_state import ensure_workspace_from_current_model
+
+            ensure_workspace_from_current_model(self._sap_model, self.workspace)
 
     def is_alive(self) -> bool:
         """Cheap liveness probe: a model handle that answers GetModelIsLocked.
@@ -190,6 +202,10 @@ class SapSession:
             self._sap_model = None
             self._sap_object = None
             self._helper = None
+            # NOTE: workspace state is deliberately NOT reset here. It survives transient
+            # re-attaches within a bridge process (a reset would lose the registered base
+            # and re-derive it from the workspace filename — wrong). It resets only when the
+            # bridge process restarts.
 
 
 # Process-wide singleton: one bridge process == one SAP session.
