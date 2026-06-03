@@ -58,6 +58,10 @@ from .contracts import (
     AssignFrameLoadDistributedResponse,
     AssignFrameLoadsDistributedBatchRequest,
     AssignFrameLoadsDistributedBatchResponse,
+    AssignFrameLoadPointRequest,
+    AssignFrameLoadPointResponse,
+    AssignFrameLoadsPointBatchRequest,
+    AssignFrameLoadsPointBatchResponse,
     CreateFrameRequest,
     CreateFrameResponse,
     CreateFramesRequest,
@@ -612,6 +616,35 @@ def assign_frame_loads_distributed_batch(request: AssignFrameLoadsDistributedBat
                   "direction": it.direction, "coord_sys": it.coord_sys, "load_type": it.load_type}
                  for it in request.items]
         return frame_loads_primitive.assign_frame_load_distributed_batch(
+            model, items, request.dry_run, request.confirm)
+
+
+@app.post("/v1/frames/{name}/loads/point", response_model=AssignFrameLoadPointResponse)
+def assign_frame_load_point(name: str, request: AssignFrameLoadPointRequest) -> AssignFrameLoadPointResponse:
+    """Assign a point load to a frame at ``distance`` (write — ACCUMULATES). ``rel_distance`` True =
+    0..1 relative, False = absolute. ``direction``/``coord_sys``/``load_type`` as in distributed
+    (§35). Validates frame + pattern. ``confirm`` mandatory; ``dry_run`` previews."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        return frame_loads_primitive.assign_frame_load_point(
+            model, name, request.pattern_name, request.value, request.distance, request.direction,
+            request.rel_distance, request.coord_sys, request.load_type, request.dry_run, request.confirm,
+        )
+
+
+@app.post("/v1/frames/loads/point/batch", response_model=AssignFrameLoadsPointBatchResponse)
+def assign_frame_loads_point_batch(request: AssignFrameLoadsPointBatchRequest) -> AssignFrameLoadsPointBatchResponse:
+    """Assign point loads to many frames atomically (write — stop-on-first-failure). Each
+    {frame_name, pattern_name, value, distance, direction, rel_distance?, coord_sys?, load_type?}.
+    ``confirm`` mandatory."""
+    session = get_session()
+    with session.lock():
+        model = session.sap_model()
+        items = [{"frame_name": it.frame_name, "pattern_name": it.pattern_name, "value": it.value,
+                  "distance": it.distance, "direction": it.direction, "rel_distance": it.rel_distance,
+                  "coord_sys": it.coord_sys, "load_type": it.load_type} for it in request.items]
+        return frame_loads_primitive.assign_frame_load_point_batch(
             model, items, request.dry_run, request.confirm)
 
 

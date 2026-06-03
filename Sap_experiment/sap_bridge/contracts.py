@@ -392,6 +392,79 @@ class AssignFrameLoadsDistributedBatchResponse(BaseModel):
     not_attempted: list[str] | None = None
 
 
+# --- Load assignment: frame point loads (Fase 1h.4) --------------------------
+
+
+class AssignFrameLoadPointRequest(BaseModel):
+    """Body for POST /v1/frames/{name}/loads/point. ``value`` magnitude; ``distance`` location
+    (relative 0..1 if ``rel_distance`` else absolute). ``direction``/``coord_sys``/``load_type``
+    as in distributed (§35). Accumulates. ``confirm`` mandatory."""
+
+    pattern_name: str
+    value: float
+    distance: float
+    direction: str
+    rel_distance: bool = Field(True, description="True: distance is 0..1 relative; False: absolute")
+    coord_sys: str = Field("Global", description="'Global' or 'Local'")
+    load_type: str = Field("Force", description="'Force' or 'Moment'")
+    dry_run: bool = Field(False, description="If true, preview without applying")
+    confirm: bool = Field(False, description="Must be true to apply")
+
+
+class FramePointLoadSpec(BaseModel):
+    frame_name: str
+    pattern_name: str
+    value: float
+    distance: float
+    direction: str
+    rel_distance: bool = True
+    coord_sys: str = "Global"
+    load_type: str = "Force"
+
+
+class AssignFrameLoadsPointBatchRequest(BaseModel):
+    items: list[FramePointLoadSpec]
+    dry_run: bool = Field(False, description="If true, preview without applying")
+    confirm: bool = Field(False, description="Must be true to apply")
+
+
+class FramePointLoad(BaseModel):
+    """One point load as facts: pattern, type, direction (string + raw Dir), coord_sys, whether
+    the distance is relative, the distance and the value."""
+
+    pattern_name: str
+    load_type: str
+    direction: str
+    dir_code: int
+    coord_sys: str
+    rel_distance: bool
+    distance: float
+    value: float
+
+
+class FramePointLoadApplied(BaseModel):
+    frame_name: str
+    load: FramePointLoad
+    note: str = "accumulated (added to existing point loads for this pattern)"
+
+
+class AssignFrameLoadPointResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    would_apply: FramePointLoadApplied | None = None
+    applied: FramePointLoadApplied | None = None
+
+
+class AssignFrameLoadsPointBatchResponse(BaseModel):
+    dry_run: bool
+    validation_passed: bool = True
+    count: int
+    would_apply: list[FramePointLoadApplied] | None = None
+    applied: list[FramePointLoadApplied] | None = None
+    failed_at: BatchItemFailure | None = None
+    not_attempted: list[str] | None = None
+
+
 class LoadCase(BaseModel):
     """One analysis load case defined in the model: its name and raw SAP case type.
 

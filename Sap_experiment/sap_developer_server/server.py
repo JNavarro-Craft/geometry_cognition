@@ -45,7 +45,9 @@ from Sap_experiment.sap_developer_server.tools import (
     get_sections,
     list_savepoints,
     assign_frame_load_distributed,
+    assign_frame_load_point,
     assign_frame_loads_distributed_batch,
+    assign_frame_loads_point_batch,
     assign_joint_load,
     assign_joint_loads_batch,
     clear_joint_loads,
@@ -210,6 +212,30 @@ def assign_frame_loads_distributed_batch_tool(
     {frame_name, pattern_name, value, direction, coord_sys?, load_type?}. Stop-on-first-failure.
     confirm=true mandatory; dry_run previews."""
     return assign_frame_loads_distributed_batch(items, dry_run, confirm)
+
+
+@mcp.tool(name="assign_frame_load_point")
+def assign_frame_load_point_tool(
+    frame_name: str, pattern_name: str, value: float, distance: float, direction: str,
+    rel_distance: bool = True, coord_sys: str = "Global", load_type: str = "Force",
+    dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """WRITE: assign a POINT load to a frame at distance. rel_distance=True → 0..1 relative (0.5 =
+    midspan); False → absolute. direction/coord_sys/load_type as in assign_frame_load_distributed
+    (§35). ACCUMULATES (clear first to replace). confirm=true mandatory; dry_run previews. 500 down
+    at midspan → value=-500, distance=0.5, direction='Z'."""
+    return assign_frame_load_point(frame_name, pattern_name, value, distance, direction,
+                                   rel_distance, coord_sys, load_type, dry_run, confirm)
+
+
+@mcp.tool(name="assign_frame_loads_point_batch")
+def assign_frame_loads_point_batch_tool(
+    items: list[dict], dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """WRITE: assign point loads to many frames atomically. items = list of {frame_name,
+    pattern_name, value, distance, direction, rel_distance?, coord_sys?, load_type?}.
+    Stop-on-first-failure. confirm=true mandatory; dry_run previews."""
+    return assign_frame_loads_point_batch(items, dry_run, confirm)
 
 
 @mcp.tool(name="get_load_cases")

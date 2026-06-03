@@ -21,7 +21,9 @@ from .bridge_backend import (
     get_model_settings_bridge,
     list_savepoints_bridge,
     assign_frame_load_distributed_bridge,
+    assign_frame_load_point_bridge,
     assign_frame_loads_distributed_batch_bridge,
+    assign_frame_loads_point_batch_bridge,
     assign_joint_load_bridge,
     assign_joint_loads_batch_bridge,
     clear_joint_loads_bridge,
@@ -292,6 +294,38 @@ def assign_frame_loads_distributed_batch(
     base_url, timeout = bridge_settings()
     try:
         return assign_frame_loads_distributed_batch_bridge(base_url, timeout, items, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def assign_frame_load_point(
+    frame_name: str, pattern_name: str, value: float, distance: float, direction: str,
+    rel_distance: bool = True, coord_sys: str = "Global", load_type: str = "Force",
+    dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Assign a POINT load to a frame at ``distance`` (WRITE — Fase 1h.4). rel_distance=True →
+    distance is 0..1 relative (0.5 = midspan); False → absolute in model units. direction/coord_sys/
+    load_type as in assign_frame_load_distributed (§35). ACCUMULATES (clear first to replace).
+    Validates frame+pattern. confirm=true mandatory; dry_run previews. 500 kgf down at midspan →
+    value=-500, distance=0.5, direction='Z'."""
+    base_url, timeout = bridge_settings()
+    try:
+        return assign_frame_load_point_bridge(base_url, timeout, frame_name, pattern_name, value,
+                                              distance, direction, rel_distance, coord_sys,
+                                              load_type, dry_run, confirm)
+    except Exception as exc:  # noqa: BLE001
+        return _bridge_error(exc)
+
+
+def assign_frame_loads_point_batch(
+    items: list[dict], dry_run: bool = False, confirm: bool = False,
+) -> dict[str, Any]:
+    """Assign point loads to many frames atomically (WRITE — batch). items = list of {frame_name,
+    pattern_name, value, distance, direction, rel_distance?, coord_sys?, load_type?}.
+    Stop-on-first-failure. confirm=true mandatory; dry_run previews."""
+    base_url, timeout = bridge_settings()
+    try:
+        return assign_frame_loads_point_batch_bridge(base_url, timeout, items, dry_run, confirm)
     except Exception as exc:  # noqa: BLE001
         return _bridge_error(exc)
 

@@ -344,6 +344,30 @@ def assign_frame_loads_distributed_batch_bridge(
     )
 
 
+def assign_frame_load_point_bridge(
+    base_url: str, timeout_seconds: float, frame_name: str, pattern_name: str, value: float,
+    distance: float, direction: str, rel_distance: bool, coord_sys: str, load_type: str,
+    dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"pattern_name": pattern_name, "value": value, "distance": distance,
+                       "direction": direction, "rel_distance": rel_distance, "coord_sys": coord_sys,
+                       "load_type": load_type, "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, f"/v1/frames/{quote(frame_name)}/loads/point", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
+def assign_frame_loads_point_batch_bridge(
+    base_url: str, timeout_seconds: float, items: list[dict], dry_run: bool, confirm: bool,
+) -> dict[str, Any]:
+    body = json.dumps({"items": items, "dry_run": dry_run, "confirm": confirm}).encode("utf-8")
+    return _bridge_json_request(
+        base_url, "/v1/frames/loads/point/batch", timeout_seconds,
+        method="POST", body=body, content_type="application/json",
+    )
+
+
 # --- Joint restraints (Fase 1h.3) --------------------------------------------
 
 def get_joint_restraints_bridge(

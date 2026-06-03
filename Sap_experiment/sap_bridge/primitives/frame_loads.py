@@ -24,11 +24,15 @@ from .. import error_codes
 from ..audit_log import audited
 from ..contracts import (
     AssignFrameLoadDistributedResponse,
+    AssignFrameLoadPointResponse,
     AssignFrameLoadsDistributedBatchResponse,
+    AssignFrameLoadsPointBatchResponse,
     BatchItemFailure,
     DistributedLoad,
     FrameDistributedLoad,
     FrameDistributedLoadApplied,
+    FramePointLoad,
+    FramePointLoadApplied,
 )
 from ..sap_session import SapSessionError
 from . import frames as frames_read
@@ -242,5 +246,131 @@ def assign_frame_load_distributed_batch(
         ctx["result"] = "applied" if failed is None else f"error_{error_codes.OAPI_CALL_FAILED}"
         ctx["result_details"] = {"applied_count": len(outcome.applied)}
         return AssignFrameLoadsDistributedBatchResponse(
+            dry_run=False, count=len(records), applied=outcome.applied,
+            failed_at=failed, not_attempted=not_attempted)
+
+
+# --- Write-side: point loads (Fase 1h.4) -------------------------------------
+
+
+def _do_assign_point(sap_model: Any, frame_name: str, pattern_name: str, value: float,
+                     distance: float, direction: str, rel_distance: bool, coord_sys: str,
+                     load_type: str) -> tuple[int, str]:
+    dir_code, csys = resolve_load_direction(direction, coord_sys)
+    my_type = resolve_load_type(load_type)
+    ret = sap_model.FrameObj.SetLoadPoint(
+        frame_name, pattern_name, my_type, dir_code, distance, value, csys, rel_distance, False,
+        _objects_item(sap_model),
+    )
+    ret_code = ret[0] if isinstance(ret, tuple) else ret
+    if ret_code != 0:
+        raise SapSessionError(
+            error_codes.OAPI_CALL_FAILED,
+            f"FrameObj.SetLoadPoint('{frame_name}', '{pattern_name}') returned {ret_code}",
+        )
+    return dir_code, csys
+
+
+def _point_record(frame_name: str, pattern_name: str, value: float, distance: float,
+                  direction: str, dir_code: int, rel_distance: bool, csys: str,
+                  load_type: str) -> FramePointLoadApplied:
+    return FramePointLoadApplied(
+        frame_name=frame_name,
+        load=FramePointLoad(
+            pattern_name=pattern_name, load_type=load_type, direction=direction, dir_code=dir_code,
+            coord_sys=csys, rel_distance=rel_distance, distance=distance, value=value),
+    )
+
+
+def assign_frame_load_point(
+    sap_model: Any, frame_name: str, pattern_name: str, value: float, distance: float,
+    direction: str, rel_distance: bool, coord_sys: str, load_type: str, dry_run: bool, confirm: bool,
+) -> AssignFrameLoadPointResponse:
+    """Assign a point load to a frame at ``distance`` (accumulates). Validates frame + pattern."""
+    with audited("assign_frame_load_point",
+                 {"frame_name": frame_name, "pattern_name": pattern_name, "value": value,
+                  "distance": distance, "direction": direction, "rel_distance": rel_distance,
+                  "coord_sys": coord_sys, "load_type": load_type,
+                  "dry_run": dry_run, "confirm": confirm}) as ctx:
+        _validate_frame(sap_model, frame_name)
+        load_patterns_read.validate_load_pattern_exists(sap_model, pattern_name)
+        dir_code, csys = resolve_load_direction(direction, coord_sys)
+        resolve_load_type(load_type)
+
+        if dry_run:
+            ctx["result"] = "preview_only"
+            ctx["result_details"] = {"frame_name": frame_name, "dir_code": dir_code}
+            return AssignFrameLoadPointResponse(
+                dry_run=True,
+                would_apply=_point_record(frame_name, pattern_name, value, distance, direction,
+                                          dir_code, rel_distance, csys, load_type))
+
+        if not confirm:
+            raise SapSessionError(
+                error_codes.CONFIRM_REQUIRED,
+                "assign_frame_load_point modifies the model; pass confirm=true to apply",
+            )
+
+        dir_code, csys = _do_assign_point(sap_model, frame_name, pattern_name, value, distance,
+                                          direction, rel_distance, coord_sys, load_type)
+        ctx["result_details"] = {"frame_name": frame_name, "dir_code": dir_code}
+        return AssignFrameLoadPointResponse(
+            dry_run=False,
+            applied=_point_record(frame_name, pattern_name, value, distance, direction, dir_code,
+                                  rel_distance, csys, load_type))
+
+
+def assign_frame_load_point_batch(
+    sap_model: Any, items: list[dict], dry_run: bool, confirm: bool,
+) -> AssignFrameLoadsPointBatchResponse:
+    """Assign point loads to many frames atomically (stop-on-first-failure)."""
+    with audited("assign_frame_load_point_batch",
+                 {"count": len(items), "dry_run": dry_run, "confirm": confirm}) as ctx:
+        if not items:
+            raise SapSessionError(error_codes.EMPTY_BATCH, "assign_frame_load_point_batch: empty")
+
+        records: list[tuple[dict, FramePointLoadApplied]] = []
+        for spec in items:
+            _validate_frame(sap_model, spec["frame_name"])
+            load_patterns_read.validate_load_pattern_exists(sap_model, spec["pattern_name"])
+            cs = spec.get("coord_sys", "Global")
+            lt = spec.get("load_type", "Force")
+            rd = spec.get("rel_distance", True)
+            dir_code, csys = resolve_load_direction(spec["direction"], cs)
+            resolve_load_type(lt)
+            records.append((spec, _point_record(
+                spec["frame_name"], spec["pattern_name"], spec["value"], spec["distance"],
+                spec["direction"], dir_code, rd, csys, lt)))
+
+        if dry_run:
+            ctx["result"] = "preview_only"
+            ctx["result_details"] = {"count": len(records)}
+            return AssignFrameLoadsPointBatchResponse(
+                dry_run=True, count=len(records), would_apply=[r for _s, r in records])
+
+        if not confirm:
+            raise SapSessionError(
+                error_codes.CONFIRM_REQUIRED,
+                f"assign_frame_load_point_batch modifies {len(items)} frame(s); pass confirm=true",
+            )
+
+        def _apply(_idx: int, item: tuple[dict, FramePointLoadApplied]) -> FramePointLoadApplied:
+            spec, rec = item
+            _do_assign_point(sap_model, spec["frame_name"], spec["pattern_name"], spec["value"],
+                             spec["distance"], spec["direction"], spec.get("rel_distance", True),
+                             spec.get("coord_sys", "Global"), spec.get("load_type", "Force"))
+            return rec
+
+        outcome = apply_batch_atomic(records, _apply)
+        failed, not_attempted = None, None
+        if outcome.failed_index is not None:
+            _s, rec = outcome.failed_item
+            failed = BatchItemFailure(index=outcome.failed_index,
+                                      item=f"frame '{rec.frame_name}' / pattern '{rec.load.pattern_name}'",
+                                      reason=outcome.failed_reason or "unknown")
+            not_attempted = [r.frame_name for _s2, r in outcome.not_attempted]
+        ctx["result"] = "applied" if failed is None else f"error_{error_codes.OAPI_CALL_FAILED}"
+        ctx["result_details"] = {"applied_count": len(outcome.applied)}
+        return AssignFrameLoadsPointBatchResponse(
             dry_run=False, count=len(records), applied=outcome.applied,
             failed_at=failed, not_attempted=not_attempted)
