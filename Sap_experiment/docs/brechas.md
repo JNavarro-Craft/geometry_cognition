@@ -714,6 +714,18 @@ El bridge será consumido por plugins Rhino y scripts (Objetivo 2). Antes de eso
   ya está en el contrato para no romperlo.
 - 🔶 **Sesión attach-only**: robustecer a "start new instance" (seam ya previsto en
   `sap_session.py` con el comentario de `mode`). Aditivo, no rompe el contrato.
+- 🔶 **Diálogos modales de SAP que cuelgan la OAPI** (brecha de §31, **anotada para atacar
+  al 2º trigger**): una llamada OAPI puede abrir un diálogo modal de SAP esperando input
+  humano (visto en §31: `OpenFile` sobre un `.sdb` inválido → *"Error opening file"*), y la
+  llamada COM no retorna hasta que un humano lo cierra — con el lock global tomado, TODO el
+  bridge se cuelga (hasta `/health`). El guard `empty_model` eliminó el disparador conocido.
+  Decisión consciente (anti-patrón #6 inverso): **no endurecer especulativamente** contra un
+  riesgo que se manifestó UNA vez; esperar al segundo caso real antes de invertir. Cuando
+  llegue, opciones a evaluar: ¿flag OAPI para suprimir prompts? ¿watchdog con timeout que
+  detecte el cuelgue y mate/reattach? ¿pre-validación más fuerte por primitiva? Mientras
+  tanto: cada primitiva que haga `OpenFile`/`Save`/re-anchor hereda el riesgo — preferir
+  validar en el filesystem/estado ANTES de la llamada OAPI (como ya hacen `open_model` §27 y
+  `save_workspace_as` §31).
 
 ---
 
