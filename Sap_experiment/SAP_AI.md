@@ -7,6 +7,17 @@ Complemento de [`docs/agnostic_principle.md`](docs/agnostic_principle.md): aqué
 Marcadores: ✅ logrado y validado en vivo · ◾ fuera por diseño en esta fase ·
 🔶 hallazgo / pendiente documentado.
 
+> ## 🏁 CICLO 1h.* CERRADO — build-from-scratch (2026-06-03)
+> El bridge alcanza **paridad para el workflow estructural de frames de punta a punta**:
+> construir un modelo desde un blank (geometría + secciones + apoyos + cargas), analizarlo y
+> leer resultados, con el modelo base del usuario siempre protegido. **56 tools MCP estables.**
+> Validado en 1h.5 con una cercha Pratt de 8 nudos / 13 barras: equilibrio exacto, comportamiento
+> de cercha correcto (tracción/compresión, releases→axial puro), iteración de secciones,
+> persistencia determinista cross-session. 4 fases consecutivas (1h.2-1h.5) sin bugs en
+> validación. Lo que queda fuera (áreas/shells, links, cargas trapezoidales/térmicas,
+> commit_to_base, launch_sap…) se agrega **reactivamente** cuando un consumidor lo pida — ver
+> brechas.md "Primitivas anticipadas". **Próximo: pivote a capa de dominio (easywood_mcp).**
+
 > **Cruce al write-side (sesión 8).** Tras 17 primitivas read-only, el experimento cruza
 > a escritura. Las reglas del write-side están consolidadas en
 > [`docs/write_side_design.md`](docs/write_side_design.md) — **autoridad arquitectónica:

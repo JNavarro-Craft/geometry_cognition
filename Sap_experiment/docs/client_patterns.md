@@ -240,3 +240,54 @@ Notas:
 - **coord_sys**: joint loads y frame loads aceptan `"Global"` (default) o `"Local"`. Para las direcciones locales de frame, el bridge ya fuerza `Local` aunque pases otra cosa.
 - **Frames sin sección admiten cargas** — el bridge no lo impide; si falta algo para analizar, el error sale en `run_analysis`, no en el assign.
 - **Batch**: `assign_joint_loads_batch`, `assign_frame_load_distributed_batch`, `assign_frame_load_point_batch` — atómicos (stop-on-first-failure), igual que el resto.
+
+## Patrón 11: Cercha multi-panel completa (build → restraint → load → analyze → iterate → save)
+
+Validado en Fase 1h.5 con una cercha Pratt de 8 nudos / 13 barras. Es el flujo de referencia para un consumidor (easywood_mcp) que construye una estructura real desde cero y la verifica. Junta todos los patrones anteriores a escala:
+```
+# 1. arrancar vacío + material/sección
+new_blank_model(units="kgf_m_C", confirm=True)
+create_material("AI_MGP10", "NoDesign")
+create_rectangular_section("AI_45x95", "AI_MGP10", depth=0.045, width=0.095)
+
+# 2. geometría EN BATCH (naming híbrido: explícitos para los nudos clave)
+create_joints([{ "x":0,"y":0,"z":0,"name":"AI_L0"}, ... 8 nudos ...], confirm=True)
+create_frames([{ "joint_i":"AI_L0","joint_j":"AI_L1","section":"AI_45x95","name":"AI_BC0"}, ...], confirm=True)
+
+# 3. releases (one-by-one — no hay batch de releases): R3 en barras de cercha (todas menos cuerda inferior)
+for f in diagonales + montantes + cuerda_superior:
+    set_frame_releases(f, releases_i={"R3":True}, releases_j={"R3":True}, confirm=True)
+
+# 4. apoyos EN BATCH. ⚠️ En 3D con cercha plana X-Z, restringir U2 (fuera de plano) en TODOS los
+#    nudos para evitar inestabilidad fuera del plano (física estándar, el cliente lo compone).
+set_joint_restraints_batch([
+    {"name":"AI_L0","restraints":{"U1":True,"U2":True,"U3":True}},   # pin
+    {"name":"AI_L4","restraints":{"U2":True,"U3":True}},             # roller
+    {"name":"AI_L1","restraints":{"U2":True}}, ... (resto: solo U2)
+], confirm=True)
+
+# 5. cargas en MÚLTIPLES patterns, en batch
+create_load_pattern("AI_LIVE_ROOF", "Live", confirm=True)
+assign_frame_loads_distributed_batch([{ "frame_name":"AI_TC0","pattern_name":"DEAD","value":-100,"direction":"Gravity"}, ...], confirm=True)
+assign_joint_loads_batch([{ "joint_name":"AI_U2","pattern_name":"AI_LIVE_ROOF","forces":{"F3":-500}}, ...], confirm=True)
+
+# 6. analizar y verificar coherencia (dominio del cliente)
+run_analysis()
+react_L0 = get_joint_reactions("AI_L0", "AI_LIVE_ROOF")   # Σ reacciones ≈ -Σ cargas (equilibrio)
+get_frame_forces("AI_BC0", "AI_LIVE_ROOF")                # cuerda inf: tracción
+get_frame_forces("AI_TC0", "AI_LIVE_ROOF")                # cuerda sup: compresión; m3≈0 (release)
+
+# 7. iterar: probar otras secciones (savepoint para volver)
+create_savepoint("pre_iteration")
+set_model_locked(False, confirm=True)                     # run_analysis lockeó
+assign_section_to_frames("AI_38x73", cuerda_inferior, confirm=True)
+run_analysis()                                            # nueva deflexión; equilibrio invariante
+restore_savepoint("pre_iteration", confirm=True)          # volver al baseline (workspace pattern aguanta)
+
+# 8. materializar el diseño final
+save_workspace_as("C:/models/cercha_pratt_v1.sdb", confirm=True)
+```
+Notas:
+- **Inestabilidad fuera de plano**: el síntoma típico es que `run_analysis` reporte un caso no convergido o resultados absurdos. La cura para una cercha plana es restringir el DOF perpendicular al plano en todos los nudos. El bridge no lo hace por vos (no asume dimensionalidad) — es composición del cliente.
+- **Determinismo**: tras `save_workspace_as` → `open_model`, re-`run_analysis` da resultados idénticos (validado hasta ~1e-17). El `.sdb` es un modelo completo y reproducible.
+- **Escala**: batch ops, naming híbrido y workspace pattern se validaron a 8 joints / 13 frames sin fricción; el patrón escala linealmente a cerchas más grandes.

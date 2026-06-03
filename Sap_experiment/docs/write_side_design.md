@@ -162,6 +162,23 @@ Las cargas completan el flujo "construir → cargar → analizar" desde cero. 12
 
 > **Hallazgos del pre-vuelo (§35, §36):** Dir enum crudo Int32 mapeado + acoplado a CSys; `eLoadPatternType` CamelCase; `Add` rechaza duplicado (ret=1); blank trae solo DEAD; orden `[F1,F2,F3,M1,M2,M3]`; `Replace=False` acumula; lecturas en arrays paralelos (CSys en MAYÚSCULAS); `Delete*Load` sí limpian. Ver brechas §35/§36.
 
+### 3h. Ciclo 1h.* cerrado (Fase 1h.5)
+
+El ciclo **build-from-scratch** (construir-cargar-analizar desde un modelo vacío) cierra formalmente con la validación de 1h.5. Las cuatro fases y su contribución:
+
+| Fase | Aporte | Primitivas |
+|---|---|---|
+| **1h.1** | infraestructura: arrancar de vacío + materializar a disco | `new_blank_model`, `save_workspace_as` (2) |
+| **1h.2** | geometría: nudos, barras, releases, edición, borrado | `create_joint(s)`, `create_frame(s)`, `delete_joint/frame`, `modify_joint/frame`, `set_frame_releases` (9) |
+| **1h.3** | apoyos: condiciones de contorno 6-DOF | `set_joint_restraints(_batch)`, `get_joint_restraints` (3) |
+| **1h.4** | cargas: patterns, joint/frame loads, distribuidas/puntuales | `create_load_pattern`, `assign_joint_load(_batch)`, `clear/get_joint_loads`, `assign_frame_load_distributed(_batch)`, `assign_frame_load_point(_batch)`, `clear/get_frame_loads` (11) |
+
+**23 primitivas nuevas** (33 → **56 tools MCP**). Junto con el read-side previo (1a-1e) y el write-side de objetos (1g), el bridge cubre el **workflow estructural completo para frames**: construir un modelo de barras desde cero, apoyarlo, cargarlo (point + distributed, múltiples patterns), analizarlo y leer resultados — todo con el workspace pattern protegiendo el base, dry-run/confirm/audit en cada write, y batch atómico.
+
+**Capacidad demostrada (1h.5):** una cercha Pratt de 8 nudos / 13 barras construida íntegramente desde blank, con releases + apoyos + dos patterns de carga, analiza y produce resultados estructuralmente correctos (equilibrio exacto, tracción/compresión donde corresponde, releases dando axial puro), itera (cambio de secciones → cambio de deflexión, equilibrio invariante), persiste cross-session de forma determinista. Validación sin un solo bug — 4ª fase consecutiva limpia (§37).
+
+**Frontera explícita del ciclo.** El bridge soporta workflows de **frames** (barras 1D): joints, frames, releases, restraints, cargas point y distributed uniformes. Queda FUERA del ciclo, y se agrega **reactivamente** cuando un consumidor lo necesite (no preventivamente — ver brechas "Primitivas anticipadas"): áreas/shells, links, cargas trapezoidales/térmicas/prestress, presets de releases, `commit_workspace_to_base`, `launch_sap`, `new_from_template`, y los readers de stresses/envelope/modal/combinations. Esta frontera no es deuda: es el alcance deliberado del ciclo build-from-scratch para frames.
+
 ### 4. Atomicidad: stop on first failure + pre-validación del cliente
 
 **Regla del bridge**: en operaciones batch, si una sub-operación falla, el bridge se detiene, no revierte lo ya aplicado, retorna reporte detallado:

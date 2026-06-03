@@ -747,6 +747,53 @@ nombrado)**. Probado código por código leyendo de vuelta:
   DOS entradas (no una consolidada). SAP las suma en el análisis; el bridge las relaya como hechos
   separados (agnóstico — no consolida). El cliente que quiere "una sola" usa `clear_*` + `assign`.
 
+## ✅ §37 — Validación de cierre del ciclo 1h.* (Fase 1h.5): SIN descubrimientos
+
+Cercha Pratt simétrica de **8 joints / 13 frames** construida desde blank, cargada con DOS
+patterns (DEAD distribuida + AI_LIVE_ROOF puntual), analizada e iterada. **La validación pasó
+sin un solo bug ni hallazgo nuevo — cuarta fase consecutiva sin descubrimientos (1h.2-1h.5).
+El sistema está en estado estable.**
+
+Resultados (caso AI_LIVE_ROOF, carga 1100 kgf), todos estructuralmente correctos:
+- **Equilibrio exacto**: reacciones L0 = L4 = +550 kgf → Σ = 1100 = −Σcargas (al gramo).
+- **Comportamiento de cercha**: cuerda inferior BC0 en **tracción** (+824 kgf), cuerda superior
+  TC0 en **compresión** (−869 kgf), diagonal interna Pratt F009 en **tracción** (+34 kgf).
+- **Releases verificados**: frames con R3 liberado (TC0, F009) dan `m3 = 0` exacto y axial puro;
+  la cuerda inferior continua (sin release) lleva algo de momento (~0.59) pero axial dominante.
+- **Deflexión** U2 = −0.886 mm (razonable, sin NaN/cero).
+- **Iteración** (cuerda inf → 38×73 liviana, sup → 60×140 pesada): deflexión cambió a −1.000 mm
+  (+13%, coherente: la cuerda inferior más delgada domina la pérdida de rigidez), reacciones
+  IDÉNTICAS (mismas cargas). `restore_savepoint` volvió las 13 frames a 45×95 sin contaminación.
+- **Persistencia + determinismo**: tras `save_workspace_as` → `open_model`, TODO persistió
+  (geometría, secciones, releases, restraints, ambos patterns de carga); el re-análisis dio
+  resultados **idénticos hasta ~1e-17** (ruido de FP del solver, no significativo).
+- **Audit**: 27 ops de escritura auditadas, **0 errores**.
+
+Observación operativa (no bug): en un modelo 3D con la cercha en el plano X-Z y releases R3 en
+las barras, hubo que **restringir U2 (fuera de plano) en TODOS los joints** para evitar
+inestabilidad fuera del plano. Es física estándar (no un defecto del bridge); el cliente compone
+los restraints según la dimensionalidad del problema.
+
+## 🔭 Primitivas anticipadas (no implementadas) — agregar REACTIVAMENTE
+
+El diseño future-aware dejó seams/helpers/fields para varias primitivas que NO se implementaron.
+Decisión de cierre (1h.5, opción C): se agregan **cuando un consumidor real las necesite**
+(easywood_mcp u otro), no preventivamente como inventario. Para cada una: use case, urgencia, y
+el seam que ya existe.
+
+| Primitiva | Para qué | Urgencia | Seam future-aware existente |
+|---|---|---|---|
+| `commit_workspace_to_base` | Promover el workspace al base (lo inverso de reset) — útil si la iteración cross-session se vuelve común | **alta** | `_save_to_path_and_update_state(path, allow_base_overwrite)` ya existe; se llama con `allow_base_overwrite=True` y restricción inversa (§3d) |
+| `launch_sap` | Arrancar SAP programáticamente (hoy attach-only) | media | `sap_session.py` tiene el seam `mode` ('attach'/'start') + `sap_instance_origin` en WorkspaceState |
+| `new_from_template` | Cargar un `.sdb` template como punto de partida (base sigue None) | baja (hasta que haya templates) | `_initialize_from(source)` en model_initialization (hoy source='blank') |
+| `assign_frame_load_distributed_trapezoidal` | Carga lineal variable (Val1≠Val2) — p.ej. nieve drift | media (si aparece) | `SetLoadDistributed` ya toma Val1/Val2 y Dist1/Dist2; `resolve_load_direction` se reusa |
+| `assign_frame_load_temperature` / `_prestress` / `_strain` | Tipos de carga no mecánicos | baja | el patrón assign + `resolve_load_type` (extender el mapeo Force/Moment) |
+| `set_frame_releases_pattern` | Presets truss/beam de releases | baja (granular basta) | `set_frame_releases` granular ya cubre el caso |
+| `create_area` / `create_link` | Shells/áreas y links (si easywood_mcp modela paneles) | media (si aplica) | el patrón hybrid-naming + `apply_batch_atomic` + connection-detection son plantilla directa |
+| `modify_frame_partial` | Cambiar SOLO sección o SOLO endpoints | baja | `modify_frame` full ya acepta campos opcionales (≥1) |
+| `set_joint_restraints` (single, no batch) | Hoy hay `set_joint_restraints` single Y batch | — | ya existen ambos |
+| read complementarios (stresses 1e.2, envelope 1e.3, modal 1f, combinations) | Resultados que el ciclo 1h.* no expuso | baja-media | los readers existentes (`get_frame_forces`, etc.) son plantilla |
+
 ---
 
 ## ◾ Brechas de alcance (fuera por diseño esta fase, orden tentativo siguiente)
@@ -831,9 +878,11 @@ Del PROMPT MAESTRO, "PRÓXIMOS PASOS". No bloqueantes; cada una es su propia fas
     clear explícito, coord_sys configurable, Dir enum mapeado (§35). **Hecha + validada** (sesión
     19). **56 tools MCP.** **CIERRA el ciclo construir-cargar-analizar**: cercha desde blank →
     analyze → resultados coherentes (u3=-0.485mm, axial -833kgf). Ver §35, §36 y write_side_design §3g.
-  - ◾ **1h.5** — validación end-to-end cercha multi-panel + extras emergentes. Fuera de 1h:
-    `launch_sap`, `new_from_template`, `commit_workspace_to_base`, springs/constraints/local-axes,
-    trapezoidal/temperature loads, load combinations, cleanup temp.
+  - ✅ **1h.5** — validación de cierre: cercha Pratt 8 joints/13 frames desde blank, cargada +
+    analizada + iterada + persistida. **Hecha** (sesión 20). SIN primitivas nuevas, SIN bugs (§37).
+    **Cierra formalmente el ciclo 1h.* (construir-cargar-analizar desde cero).** Las "extras"
+    (commit_workspace_to_base, launch_sap, trapezoidal, áreas/links…) se agregan REACTIVAMENTE
+    cuando un consumidor las pida — ver "Primitivas anticipadas" arriba.
 - ◾ **Fase 1i** — snapshots + diff.
 - ◾ **Fase 1j** — poblar `docs/domains/structural/` (códigos, materiales, factores,
   recetas, casos) — conocimiento del cliente, no tools.
